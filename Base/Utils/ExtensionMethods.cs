@@ -1543,7 +1543,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Linq extensions (DoForEach, Concat, FilterAndRemove, WhereIsNotDefault)
+        #region Linq extensions (DoForEach, Concat, FilterAndRemove, WhereIsNotDefault, Repeat, ZipWithIndex)
 
         /// <summary>
         /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
@@ -1674,7 +1674,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Linq type extension method that uses the given <paramref name="filterPredicate"/> to select which items in the given list are to be placed in the output set, removes them from the list
+        /// Linq style extension method that uses the given <paramref name="filterPredicate"/> to select which items in the given list are to be placed in the output set, removes them from the list
         /// and yields them.  If <paramref name="consecutive"/> is set to true then the filter will end as soon as the filter yields at least one element and then finds a following non-matching element.
         /// If <paramref name="fromFront"/> is set to true then the filter will end as soon as the first non-matching element is found.
         /// If <paramref name="filterPredicate"/> is null and <paramref name="mapNullFilterPredicateToAll"/> is true then this method will remove and return all of the elements in the list.
@@ -1712,7 +1712,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Linq type extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
+        /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
         /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/> if the caller does not explicitly provide a non-default <paramref name="eqCmp"/> instance to use.
         /// </summary>
         public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp = null)
@@ -1722,6 +1722,33 @@ namespace MosaicLib.Utils
             var defaultForTItemType = default(TItemType);
 
             return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, defaultForTItemType));
+        }
+
+        /// <summary>
+        /// Linq type extension method that generates an IEnumerable that produces the given <paramref name="item"/> repeated <paramref name="repeatCount"/> times.
+        /// </summary>
+        public static IEnumerable<TItemType> Repeat<TItemType>(this TItemType item, int repeatCount)
+        {
+            for (int index = 0; index < repeatCount; index++)
+            {
+                yield return item;
+            }    
+        }
+
+        /// <summary>
+        /// Variant of Linq Enumerable.Zip extension method that passes the index of the current items being zipped to the <paramref name="zipFunc"/>.  
+        /// This is in the mode of the Select variant that accepts the current item with its index in the sequence.
+        /// </summary>
+        public static IEnumerable<TResultType> ZipWithIndex<TInputTypeA, TInputTypeB, TResultType>(this IEnumerable<TInputTypeA> aEnum, IEnumerable<TInputTypeB> bEnum, Func<TInputTypeA, TInputTypeB, int, TResultType> zipFunc)
+        {
+            using (var ae = aEnum.GetEnumerator())
+            using (var be = bEnum.GetEnumerator())
+            {
+                for (int index = 0; ae.MoveNext() && be.MoveNext(); index++)
+                {
+                    yield return zipFunc(ae.Current, be.Current, index);
+                }
+            }
         }
 
         #endregion
@@ -1991,6 +2018,7 @@ namespace MosaicLib.Utils
         /// This method can be used to improve the ability of the calling method to support being inlined.
         /// </summary>
         /// <exception cref="System.Exception">Throws the given System.Execption</exception>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void Throw(this System.Exception ex)
         {
             throw ex;

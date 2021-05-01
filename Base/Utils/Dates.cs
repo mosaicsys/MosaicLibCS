@@ -34,10 +34,11 @@ namespace MosaicLib.Utils
 	{
         /// <summary>
         /// This method converts the given <paramref name="dt"/> DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// <para/>This is based on the existing DateTime.ToFileTimeUtc() method which automatically converts the given <paramref name="dt"/> to UTC before converting the date to a FTIME value.
         /// </summary>
         public static double GetUTCTimeSince1601(this DateTime dt, bool mapZero = true)
         {
-            if (dt.IsZero())
+            if (dt.IsZero() && mapZero)
                 return 0.0;
             else
                 return dt.ToFileTimeUtc() * 0.0000001;

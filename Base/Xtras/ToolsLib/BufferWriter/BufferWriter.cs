@@ -147,4 +147,26 @@ namespace Mosaic.ToolsLib.BufferWriter
             }
         }
     }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Writes the contents of the given <paramref name="byteArrayBufferWriter"/> to the given <paramref name="intoStream"/>.
+        /// If <paramref name="resetCount"/> is true then resets <paramref name="byteArrayBufferWriter"/>'s count using its ResetCount method. 
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void WriteTo(this ByteArrayBufferWriter byteArrayBufferWriter, System.IO.Stream intoStream, bool resetCount = false, bool flushIntoStream = false)
+        {
+            intoStream.Write(byteArrayBufferWriter.ByteArray, 0, byteArrayBufferWriter.CurrentCount);
+
+            if (resetCount)
+                byteArrayBufferWriter.ResetCount();
+
+            if (flushIntoStream)
+                intoStream.Flush();
+        }
+    }
 }

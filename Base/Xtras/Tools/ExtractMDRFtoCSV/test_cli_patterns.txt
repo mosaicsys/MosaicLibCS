@@ -1,0 +1,5 @@
+﻿-lo -lm -lobj -tag:list *.mdrf2 *.mdrf2.lz4 *.mdrf
+-io -iobj -mb -tag:data+ *.mdrf2 *.mdrf2.lz4 *.mdrf
+-tag:data *.mdrf2 *.mdrf2.lz4 *.mdrf
+-mb -hado -tag:data-hado *.mdrf2 *.mdrf2.lz4 *.mdrf
+-i:30 -tag:data30sInterval *.mdrf2 *.mdrf2.lz4 *.mdrf

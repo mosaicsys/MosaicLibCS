@@ -163,7 +163,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 MaxDataBlockSize = other.MaxDataBlockSize;
                 NominalMaxDataBlockSize = other.NominalMaxDataBlockSize;
                 NominalMaxFileSize = other.NominalMaxFileSize;
-                CompressionLevel = other.CompressionLevel;
                 FileIndexNumRows = other.FileIndexNumRows;
                 MaxFileRecordingPeriod = other.MaxFileRecordingPeriod;
                 MinInterFileCreateHoldoffPeriod = other.MinInterFileCreateHoldoffPeriod;
@@ -270,7 +269,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 {
                     NominalMaxDataBlockSize = 65536,
                     NominalMaxFileSize = 50*1024*1024,
-                    CompressionLevel = 1,
                     MaxFileRecordingPeriod = (24.0).FromHours(),
                     MinInterFileCreateHoldoffPeriod = (15.0).FromSeconds(),
                     MinNominalFileIndexWriteInterval = (10.0).FromSeconds(),
@@ -295,7 +293,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             NominalMaxDataBlockSize = nvs["setup.NominalMaxDataBlockSize"].VC.GetValueI4(rethrow: false);
             NominalMaxFileSize = nvs["setup.NominalMaxFileSize"].VC.GetValueI4(rethrow: false);
             FileIndexNumRows = nvs["setup.FileIndexNumRows"].VC.GetValueI4(rethrow: false);
-            CompressionLevel = nvs["setup.CompressionLevel"].VC.GetValueI4(rethrow: false);
             MaxFileRecordingPeriod = nvs["setup.MaxFileRecordingPeriod"].VC.GetValueTS(rethrow: false);
             MinInterFileCreateHoldoffPeriod = nvs["setup.MinInterFileCreateHoldoffPeriod"].VC.GetValueTS(rethrow: false);
             MinNominalFileIndexWriteInterval = nvs["setup.MinNominalFileIndexWriteInterval"].VC.GetValueTS(rethrow: false);
@@ -317,7 +314,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             nvs.ConditionalSetValue("setup.NominalMaxDataBlockSize", NominalMaxDataBlockSize != 0, NominalMaxDataBlockSize);
             nvs.ConditionalSetValue("setup.NominalMaxFileSize", NominalMaxFileSize != 0, NominalMaxFileSize);
             nvs.ConditionalSetValue("setup.FileIndexNumRows", FileIndexNumRows != 0, FileIndexNumRows);
-            nvs.ConditionalSetValue("setup.CompressionLevel", CompressionLevel > 0, CompressionLevel);
             nvs.SetValue("setup.MaxFileRecordingPeriodInSeconds", MaxFileRecordingPeriod.TotalSeconds);
             nvs.SetValue("setup.MinInterFileCreateHoldoffPeriodInSeconds", MinInterFileCreateHoldoffPeriod.TotalSeconds);
             nvs.SetValue("setup.MinNominalFileIndexWriteIntervalInSeconds", MinNominalFileIndexWriteInterval.TotalSeconds);
@@ -616,6 +612,21 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <summary>
+        /// Checks if the DTPair's utcTimeSince1601 field is zero and, if so, sets it from the dateTime's field converted to time since 1601 using GetUTCTimeSince1601.
+        /// </summary>
+        /// <returns></returns>
+        public DateTimeStampPair PopulateUTCTimeSince1601IfNeeded()
+        {
+            if (utcTimeSince1601 == 0.0)
+                utcTimeSince1601 = dateTime.GetUTCTimeSince1601();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Returns a clone/copy of this object.
+        /// </summary>
         public DateTimeStampPair MakeCopyOfThis(bool deepCopy = true)
         {
             return (DateTimeStampPair)MemberwiseClone();
@@ -643,8 +654,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
             if (nextRow != null)
                 return nextRow.FileOffsetToStartOfFirstBlock - row.FileOffsetToStartOfFirstBlock;
-            else
+            else if (fileLength != 0)
                 return fileLength - row.FileOffsetToStartOfFirstBlock;
+            else if (LastBlockInfo != null)
+                return (LastBlockInfo.FileOffsetToStartOfBlock + LastBlockInfo.BlockTotalLength) - row.FileOffsetToStartOfFirstBlock;
+            else
+                return 0;
         }
     }
 
@@ -818,9 +833,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         internal static int SerializedSize { get { return 40; } }
 
-        internal FileIndexRowBase Clear()
+        internal FileIndexRowBase Clear(bool clearRowIndex = false)
         {
-            RowIndex = 0;
+            if (clearRowIndex)
+                RowIndex = 0;
             FileIndexRowFlagBitsU4 = 0;
             FileOffsetToStartOfFirstBlock = 0;
             FileIndexUserRowFlagBits = 0;
@@ -867,6 +883,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         internal static int SerializedSize { get { return 20; } }
 
         public FixedBlockTypeID FixedBlockTypeID { get { return unchecked((FixedBlockTypeID) BlockTypeID32); } }
+
+        public Int32 InferredMinimumFileLength { get { return (FileOffsetToStartOfBlock + BlockTotalLength); } }
     }
 
     #endregion

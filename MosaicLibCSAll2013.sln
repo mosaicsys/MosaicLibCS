@@ -1,6 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2010
+# Visual Studio 2013
+VisualStudioVersion = 12.0.40629.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase2010", "Base\MosaicLibCSBase2010.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCS_PartsLibBase", "Base\Xtras\PartsLib\MosaicLibCS_PartsLib\MosaicLibCS_PartsLibBase.csproj", "{510022EC-7C35-4F8A-B1C7-2471E1DE8678}"

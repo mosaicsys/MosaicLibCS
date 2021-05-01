@@ -52,6 +52,7 @@ namespace MosaicLib.WPF.Controls
         public static readonly DependencyProperty ActionInfoProperty = DependencyProperty.Register("ActionInfo", typeof(IActionInfo), typeof(PartBaseStateLED));
         public static readonly DependencyProperty HighlightColorProperty = DependencyProperty.Register("HighlightColor", typeof(Color), typeof(PartBaseStateLED));
         public static readonly DependencyProperty IncludeConnectionStateProperty = DependencyProperty.Register("IncludeConnectionState", typeof(bool), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty IncludePartIDProperty = DependencyProperty.Register("IncludePartID", typeof(bool), typeof(PartBaseStateLED));
         public static readonly DependencyProperty BorderWidthProperty = DependencyProperty.Register("BorderWidth", typeof(double), typeof(PartBaseStateLED), new PropertyMetadata(0.0, HandleBorderWidthPropertyChanged));
         public static new readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register("BorderThickness", typeof(Thickness), typeof(PartBaseStateLED), new PropertyMetadata(new Thickness(0), HandleBorderThicknessPropertyChanged));
         public static readonly DependencyProperty ColorListProperty = DependencyProperty.Register("ColorList", typeof(string), typeof(PartBaseStateLED), new PropertyMetadata(defaultColorListString, HandleColorListPropertyChanged));
@@ -61,6 +62,7 @@ namespace MosaicLib.WPF.Controls
         public IActionInfo ActionInfo { get { return (IActionInfo)GetValue(ActionInfoProperty); } set { SetValue(ActionInfoProperty, value); } }
         public Color HighlightColor { get { return (Color)GetValue(HighlightColorProperty); } set { SetValue(HighlightColorProperty, value); } }
         public bool IncludeConnectionState { get { return (bool)GetValue(IncludeConnectionStateProperty); } set { SetValue(IncludeConnectionStateProperty, value); } }
+        public bool IncludePartID { get { return (bool)GetValue(IncludePartIDProperty); } set { SetValue(IncludePartIDProperty, value); } }
         public double BorderWidth { get { return (double)GetValue(BorderWidthProperty); } set { SetValue(BorderWidthProperty, value); } }
         public new Thickness BorderThickness { get { return (Thickness)GetValue(BorderThicknessProperty); } set { SetValue(BorderThicknessProperty, value); } }
         public string ColorList { get { return (string)GetValue(ColorListProperty); } set { SetValue(ColorListProperty, value); } }
@@ -74,7 +76,7 @@ namespace MosaicLib.WPF.Controls
         private IActionInfo lastActionInfo;
         private double lastBorderWidth;
         private Color lastHighlightColor;
-        private bool lastIncludeConnectionState = true;
+        private bool lastIncludeConnectionState = true, lastIncludePartID = false;
         private System.Windows.Media.Brush lastBorderBrush = solidBlackBrush;
         private Colors colors = defaultColors;
 
@@ -92,6 +94,8 @@ namespace MosaicLib.WPF.Controls
                 lastHighlightColor = (Color)e.NewValue;
             else if (e.Property == IncludeConnectionStateProperty)
                 lastIncludeConnectionState = (bool)e.NewValue;
+            else if (e.Property == IncludePartIDProperty)
+                lastIncludePartID = (bool)e.NewValue;
             else if (e.Property == BorderBrushProperty)
                 lastBorderBrush = (Brush)e.NewValue;
 
@@ -171,7 +175,8 @@ namespace MosaicLib.WPF.Controls
 
         private void Update()
         {
-            string toolTipMesg = (lastPartBaseState != null) ? "{0}".CheckedFormat(lastPartBaseState) : "[Part BaseState is null]";
+            var ttPartIDPrefix = (IncludePartID ? "{0} ".CheckedFormat(lastPartBaseState != null ? lastPartBaseState.PartID : string.Empty) : "");
+            string toolTipMesg = (lastPartBaseState != null) ? "{0}{1}".CheckedFormat(ttPartIDPrefix, lastPartBaseState.ToString(BaseState.ToStringSelect.All & ~BaseState.ToStringSelect.PartID)) : "[Part BaseState is null]";
 
             Color color;
 
@@ -195,7 +200,7 @@ namespace MosaicLib.WPF.Controls
                 {
                     color = colors.busyColor;
 
-                    toolTipMesg = (lastActionInfo != null) ? "Busy, {0} [{1}]".CheckedFormat(lastActionInfo, lastPartBaseState.Reason) : "Busy [{0}]".CheckedFormat(lastPartBaseState.Reason);
+                    toolTipMesg = (lastActionInfo != null) ? "{0}Busy, {1} [{2}]".CheckedFormat(ttPartIDPrefix, lastActionInfo, lastPartBaseState.Reason) : "{0}Busy [{1}]".CheckedFormat(ttPartIDPrefix, lastPartBaseState.Reason);
                 }
                 else if ((lastActionInfo != null) && lastActionInfo.ActionState.Failed)
                 {
@@ -205,7 +210,7 @@ namespace MosaicLib.WPF.Controls
                 else
                 {
                     color = colors.idleColor;
-                    toolTipMesg = (lastActionInfo != null) ? "Idle, {0}".CheckedFormat(lastActionInfo) : "Idle";
+                    toolTipMesg = (lastActionInfo != null) ? "{0}Idle, {1}".CheckedFormat(ttPartIDPrefix, lastActionInfo) : "{0}Idle".CheckedFormat(ttPartIDPrefix);
                 }
 
                 if (connectionStateIsApplicable && lastPartBaseState.ConnState == ConnState.ConnectionDegraded)

@@ -105,6 +105,32 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <summary>InlineMAP key name used to carry Error Mesg contents</summary>
         public const string ObjKnownType_Error = "Error";
 
+        /// <summary>file extension used for mdrf1 files [.mdrf]</summary>
+        public const string mdrf1FileExtension = ".mdrf";
+
+        /// <summary>file extension used for mdrf1 files [.mdrf1]</summary>
+        public const string mdrf1AltFileExtension = ".mdrf1";
+
+        /// <summary>base file extension used for mdrf2 files [.mdrf2]</summary>
+        public const string mdrf2BaseFileExtension = ".mdrf2";
+
+        /// <summary>full file extension for lz4 compressed mdrf2 files [.mdrf2.lz4]</summary>
+        public const string mdrf2LZ4FileExtension = mdrf2BaseFileExtension + Compression.Constants.LZ4FileExtension;
+
+        /// <summary>full file extension for gzip compressed mdrf2 files [.mdrf2.gz]</summary>
+        public const string mdrf2GZipFileExtension = mdrf2BaseFileExtension + Compression.Constants.GZipFileExtension;
+
+        /// <summary>full file extension for lz4 compressed mdrf1 files [.mdrf.lz4]</summary>
+        public const string mdrf1LZ4FileExtension = mdrf1FileExtension + Compression.Constants.LZ4FileExtension;
+
+        /// <summary>full file extension for gzip compressed mdrf1 files [.mdrf.gz]</summary>
+        public const string mdrf1GZipFileExtension = mdrf1FileExtension + Compression.Constants.GZipFileExtension;
+
+        /// <summary>full file extension for lz4 compressed mdrf1 files [.mdrf1.lz4]</summary>
+        public const string mdrf1AltLZ4FileExtension = mdrf1AltFileExtension + Compression.Constants.LZ4FileExtension;
+
+        /// <summary>full file extension for gzip compressed mdrf1 files [.mdrf1.gz]</summary>
+        public const string mdrf1AltGZipFileExtension = mdrf1AltFileExtension + Compression.Constants.GZipFileExtension;
     }
 
     #endregion

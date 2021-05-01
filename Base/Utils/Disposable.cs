@@ -528,6 +528,49 @@ namespace MosaicLib.Utils
     }
 
     #endregion
+
+    #region IIsDisposed and related extension methods
+
+    /// <summary>
+    /// Interface supported by objects that can be asked if they have been Explicitly Disposed.  
+    /// <para/>Note: this interface is explicitly not intended to be used in relation to finalization of objects and this interfaces properties may report
+    /// arbitrary values if called on a finalized objects
+    /// </summary>
+    public interface IIsDisposed : IDisposable
+    {
+        /// <summary>Returns true if the object indicates that it has been explicitly disposed using its IDispoable.Dispose method.</summary>
+        bool IsDisposed { get; }
+
+        /// <summary>Returns true if the object indicates that it has been explicitly disposed or that it is currently being disposed.</summary>
+        bool IsDisposing { get; }
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Queries the given <paramref name="objToQuery"/> and checks if it IsDisposed (or IsDisposing if <paramref name="orDisposing"/> is true)
+        /// and if true then this method throws an ObjectDisposedException using the Throw extension methods (so that this method can be inlined).
+        /// </summary>
+        /// <exception cref="ObjectDisposedException"/>
+        public static void ThrowIfDisposed(this IIsDisposed objToQuery, bool orDisposing = true, string mesg = null, Func<string> mesgFactoryFunc = null)
+        {
+            if (objToQuery.IsDisposed || (orDisposing && objToQuery.IsDisposing))
+            {
+                if (mesg == null && mesgFactoryFunc != null)
+                    mesg = mesgFactoryFunc();
+
+                if (mesg != null)
+                    new ObjectDisposedException(Fcns.CurrentClassLeafName, mesg).Throw();
+                else
+                    new ObjectDisposedException(Fcns.CurrentClassLeafName).Throw();
+            }
+        }
+    }
+
+    #endregion
 }
 
 //-------------------------------------------------------------------

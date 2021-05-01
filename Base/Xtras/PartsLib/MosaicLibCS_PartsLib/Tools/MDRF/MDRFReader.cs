@@ -439,14 +439,30 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
     {
         #region Construction (and Release)
 
-        public MDRFFileReader(string path, IValuesInterconnection ivi = null, MDRFFileReaderBehavior mdrfFileReaderBehavior = MDRFFileReaderBehavior.AutoCreateIVI, Action<object> readObjectEventHandlerHook = null)
+        public MDRFFileReader(string path, IValuesInterconnection ivi = null, MDRFFileReaderBehavior mdrfFileReaderBehavior = MDRFFileReaderBehavior.AutoCreateIVI, Action<object> readObjectEventHandlerHook = null, Stream externallyProvidedFileStream = null, bool closeExternallyProvidedFileStreamOnRelease = true)
         {
             MDRFFileReaderBehavior = mdrfFileReaderBehavior;
             ReadObjectEventHandlerHook = readObjectEventHandlerHook;
+            ExternallyProvidedFileStream = externallyProvidedFileStream;
+            CloseExternallyProvidedFileStreamOnRelease = closeExternallyProvidedFileStreamOnRelease;
+
+            if (ExternallyProvidedFileStream != null)
+            {
+                enableLiveFileHeuristics = false;
+            }
+
             AddExplicitDisposeAction(Release);
 
             FilePath = path.MapNullToEmpty();
-            IVI = ((ivi != null || !autoCreateIVI) ? ivi : new ValuesInterconnection("{0} {1}".CheckedFormat(Fcns.CurrentMethodName, FilePath), registerSelfInDictionary: false, makeAPIThreadSafe: true));
+            if (ivi != null || !autoCreateIVI)
+            {
+                IVI = ivi;
+            }
+            else
+            {
+                var iviName = (FilePath.IsNeitherNullNorEmpty() ? "{0} {1}".CheckedFormat(Fcns.CurrentMethodName, FilePath) : Fcns.CurrentMethodName);
+                IVI = new ValuesInterconnection(iviName, registerSelfInDictionary: false, makeAPIThreadSafe: true);
+            }
 
             LibraryInfo = new LibraryInfo();
             SetupInfo = emptySetupInfo;
@@ -455,7 +471,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             try
             {
-                fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                fs = ExternallyProvidedFileStream ?? new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
                 UpdateFileLength();
 
@@ -463,6 +479,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 if (ResultCode.IsNullOrEmpty())
                     ResultCode = ReadMetaDataBlocks();
+
+                if (ExternallyProvidedFileStream != null && FileIndexInfo != null && FileIndexInfo.LastBlockInfo != null)
+                    FileLength = FileIndexInfo.LastBlockInfo.InferredMinimumFileLength;
             }
             catch (System.Exception ex)
             {
@@ -472,7 +491,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         public void Release()
         {
-            Fcns.DisposeOfObject(ref fs);
+            if (ExternallyProvidedFileStream == null)
+                Fcns.DisposeOfObject(ref fs);
+            else if (CloseExternallyProvidedFileStreamOnRelease)
+                Fcns.DisposeOfGivenObject(ExternallyProvidedFileStream);
+
+            fs = null;
+            ExternallyProvidedFileStream = null;
         }
 
         public MDRFFileReaderBehavior MDRFFileReaderBehavior 
@@ -488,6 +513,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private MDRFFileReaderBehavior _mdrfFileReaderBehavior;
         private Action<object> ReadObjectEventHandlerHook { get; set; }
+        private Stream ExternallyProvidedFileStream { get; set; }
+        private bool CloseExternallyProvidedFileStreamOnRelease { get; set; }
+
         private bool autoCreateIVI, enableLiveFileHeuristics;
 
         #endregion
@@ -526,7 +554,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         {
             try
             {
-                FileLength = unchecked((int)((fs != null) ? fs.Length : 0));        // This will obtain the current actual file length from win32 using the file handle
+                if (fs is FileStream)       // this covers both the locally created FileStream case and the case where an external file stream has been provided to the tool
+                    FileLength = (int)fs.Length;        // This will obtain the current actual file length from win32 using the file handle
+                else
+                    FileLength = 0; // we do not know what the file length is
             }
             catch
             {
@@ -721,7 +752,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             for (; ; )
             {
-                if (fileScanOffset >= FileLength)
+                if (fileScanOffset >= FileLength && FileLength > 0)
                     break;
 
                 int tempOffset = fileScanOffset;
@@ -927,24 +958,24 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             return ec;
         }
 
-        private int lastReadAndProcessFileLength = 0;
+        private int lastReadAndProcessFileLength;
 
         private IGroupInfo[] FilteredGroupInfoArray { get; set; }
-        private FileIndexRowBase currentScanRow = null;
-        private FileIndexRowBase nextScanRow = null;
+        private FileIndexRowBase currentScanRow;
+        private FileIndexRowBase nextScanRow;
 
-        private bool stopReadingRequestHasBeenTriggered = false;
+        private bool stopReadingRequestHasBeenTriggered;
 
-        public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
+        public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpecIn)
         {
-            filterSpec = new ReadAndProcessFilterSpec(filterSpec);      // make a clone of the given value so that the caller can re-use, and changed, there copy while we use ours.
+            var filterSpec = new ReadAndProcessFilterSpec(filterSpecIn);      // make a clone of the given value so that the caller can re-use, and changed, there copy while we use ours.
 
             FileIndexRowBase[] filteredFileIndexRowArray = filterSpec.UpdateFilterSpecAndGenerateFilteredFileIndexRows(DateTimeInfo, FileIndexInfo);
             int numFilteredFileIndexRows = filteredFileIndexRowArray.SafeLength();
 
             FilteredGroupInfoArray = GroupInfoArray.Where(gi => filterSpec.GroupFilterDelegate(gi)).ToArray();
 
-            ResetTimers(filterSpec);
+            ResetTimersAndCadencing(filterSpec);
 
             ResetIVAs();
 
@@ -958,7 +989,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             {
                 lastReadAndProcessFileLength = FileLength;
             }
-            else if (lastReadAndProcessFileLength != FileLength)
+            else if (lastReadAndProcessFileLength != FileLength && enableLiveFileHeuristics)
             {
                 LoadFileIndexInfo();
 
@@ -1010,13 +1041,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         {
                             enableReportingCadenceIntervalEventsForThisTimeStamp = intervalCadenceTimer.GetIsTriggered(new QpcTimeStamp(dbb.fileDeltaTimeStamp));
 
+                            if (enableReportingCadenceIntervalEventsForThisTimeStamp && groupByFileIDCadencingGateArray != null)
+                                groupByFileIDCadencingGateArray.SetAll(true);
+
                             //cadenceTriggerEvalList.Add(Tuple.Create(dbb.fileDeltaTimeStamp, enableReportingCadenceIntervalEventsForThisTimeStamp));
                         }
 
                         if (enableReportingCadenceIntervalEventsForThisTimeStamp)
                         {
                             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.NewTimeStamp, DataBlockBuffer = LastTimeStampUpdateDBB });
-                            lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
                         }
                     }
 
@@ -1042,7 +1075,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
                     }
 
-                    if (fileScanOffset >= FileLength)
+                    if (fileScanOffset >= FileLength && FileLength != 0)
                         break;
                 }
             }
@@ -1058,15 +1091,24 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp, Row = currentScanRow, VC = ValueContainer.CreateBo(FileIndexInfo.FileWasProperlyClosed) });
         }
 
-        private void ResetTimers(ReadAndProcessFilterSpec filterSpec)
+        private void ResetTimersAndCadencing(ReadAndProcessFilterSpec filterSpec)
         {
             haveStartConditionsBeenReached = false;
             enableReportingCadenceIntervalEventsForThisTimeStamp = false;
 
             isCadenceIntervalEnabled = (filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval > 0.0);
 
+            if (isCadenceIntervalEnabled)
+            {
+                int maxGroupID = GroupInfoArray.Max(gi => gi.FileID);
+                groupByFileIDCadencingGateArray = new bool [maxGroupID + 1];
+            }
+            else
+            {
+                groupByFileIDCadencingGateArray = null;
+            }
+
             lastDbbTimeStamp = Double.NegativeInfinity;
-            lastGroupOrTSUpdateEventTimeStamp = Double.NegativeInfinity;
 
             if (isCadenceIntervalEnabled)
                 intervalCadenceTimer = new QpcTimer() { TriggerIntervalInSec = filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval, AutoReset = true }.Reset(QpcTimeStamp.Zero, triggerImmediately: true);
@@ -1092,10 +1134,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private bool haveStartConditionsBeenReached;
         private bool enableReportingCadenceIntervalEventsForThisTimeStamp;
+        private bool[] groupByFileIDCadencingGateArray;
 
         private bool isCadenceIntervalEnabled;
         private double lastDbbTimeStamp;
-        private double lastGroupOrTSUpdateEventTimeStamp;
         private QpcTimer intervalCadenceTimer;
 
         private void ResetIVAs()
@@ -1106,8 +1148,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private static IValueAccessor[] emptyIVAArray = EmptyArrayFactory<IValueAccessor>.Instance;
 
-        private ProcessContentEvent lastEventPCE = ProcessContentEvent.None;
-        private FixedBlockTypeID lastBlockTypeID = FixedBlockTypeID.None;
+        private ProcessContentEvent lastEventPCE;
 
         private void SignalEventIfEnabled(ReadAndProcessFilterSpec filterSpec, ProcessContentEventData eventData)
         {
@@ -1118,12 +1159,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 eventData.Row = currentScanRow;
 
             // generate the DateTime value
-            if (currentScanRow == null || currentScanRow.IsEmpty || eventData.FileDeltaTimeStamp < currentScanRow.FirstBlockDeltaTimeStamp)
+            if (currentScanRow == null || currentScanRow.IsEmpty || eventData.FileDeltaTimeStamp < currentScanRow.FirstBlockDeltaTimeStamp || currentScanRow.FirstBlockUtcTimeSince1601 == 0.0)
             {
                 // There is no current row (or it is empty, or the current delta timestamp comes from before the current row): interpolate from the first DateTime stamp in the file
                 eventData.UTCDateTime = DateTimeInfo.UTCDateTime + TimeSpan.FromSeconds(Math.Max(0.0, eventData.FileDeltaTimeStamp));
             }
-            else if (nextScanRow == null || nextScanRow.IsEmpty)
+            else if (nextScanRow == null || nextScanRow.IsEmpty || nextScanRow.FirstBlockUtcTimeSince1601 == 0.0)
             {
                 // There is no next row (or it is empty): interpolate from the first DateTime stamp in the current row
                 eventData.UTCDateTime = currentScanRow.FirstBlockDateTime + TimeSpan.FromSeconds(eventData.FileDeltaTimeStamp - currentScanRow.FirstBlockDeltaTimeStamp);
@@ -1265,8 +1306,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 default:
                     break;
             }
-
-            lastBlockTypeID = dbb.FixedBlockTypeID;
         }
 
         private void ProcessMessageOrErrorBlock(DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
@@ -1362,8 +1401,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             if (decodeIndex == dbb.payloadLength)
             {
-                if (enableReportingCadenceIntervalEventsForThisTimeStamp)
+                if (groupByFileIDCadencingGateArray == null)
+                {
                     SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                }
+                else if (groupByFileIDCadencingGateArray[gi.FileID])
+                {
+                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                    groupByFileIDCadencingGateArray[gi.FileID] = false;
+                }
 
                 return;
             }
@@ -1402,11 +1448,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     if ((groupBlockFlagBits & GroupBlockFlagBits.IsStartOfFullGroup) != GroupBlockFlagBits.None)
                     {
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.StartOfFullGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
-                        lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
                     }
-                    else if (enableReportingCadenceIntervalEventsForThisTimeStamp)
+                    else if (groupByFileIDCadencingGateArray == null)
                     {
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                    }
+                    else if (groupByFileIDCadencingGateArray[gi.FileID])
+                    {
+                        SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                        groupByFileIDCadencingGateArray[gi.FileID] = false;
                     }
                 }
             }
@@ -1446,8 +1496,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 if (ivaSetPendingCount > 0)
                     IVI.Set(GroupPointIVAArray);
 
-                if (enableReportingCadenceIntervalEventsForThisTimeStamp)
+                if (groupByFileIDCadencingGateArray == null)
+                {
                     SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.PartialGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                }
+                else if (groupByFileIDCadencingGateArray[gi.FileID])
+                {
+                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.PartialGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
+                    groupByFileIDCadencingGateArray[gi.FileID] = false;
+                }
             }
         }
 
@@ -1656,6 +1713,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 contentLen = 0;
             }
 
+            public void Resize(int newByteArraySize)
+            {
+                newByteArraySize = (newByteArraySize + cacheSizeRoundingMinusOne) & ~cacheSizeRoundingMinusOne;     // round size up the neartest multiple of cacheSizeRounding
+
+                System.Array.Resize(ref byteArray, newByteArraySize);
+                contentLen = Math.Min(contentLen, newByteArraySize);
+            }
+
             /// <summary>Returns true if the given byte offset is currently present in the loaded cache contents</summary>
             public bool ContainsByte(int testFileStartOffset)
             {
@@ -1699,11 +1764,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             // if the cache is not large enough for this requested block after boundary alignment then we reset the cache by creating another, larger one
             if (desiredCacheCount > cache.byteArray.Length)
-            {
-                // enlarging the cache also clears it and thus triggers a full read.
-                cache = new FileByteArrayCache(desiredCacheCount);
-            }
-            else
+                cache.Resize(desiredCacheCount);
+
             {
                 // if the newly desired cache offset is beyond the current one and the cache still contains at least one byte at the the newly desire offset
                 // then shift the portion that we already read down and make it the new start offset.
@@ -1731,12 +1793,32 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             startOffsetInCacheByteArray = startOffsetInFile - cache.bufferStartOffsetInFile;
 
             int readStartOffset = cache.bufferStartOffsetInFile + cache.contentLen;
-            int countToRead = Math.Min(desiredCacheCount - cache.contentLen, FileLength - readStartOffset);
+            int countToRead = desiredCacheCount - cache.contentLen;
+            if (FileLength != 0)
+                countToRead = Math.Min(countToRead, FileLength - readStartOffset);
 
             string ec;
             try
             {
-                fs.Seek(readStartOffset, SeekOrigin.Begin);
+                int skipOverLength = (readStartOffset - (int)fs.Position);
+                if (fs.CanSeek || skipOverLength < 0)
+                {
+                    // use seek when supported or if caller is attempting to rewind in file (which will throw)
+                    fs.Seek(readStartOffset, SeekOrigin.Begin);
+                }
+                else
+                {
+                    while (skipOverLength > 0)
+                    {
+                        var skipIncrementCount = Math.Min(skipOverLength, tempSkipBuffer.Length);
+                        var didSkipIncrementCount = fs.Read(tempSkipBuffer, 0, skipIncrementCount);
+                        if (didSkipIncrementCount > 0)
+                            skipOverLength -= didSkipIncrementCount;
+                        else
+                            break;  // end of file reached.
+                    }
+                }
+
                 int countRead = fs.Read(cache.byteArray, cache.contentLen, countToRead);
 
                 if (countRead > 0)
@@ -1755,15 +1837,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             return ec;
         }
 
+        byte[] tempSkipBuffer = new byte[4096];
+
         #endregion
 
         #region Internal fields
 
-        private FileStream fs;
-        private int fileScanOffset = 0;
-        private double currentBlockDeltaTimeStamp = 0;
+        private Stream fs;
+        private int fileScanOffset;
+        private double currentBlockDeltaTimeStamp;
 
-        private int fileIndexBlockStartOffset = 0;
+        private int fileIndexBlockStartOffset;
 
         private static readonly SetupInfo emptySetupInfo = new SetupInfo();
         private static readonly FileIndexInfo emptyFileIndexInfo = new FileIndexInfo();

@@ -48,6 +48,7 @@ using MDRF = MosaicLib.PartsLib.Tools.MDRF;
 using Utils = MosaicLib.Utils;
 using MosaicLib.PartsLib.Tools.MDRF.Writer;
 using Mosaic.ToolsLib.MDRF2.Common;
+using Mosaic.ToolsLib.Compression;
 
 namespace Mosaic.ToolsLib.MDRF2.Writer
 {
@@ -61,7 +62,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <summary>Method used to record an object into the current MDRF2 file</summary>
         string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0);
 
-        /// <summary>Gives the total number of client operations that this writer has been asked to perform.  This allows a client to tell if other clients have used the writer recently</summary>
+        /// <summary>Gives the total number of client operations that this writer has been asked to perform.  This allows a client to tell if other clients have used the writer recently.</summary>
         ulong ClientOpRequestCount { get; }
     }
 
@@ -70,18 +71,40 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
     /// </summary>
     public class MDRF2WriterConfig : ICopyable<MDRF2WriterConfig>
     {
+        /// <summary>Specifies the partID of the writer</summary>
         public string PartID { get; set; }
+
+        /// <summary>Specifies the SetupInfo to be included in the MDRF2 file(s).  Defaults to SetupInfo.DefaultforMDRF2.</summary>
         public SetupInfo SetupInfo { get; set; } = SetupInfo.DefaultForMDRF2;
 
-        public MDRF.Writer.GroupInfo[] GroupInfoArray { get; set; }
-        public MDRF.Writer.OccurrenceInfo[] OccurrenceInfoArray { get; set; }
+        /// <summary>Gives the set of group definitions to use.  Set to null to create the default group.  The empty array (this default) selects that no groups shall be created or used.</summary>
+        public MDRF.Writer.GroupInfo[] GroupInfoArray { get; set; } = EmptyArrayFactory<MDRF.Writer.GroupInfo>.Instance;
 
-        public MDRF2WriterConfigBehavior WriterBehavior { get; set; } = MDRF2WriterConfigBehavior.EnableAPILocking | MDRF2WriterConfigBehavior.UseLZ4Compression;
-        public int CompressionLevel { get; set; } = 1;
+        /// <summary>Gives the set of occurrence definitions to use.  Set to null to create the default occurrences.  The empty array (this default) selects that no occurrences are created.</summary>
+        public MDRF.Writer.OccurrenceInfo[] OccurrenceInfoArray { get; set; } = EmptyArrayFactory<MDRF.Writer.OccurrenceInfo>.Instance;
 
+        /// <summary>Selects the writer behavior.  Defaults to MDRF2WriterConfigBehavior.EnableAPILocking.  Set to None to disable API locking (so as to increase performance at the expense of built in thread safety).</summary>
+        public MDRF2WriterConfigBehavior WriterBehavior { get; set; } = MDRF2WriterConfigBehavior.EnableAPILocking;
+
+        /// <summary>Gives </summary>
+        public CompressorSelect CompressorSelect { get; set; } = CompressorSelect.LZ4;
+
+        /// <summary>When the CompressorSelect is not set to None, this gives the desired compression level for the selected Compressor type.  Defaults to 2.</summary>
+        /// <remarks>
+        /// Values generally range from 0 to 15 depending on compressor engine type.  This value is clipped to the supported range for the selected compressor type.
+        /// 0 means least (or no) compression.  For GZip this disables compression.
+        /// 1 is the fastest selectable compression which produces the least compression cost.
+        /// 2 appears to be the sweet spot for both LZ4 and 2 or 3 for GZip compression - good tradoff of compression rate/cost and decompression speed.
+        /// </remarks>
+        public int CompressionLevel { get; set; } = 2;
+
+        /// <summary>Gives the MesgType that is used when the writer is recording a message.  Defaults to MesgType.Debug</summary>
         public Logging.MesgType RecordMessageMesgType { get; set; } = Logging.MesgType.Debug;
+
+        /// <summary>Gives the MesgType that is used when the writer is recording an error message.  Defaults to MesgType.Debug</summary>
         public Logging.MesgType RecordErrorMesgType { get; set; } = Logging.MesgType.Debug;
 
+        /// <summary>Implementation for ICopyable interface.</summary>
         public MDRF2WriterConfig MakeCopyOfThis(bool deepCopy = true)
         {
             return (MDRF2WriterConfig)this.MemberwiseClone();
@@ -90,7 +113,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
     /// <summary>
     /// Used to select the behaviors that are to be implemented by the MDRF2Writer
-    /// <para/>None (0x00), EnableAPILocking (0x01), UseLZ4Compression (0x02)
+    /// <para/>None (0x00), EnableAPILocking (0x01)
     /// </summary>
     [Flags]
     public enum MDRF2WriterConfigBehavior : int
@@ -100,9 +123,6 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         /// <summary>When this flag is selected it requests the writer to use a mutex to control access to the public API methods so that the instance may be safely used by more than one thread. [0x01]</summary>
         EnableAPILocking = 0x01,
-
-        /// <summary>When selected this indicates that LZ4 compression should be used [0x02]</summary>
-        UseLZ4Compression = 0x02,
     }
 
     /// <summary>
@@ -123,10 +143,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
     {
         #region Construction, Release, call-chainable Add variants, and supporting fields
 
-        public MDRF2Writer(MDRF2WriterConfig writerConfig)
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        public MDRF2Writer(MDRF2WriterConfig writerConfig, Stream externallyProvidedFileStream = null)
             : base(writerConfig.PartID)
         {
             WriterConfig = writerConfig.MakeCopyOfThis();
+            ExternallyProvidedFileStream = externallyProvidedFileStream;
+
+            compressorSelect = WriterConfig.CompressorSelect;
 
             mutex = ((WriterConfig.WriterBehavior & MDRF2WriterConfigBehavior.EnableAPILocking) != 0) ? new object() : null;
 
@@ -184,6 +210,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         }
 
         private MDRF2WriterConfig WriterConfig { get; set; }
+        private Stream ExternallyProvidedFileStream { get; set; }
+
+        private CompressorSelect compressorSelect;
         private static readonly MessagePack.MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
 
         public void Release()
@@ -195,7 +224,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     InnerNoteClientOpRequested();
 
                     var dtPair = MDRF2DateTimeStampPair.Now;
-                    InnerCloseCurrentFile("On Release or Dispose", ref dtPair);
+
+                    InnerFinishAndCloseCurrentFile("On Release or Dispose", ref dtPair);
 
                     Fcns.DisposeOfObject(ref metaDataBlockBufferWriter);
                     Fcns.DisposeOfObject(ref inlineIndexBlockBufferWriter);
@@ -208,8 +238,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 finally
                 {
                     fileStream = null;
-                    lz4EncoderStream = null;
                     outputStream = null;
+                    compressorStream = null;
 
                     metaDataBlockBufferWriter = null;
                     inlineIndexBlockBufferWriter = null;
@@ -399,7 +429,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     droppedCounts.IncrementDataGroup();
                     RecordError(ec);
-                    CloseFile(ref dtPair);
+                    InnerCloseFile(ref dtPair);
                 }
 
                 return ec;
@@ -589,7 +619,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                 string ec = string.Empty;
 
-                if (!InnerIsFileOpen)
+                if (!InnerIsStreamWritable)
                     ec = "{0} failed: File is not open".CheckedFormat(CurrentMethodName);
 
                 try
@@ -602,11 +632,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 }
                 catch (System.Exception ex)
                 {
-                    if (InnerIsFileOpen)
+                    if (InnerIsStreamWritable)
                     {
                         ec = RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)));
 
-                        CloseFile(ref dtPair);
+                        InnerCloseFile(ref dtPair);
                     }
                 }
 
@@ -620,13 +650,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             try
             {
-                ec = FinishAndWriteCurrentBlock(blockBufferWriter, ref dtPair, ifNeeded: true);
-
-                if (ec.IsNullOrEmpty() && ((flushFlags & MDRF.Writer.FlushFlags.File) != 0))
-                {
-                    lz4EncoderStream?.Flush();
-                    fileStream.Flush();
-                }
+                ec = FinishAndWriteCurrentBlock(blockBufferWriter, ref dtPair, ifNeeded: true, flush: (flushFlags & MDRF.Writer.FlushFlags.File) != 0);
             }
             catch (System.Exception ex)
             {
@@ -635,7 +659,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (rethrow)
                     ex.Throw();
 
-                CloseFile(ref dtPair);
+                InnerCloseFile(ref dtPair);
             }
 
             return ec;
@@ -649,7 +673,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
-                return (InnerIsFileOpen ? CurrentFileInfo : LastFileInfo).FileSize;
+                return (InnerIsStreamWritable ? CurrentFileInfo : LastFileInfo).FileSize;
             }
         }
 
@@ -663,7 +687,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                 using (var scopedLock = new ScopedLock(mutex))
                 {
-                    return currentFileInfo.IsActive && InnerIsFileOpen;
+                    return currentFileInfo.IsActive && InnerIsStreamWritable;
                 }
             }
         }
@@ -736,18 +760,18 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
-                return InnerCloseCurrentFile(reason, ref dtPair);
+                return InnerFinishAndCloseCurrentFile(reason, ref dtPair);
             }
         }
 
-        private int InnerCloseCurrentFile(string reason, ref MDRF2DateTimeStampPair dtPair)
+        private int InnerFinishAndCloseCurrentFile(string reason, ref MDRF2DateTimeStampPair dtPair)
         {
-            if (InnerIsFileOpen)
+            if (InnerIsStreamWritable)
                 RecordMessage("{0} reason:{1}".CheckedFormat(CurrentMethodName, reason.MapNullOrEmptyTo("[NoReasonGiven]")), ref dtPair);
 
             ServicePendingWrites(ref dtPair);
 
-            if (InnerIsFileOpen)
+            if (InnerIsStreamWritable)
                 WriteFileEndBlockAndCloseFile(ref dtPair);
 
             allowImmediateReopen = true;
@@ -783,7 +807,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         {
             if (!errorMesg.IsNullOrEmpty())
             {
-                Log.Emitter(WriterConfig.RecordMessageMesgType).Emit("{0}: {1}", CurrentMethodName, errorMesg);
+                Log.Emitter(WriterConfig.RecordErrorMesgType).Emit("{0}: {1}", CurrentMethodName, errorMesg);
 
                 MessageItem mesgItem = new MessageItem() { mesg = errorMesg, blockTypeID = FixedBlockTypeID.ErrorV1, dtPair = MDRF2DateTimeStampPair.Now };
 
@@ -837,7 +861,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         {
             if (groupOrOccurrenceInfoListModified || forceRebuild)
             {
-                if (InnerIsFileOpen)
+                if (InnerIsStreamWritable)
                 {
                     CloseCurrentFile("GroupOrOccurrenceInfoListModified: Reassigning IDs and building new trackers");
                 }
@@ -898,19 +922,19 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         {
             TimeSpan fileDeltaTimeSpan = dtPair.ConvertQPCToFDT(ref fileReferenceQPCDTPair).FromSeconds();
 
-            if (InnerIsFileOpen)
+            if (InnerIsStreamWritable && ExternallyProvidedFileStream == null)
             {
                 if (groupOrOccurrenceInfoListModified)
                 {
-                    InnerCloseCurrentFile("GroupOccurrence specifications changed: '{0}' is {1} bytes and {2:f3} hours)".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
+                    InnerFinishAndCloseCurrentFile("GroupOccurrence specifications changed: '{0}' is {1} bytes and {2:f3} hours)".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
                 }
-                else if (currentFileInfo.FileSize >= setup.NominalMaxFileSize)
+                else if (currentFileInfo.FileSize >= setup.NominalMaxFileSize && setup.NominalMaxFileSize != 0)
                 {
-                    InnerCloseCurrentFile("NominalMaxFileSize limit of {0} bytes reached: '{1}' is {2} bytes and {3:f3} hours)".CheckedFormat(setup.NominalMaxFileSize, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
+                    InnerFinishAndCloseCurrentFile("NominalMaxFileSize limit of {0} bytes reached: '{1}' is {2} bytes and {3:f3} hours)".CheckedFormat(setup.NominalMaxFileSize, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
                 }
-                else if (fileDeltaTimeSpan > setup.MaxFileRecordingPeriod)
+                else if (fileDeltaTimeSpan > setup.MaxFileRecordingPeriod && !setup.MaxFileRecordingPeriod.IsZero())
                 {
-                    InnerCloseCurrentFile("MaxFileRecordingPeriod limit of {0:f3} hours reached: '{1}' is {2} bytes and {3:f3} hours".CheckedFormat(setup.MaxFileRecordingPeriod.TotalHours, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
+                    InnerFinishAndCloseCurrentFile("MaxFileRecordingPeriod limit of {0:f3} hours reached: '{1}' is {2} bytes and {3:f3} hours".CheckedFormat(setup.MaxFileRecordingPeriod.TotalHours, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
                 }
                 else if (tenSecondTimer.GetIsTriggered(dtPair.QpcTimeStamp))
                 {
@@ -922,16 +946,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                     if (dayOfYearChanged && ((writerBehavior & MDRF.Writer.WriterBehavior.AdvanceOnDayBoundary) != 0) && fileDeltaTimeSpan.TotalMinutes > 10.0)
                     {
-                        InnerCloseCurrentFile("AdvanceOnDayBoundary triggered: '{0}' is {1} bytes and {2:f3} hours)".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
+                        InnerFinishAndCloseCurrentFile("AdvanceOnDayBoundary triggered: '{0}' is {1} bytes and {2:f3} hours)".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
                     }
                     else if (fileReferenceIsDST != TimeZoneInfo.Local.IsDaylightSavingTime(localDateTime) || fileReferenceUTCOffset != TimeZoneInfo.Local.GetUtcOffset(localDateTime))
                     {
-                        InnerCloseCurrentFile("DST and/or timezone have changed since file was opened: '{0}' is {1} bytes and {2:f3} hours".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
+                        InnerFinishAndCloseCurrentFile("DST and/or timezone have changed since file was opened: '{0}' is {1} bytes and {2:f3} hours".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours), ref dtPair);
                     }
                 }
             }
 
-            if (InnerIsFileOpen)
+            if (InnerIsStreamWritable)
                 return "";
 
             ReassignIDsAndBuildNewTrackersIfNeeded();
@@ -945,7 +969,6 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                 TimeZoneInfo localTZ = TimeZoneInfo.Local;
 
-                QpcTimeStamp tsNow = dtPair.QpcTimeStamp;
                 bool isDST = localTZ.IsDaylightSavingTime(localDateTime);
                 TimeSpan utcOffset = localTZ.GetUtcOffset(localDateTime);
 
@@ -984,46 +1007,43 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             // generate the file name
             string dateTimePart = Dates.CvtToString(fileReferenceDateTime.ToLocalTime(), Dates.DateTimeFormat.ShortWithMSec);
 
-            bool enableLZ4Compression = ((WriterConfig.WriterBehavior & MDRF2WriterConfigBehavior.UseLZ4Compression) != 0) || (WriterConfig.CompressionLevel > 0);
+            if (ExternallyProvidedFileStream == null)
+            {
+                string mdrf2FileExtension = MDRF2.Common.Constants.mdrf2LZ4FileExtension + compressorSelect.GetFileExtension();
 
-            string fileName = "{0}_{1}.mdrf2{2}".CheckedFormat(setup.FileNamePrefix, dateTimePart, enableLZ4Compression ? ".lz4" : "");
-            currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
+                string fileName = $"{0}_{1}{2}".CheckedFormat(setup.FileNamePrefix, dateTimePart, mdrf2FileExtension);
+
+                currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
+            }
+            else
+            {
+                currentFileInfo.FilePath = "";
+                currentFileInfo.StreamProvidedExternally = true;
+            }
 
             // attempt to create/open the file
             string ec = string.Empty;
 
             try
             {
-                int useStreamBufferSize = setup.NominalMaxDataBlockSize.Clip(1024, 65536);
-
-                fileStream = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useStreamBufferSize, FileOptions.None);
-
-                if (enableLZ4Compression)
+                if (ExternallyProvidedFileStream == null)
                 {
-                    K4os.Compression.LZ4.LZ4Level selectedLZ4Level;
+                    int useStreamBufferSize = setup.NominalMaxDataBlockSize.Clip(1024, 65536);
 
-                    switch (WriterConfig.CompressionLevel)
-                    {
-                        case 1: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L00_FAST; break;
-                        case 2: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L03_HC; break;
-                        case 3: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L03_HC; break;
-                        case 4: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L03_HC; break;
-                        case 5: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L04_HC; break;
-                        case 6: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L05_HC; break;
-                        case 7: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L06_HC; break;
-                        case 8: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L07_HC; break;
-                        case 9: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L08_HC; break;
-                        case 10: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L09_HC; break;
-                        case 11: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L10_OPT; break;
-                        case 12: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L11_OPT; break;
-                        case 13: selectedLZ4Level = K4os.Compression.LZ4.LZ4Level.L12_MAX; break;
-                        default: selectedLZ4Level = (WriterConfig.CompressionLevel <= 0) ? K4os.Compression.LZ4.LZ4Level.L00_FAST : K4os.Compression.LZ4.LZ4Level.L12_MAX; break;
-                    }
+                    fileStream = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useStreamBufferSize, FileOptions.None);
 
-                    lz4EncoderStream = K4os.Compression.LZ4.Streams.LZ4Stream.Encode(fileStream, level: selectedLZ4Level, leaveOpen: true);
+                    if (compressorSelect != CompressorSelect.None)
+                        compressorStream = fileStream.CreateCompressor(compressorSelect, WriterConfig.CompressionLevel, leaveStreamOpen: true);
+
+                    outputStream = compressorStream ?? fileStream;
                 }
+                else
+                {
+                    outputStream = ExternallyProvidedFileStream;
 
-                outputStream = (lz4EncoderStream as System.IO.Stream) ?? fileStream;
+                    if (!outputStream.CanWrite)
+                        ec = $"{CurrentMethodName} failed: externally provided file stream does not support writing";
+                }
             }
             catch (System.Exception ex)
             {
@@ -1250,12 +1270,12 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData | FileIndexRowFlagBits.ContainsEnd, 0);
         }
 
-        /// <summary>Returns true if we have a non-null file stream (fileStream)</summary>
-        bool InnerIsFileOpen { get { return (fileStream != null); } }
+        /// <summary>Returns true if outputStream?.CanWrite is true</summary>
+        bool InnerIsStreamWritable { get { return (outputStream?.CanWrite ?? false); } }
 
-        void CloseFile(ref MDRF2DateTimeStampPair dtPair)
+        void InnerCloseFile(ref MDRF2DateTimeStampPair dtPair)
         {
-            if (fileStream != null)
+            if (outputStream != null)
             {
                 try
                 {
@@ -1267,24 +1287,24 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     currentFileInfo.IsActive = false;
                     lastFileInfo = currentFileInfo;
 
-                    if (lz4EncoderStream != null)
-                    {
-                        lz4EncoderStream.Flush();
-                        lz4EncoderStream.Close();
-                        Fcns.DisposeOfObject(ref lz4EncoderStream);
-                    }
-
-                    fileStream.Flush();
-                    fileStream.Close();
-                    Fcns.DisposeOfObject(ref fileStream);
-
+                    outputStream.Flush();
                     outputStream = null;
+
+                    Fcns.DisposeOfObject(ref compressorStream);
+
+                    if (fileStream != null)
+                    {
+                        fileStream.Flush();
+                        fileStream.Close();
+                        Fcns.DisposeOfObject(ref fileStream);
+                    }
                 }
                 catch (System.Exception ex)
                 {
                     RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)));
-                    lz4EncoderStream = null;
+
                     fileStream = null;
+                    compressorStream = null;
                     outputStream = null;
                 }
             }
@@ -1317,7 +1337,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 }
             }
 
-            CloseFile(ref dtPair);
+            InnerCloseFile(ref dtPair);
 
             if (ec.IsNeitherNullNorEmpty())
                 RecordError(ec);
@@ -1348,7 +1368,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     droppedCounts = new DroppedCounts();
                 }
 
-                if (!InnerIsFileOpen)
+                if (!InnerIsStreamWritable)
                     return "{0} failed: file is not open".CheckedFormat(CurrentMethodName);
 
                 {
@@ -1680,7 +1700,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         #region Block builder
 
-        private string FinishAndWriteCurrentBlock(ByteArrayBufferWriter bufferWriter, ref MDRF2DateTimeStampPair dtPair, bool ifNeeded = false)
+        private string FinishAndWriteCurrentBlock(ByteArrayBufferWriter bufferWriter, ref MDRF2DateTimeStampPair dtPair, bool ifNeeded = false, bool flush = false)
         {
             if (!HasBlockBeenStarted)
             {
@@ -1719,9 +1739,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                         headerMPWriter.Flush();
                     }
 
-                    outputStream.Write(inlineIndexBlockBufferWriter.ByteArray, 0, inlineIndexBlockBufferWriter.CurrentCount);
-                    outputStream.Write(bufferWriter.ByteArray, 0, bufferWriter.CurrentCount);
-                    outputStream.Flush();
+                    inlineIndexBlockBufferWriter.WriteTo(outputStream);
+                    bufferWriter.WriteTo(outputStream);
+
+                    if (flush)
+                        outputStream.Flush();
                 }
                 else
                 {
@@ -1879,8 +1901,19 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         MDRF.Writer.WriterBehavior writerBehavior;
 
+        /// <summary>
+        /// This is the underlying stream for the file we are writing to
+        /// </summary>
         System.IO.FileStream fileStream;
-        K4os.Compression.LZ4.Streams.LZ4EncoderStream lz4EncoderStream;
+
+        /// <summary>
+        /// If we are using compression then this is the stream that is used to compress into the file stream
+        /// </summary>
+        System.IO.Stream compressorStream;
+
+        /// <summary>
+        /// This is a shorthand for either the compressor stream or the file stream depeding on wether compression is being used or not.
+        /// </summary>
         System.IO.Stream outputStream;
 
         DateTime fileReferenceDateTime = default;
@@ -1977,6 +2010,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             PartID = other.PartID;
 
             SetupInfo = new SetupInfo(other.SetupInfo);     // will be mapped to default values if the other is null)
+            CompressorSelect = other.CompressorSelect;
+            CompressionLevel = other.CompressionLevel;
 
             NominalScanPeriod = other.NominalScanPeriod;
 
@@ -2010,6 +2045,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         /// <summary>Gives the MDRF SetupInfo that is used to configure the underlying MDRFWriter.</summary>
         public SetupInfo SetupInfo { get; set; } = SetupInfo.DefaultForMDRF2;
+
+        public CompressorSelect CompressorSelect { get; set; } = CompressorSelect.LZ4;
+
+        public int CompressionLevel { get; set; } = 2;
 
         /// <summary>Gives the nominal scan priod for recording groups.  If this value is zero it disables peridic recording of groups</summary>
         public TimeSpan NominalScanPeriod { get; set; } = (0.1).FromSeconds();
@@ -2403,13 +2442,13 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     }
                 }
 
-                bool enableCompression = (Config.SetupInfo.CompressionLevel > 0);
                 var writerConfig = new MDRF2WriterConfig()
                 {
                     PartID = $"{PartID}.mw",
                     SetupInfo = Config.SetupInfo,
-                    WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | (enableCompression ? MDRF2WriterConfigBehavior.UseLZ4Compression : MDRF2WriterConfigBehavior.None),
-                    CompressionLevel = enableCompression ? Config.SetupInfo.CompressionLevel : 0,
+                    WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking,
+                    CompressorSelect = Config.CompressorSelect,
+                    CompressionLevel = Config.CompressionLevel,
                 };
 
                 mdrfWriter = new MDRF2Writer(writerConfig);

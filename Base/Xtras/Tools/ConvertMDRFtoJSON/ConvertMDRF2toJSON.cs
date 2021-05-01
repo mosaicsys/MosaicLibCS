@@ -28,6 +28,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using MessagePack;
+using Mosaic.ToolsLib.Compression;
 using Mosaic.ToolsLib.MessagePackUtils;
 using MosaicLib;
 using MosaicLib.Modular.Common;
@@ -129,13 +130,12 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
             {
                 BufferArrayPool = ArrayPool<byte>.Shared,
                 FileOptions = FileOptions.SequentialScan,
-                LZ4ExtraMemory = 64 * 1024,
-                InitialBufferSize = 64 * 1024,
+                InitialBufferSize = 65536,
             };
 
             bool vcJsonConvert = true;
 
-            var stemName = mdrfFilePath.RemoveSuffixIfNeeded(".lz4");
+            string stemName = mdrfFilePath.RemoveCompressorSelectExtensionFromPath();
 
             using (var mpFileRecordReader = new MessagePackFileRecordReader().Open(mdrfFilePath, settings))
             using (var ofs = new FileStream(string.Concat(stemName, ".json"), FileMode.Create, FileAccess.Write, FileShare.Read))

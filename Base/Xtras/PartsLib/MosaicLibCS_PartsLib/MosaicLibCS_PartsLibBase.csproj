@@ -28,6 +28,7 @@
     <WarningLevel>4</WarningLevel>
     <NoWarn>1591, 1587</NoWarn>
     <DocumentationFile>bin\Debug\MosaicLibCS_PartsLib.XML</DocumentationFile>
+    <LangVersion>5</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -38,6 +39,7 @@
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Release\MosaicLibCS_PartsLib.XML</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
+    <LangVersion>5</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />

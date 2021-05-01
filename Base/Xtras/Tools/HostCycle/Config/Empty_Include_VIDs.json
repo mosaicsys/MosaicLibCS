@@ -2,6 +2,8 @@
 	{"Key":"Config.HostCycle.HostName", "VC":{"s": "localhost"}},
 	{"Key":"Config.HostCycle.PortNum", "VC":{"i32": 5000}},
 	{"Key":"Config.HostCycle.DeviceID", "VC":{"u16": 32767}},
+	{"Key":"Config.HostCycle.RecipeNameExtension", "VC":{"s": ".txt"}},
+	{"Key":"Config.HostCycle.CreateJobWithTemporaryRecipe", "VC":{"b": false}},
 
 	{"Key":"E030Config.GoRemoteCmd", "VC":{"s": "REMOTE"}},
 	{"Key":"E030Config.GoLocalCmd", "VC":{"s": "LOCAL"}},

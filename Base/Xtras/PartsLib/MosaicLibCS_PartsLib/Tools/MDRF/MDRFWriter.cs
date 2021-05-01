@@ -54,12 +54,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// 1.0.4 (2017-04-04) : IMDRFWriter API Usability improvements.  Support for post construction addition of groups and occurrences to MDRFWriter objects.  GroupInfo refactored to make use of GroupBehaviorOptions to specify desired options/behavior.  Replaced WriteFileAdvanceBehavior with WriteBehavior which covers a larger set of options.  Added MDRFLogMessageHandlerAdapter to support LogDistribution output to an mdrf file.  Corrected issue with serialized format of QPCTime parameter in generated DateTimeBlock.
         /// 1.0.5 (2017-04-26) : MDRFWriter refactoring to move IVI/IVA logic so that each group defines the IVI used to create source IVAs (when enabled).  Refactored GroupBehaviorOptions members and added UseVCHasBeenSetForTouched flag to better support use in non-IVI cases.
         /// 1.0.6 (2018-11-02) : MDRFRecordingEngine: set config.GroupDefinitionItemArray to the empty array to prevent engine from creating any groups.  The default null value still causes it to create the Default group.
+        /// 1.0.7 (2021-04-26) : Added ExternallyProvidedFileStream specification and support to MDRFWriter.
         /// </remarks>
         public static readonly LibraryInfo LibInfo = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File (MDRF)",
             Name = "Mosaic Data Recording Engine (MDRE) CS API",
-            Version = "1.0.6 (2018-11-02)",
+            Version = "1.0.7 (2021-04-26)",
         };
     }
 
@@ -131,6 +132,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// <summary>Is true if the file was active (open) when this information was obtained</summary>
         public bool IsActive { get; set; }
 
+        /// <summary>Is true if the writer is writing to an externally provided stream.</summary>
+        public bool StreamProvidedExternally { get; set; }
+
         /// <summary>Returns true if this FileInfo has the same contents as the given other FileInfo</summary>
         public bool Equals(FileInfo other)
         {
@@ -138,13 +142,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     && SeqNum == other.SeqNum
                     && FileSize == other.FileSize
                     && IsActive == other.IsActive
+                    && StreamProvidedExternally == other.StreamProvidedExternally
                     );
         }
 
         /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
-            return "'{0}' seqNum:{1} size:{2}{3}".CheckedFormat(FilePath, SeqNum, FileSize, IsActive ? " [active]" : string.Empty);
+            if (!StreamProvidedExternally)
+                return "'{0}' seqNum:{1} size:{2}{3}".CheckedFormat(FilePath, SeqNum, FileSize, IsActive ? " [active]" : string.Empty);
+            else
+                return "Externally provided stream seqNum:{0} size:{1}{2}".CheckedFormat(SeqNum, FileSize, IsActive ? " [active]" : string.Empty);
         }
     }
 
@@ -320,9 +328,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     {
         #region Construction, Release, call-chainable Add variants, and supporting fields
 
-        public MDRFWriter(string partID, SetupInfo setupInfo, GroupInfo [] groupInfoArray = null, OccurrenceInfo [] occurrenceInfoArray = null, bool enableAPILocking = false)
+        public MDRFWriter(string partID, SetupInfo setupInfo, GroupInfo [] groupInfoArray = null, OccurrenceInfo [] occurrenceInfoArray = null, bool enableAPILocking = false, Stream externallyProvidedFileStream = null)
             : base(partID)
         {
+            if (externallyProvidedFileStream != null)
+            {
+                if (!externallyProvidedFileStream.CanWrite)
+                    throw new System.ArgumentException("The given explicit file stream does not support Write", "externallyProvidedFileStream");
+                else if (!externallyProvidedFileStream.CanSeek)
+                    throw new System.ArgumentException("The given explicit file stream does not support Seek", "externallyProvidedFileStream");
+
+                ExternallyProvidedFileStream = externallyProvidedFileStream;
+            }
+
             mutex = enableAPILocking ? new object() : null;
 
             AddExplicitDisposeAction(Release);
@@ -974,7 +992,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             TimeSpan fileDeltaTimeSpan = dtPair.fileDeltaTimeStamp.FromSeconds();
 
-            if (InnerIsFileOpen)
+            bool usingExternallyProvidedFileStream = (ExternallyProvidedFileStream != null);
+
+            if (InnerIsFileOpen && !usingExternallyProvidedFileStream)
             {
                 QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
 
@@ -1010,6 +1030,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             // capture the timestamp and the corresponding dateTime and related information
             {
+                dtPair.PopulateUTCTimeSince1601IfNeeded();
+
                 TimeZoneInfo localTZ = TimeZoneInfo.Local;
 
                 QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
@@ -1051,11 +1073,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             offsetToStartOfFileIndexPayload = 0;
             lastWriteAllTimeStamp = QpcTimeStamp.Zero;
             
-            // generate the file name
-            string dateTimePart = Dates.CvtToString(fileReferenceDTPair.dateTime, Dates.DateTimeFormat.ShortWithMSec);
-            string fileName = "{0}_{1}.mdrf".CheckedFormat(setup.FileNamePrefix, dateTimePart);
-            currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
-            
             // attempt to create/open the file
             string ec = string.Empty;
 
@@ -1063,7 +1080,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 int useBufferSize = setup.MaxDataBlockSize.Clip(1024, 65536);
 
-                fs = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useBufferSize, FileOptions.None);
+                if (!usingExternallyProvidedFileStream)
+                {
+                    // generate the file name
+                    string dateTimePart = Dates.CvtToString(fileReferenceDTPair.dateTime, Dates.DateTimeFormat.ShortWithMSec);
+
+                    string fileName = "{0}_{1}.mdrf".CheckedFormat(setup.FileNamePrefix, dateTimePart);
+                    currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
+
+                    fs = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useBufferSize, FileOptions.None);
+                }
+                else
+                {
+                    currentFileInfo.FilePath = "";
+                    currentFileInfo.StreamProvidedExternally = true;
+
+                    fs = ExternallyProvidedFileStream;
+                }
             }
             catch (System.Exception ex)
             {
@@ -1208,8 +1241,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                 try
                 {
-                    fs.Close();
-                    Fcns.DisposeOfObject(ref fs);
+                    fs.Flush();
+
+                    if (ExternallyProvidedFileStream == null)
+                    {
+                        fs.Close();
+                        Fcns.DisposeOfObject(ref fs);
+                    }
+                    else
+                    {
+                        fs = null;
+                    }
                 }
                 catch (System.Exception ex)
                 {
@@ -1615,9 +1657,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         class FileIndexRow : FileIndexRowBase
         {
-            public new FileIndexRow Clear()
+            public new FileIndexRow Clear(bool clearRowIndex = false)
             {
-                base.Clear();
+                base.Clear(clearRowIndex: clearRowIndex);
                 rowContentsChanged = false;
                 offsetToStartOfRow = 0;
 
@@ -1649,7 +1691,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (thisIsFirstBlockInRow)
                 {
                     FileOffsetToStartOfFirstBlock = blockStartOffset;
-                    FirstBlockUtcTimeSince1601 = dataBlockBuffer.dtPair.utcTimeSince1601;
+                    FirstBlockUtcTimeSince1601 = dataBlockBuffer.dtPair.PopulateUTCTimeSince1601IfNeeded().utcTimeSince1601;
                     FirstBlockDeltaTimeStamp = fileDeltaTimeStamp;
                 }
 
@@ -2076,7 +2118,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         AtomicInt32 seqNumGen = new AtomicInt32();
 
-        System.IO.FileStream fs;
+        private Stream ExternallyProvidedFileStream { get; set; }
+
+        Stream fs;
         DateTimeStampPair fileReferenceDTPair = null;
         int fileReferenceDayOfYear = 0;
         bool fileReferenceIsDST;

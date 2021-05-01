@@ -22,6 +22,8 @@
 using MessagePack;
 using MessagePack.Formatters;
 
+using Mosaic.ToolsLib.Compression;
+
 using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Common.CustomSerialization;
@@ -37,8 +39,6 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Mosaic.ToolsLib.MessagePackUtils
 {
@@ -1307,10 +1307,15 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     {
         public ArrayPool<byte> BufferArrayPool { get; set; } = ArrayPool<byte>.Shared;
         public FileOptions FileOptions { get; set; } = (FileOptions.SequentialScan);        // nominally optimal selection for this reader
-        public int LZ4ExtraMemory { get; set; } = 65536;
         public int InitialBufferSize { get; set; } = 65536;
         public int? InitialReadSize { get; set; } = null;   // use InitialBufferSize when null.
         public bool ReadInitialRecord { get; set; } = true;
+
+        /// <summary>When true, the Read method will catch and handle the System.IO.EndOfStreamException as indicating end of file (to support read while writing with partially written contents).</summary>
+        public bool TreatEndOfStreamExceptionAsEndOfFile { get; set; } = true;
+
+        /// <summary>When true, the Read method will catch and handle specific errors as indicating end of file (to support read while writing with partially written contents).</summary>
+        public bool TreatExpectedDecompressionErrorsAsEndOfFile { get; set; } = true;
 
         public MessagePackFileRecordReaderSettings MakeCopyOfThis(bool deepCopy = true)
         {
@@ -1332,25 +1337,25 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         /// <summary>
         /// Opend and optionally read an initial record.
         /// </summary>
-        public MessagePackFileRecordReader Open(string filePath, MessagePackFileRecordReaderSettings settings = default)
+        public MessagePackFileRecordReader Open(string filePath, MessagePackFileRecordReaderSettings settingsIn = default)
         {
             ClearCounters();
 
             ReleaseFileStreams();
 
-            Settings = settings?.MakeCopyOfThis() ?? DefaultSettings;
+            Settings = settingsIn?.MakeCopyOfThis() ?? DefaultSettings;
 
-            if (filePath.EndsWith(".lz4", StringComparison.InvariantCultureIgnoreCase))
-            {
-                ifs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, Settings.FileOptions);
-                _Counters.FileLength = (ulong) ifs.Length;
-                lz4s = K4os.Compression.LZ4.Streams.LZ4Stream.Decode(ifs, new K4os.Compression.LZ4.Streams.LZ4DecoderSettings() { ExtraMemory = Settings.LZ4ExtraMemory }, leaveOpen: false);
-            }
-            else
-            {
-                ifs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, Settings.FileOptions);
-                _Counters.FileLength = (ulong) ifs.Length;
-            }
+            var compressorSelect = filePath.GetCompressorSelectFromFilePath();
+            Stream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, Settings.FileOptions);
+            _Counters.FileLength = (ulong) fileStream.Length;
+
+            // Note: we use the compressor even when reading non-compressed files so we can make use of TreatYYYAsEndOfFile flags.
+            var compressorStream = fileStream.CreateDecompressor(compressorSelect);
+
+            compressorStream.TreatEndOfStreamExceptionAsEndOfFile = Settings.TreatEndOfStreamExceptionAsEndOfFile;
+            compressorStream.TreatExpectedDecompressionErrorsAsEndOfFile = Settings.TreatExpectedDecompressionErrorsAsEndOfFile;
+
+            useStream = compressorStream;
 
             EndReached = (_Counters.FileLength <= 0);
 
@@ -1416,18 +1421,13 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             ClearCounters();
         }
 
-        private FileStream ifs = null;
-        private Stream lz4s = null;
-
-        private Stream InnerStream { get { return lz4s ?? ifs; } }
+        private Stream useStream;
 
         private void ReleaseFileStreams()
         {
-            lz4s?.Close();
-            ifs?.Close();
+            useStream?.Close();
 
-            Fcns.DisposeOfObject(ref lz4s);
-            Fcns.DisposeOfObject(ref ifs);
+            Fcns.DisposeOfObject(ref useStream);
         }
 
         /// <summary>
@@ -1689,7 +1689,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             if (!EndReached && readRequestCount > 0)
             {
-                NoteBytesRead(InnerStream.Read(buffer, putIndex, readRequestCount));
+                NoteBytesRead(useStream.Read(buffer, putIndex, readRequestCount));
                 _Counters.NumberOfReads += 1;
             }
 

@@ -41,6 +41,7 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 
 using Mosaic.ToolsLib.MDRF2.Writer;
+using Mosaic.ToolsLib.Compression;
 
 namespace MosaicLib.Tools.PerformanceMonitorHost
 {
@@ -140,15 +141,16 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
                     perfSuiteConfig.MDRFWriterSetupInfo.MaxFileRecordingPeriod = (1.0).FromHours();
                     perfSuiteConfig.Setup();
 
-                    bool enableCompression = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.EnableCompression").GetValue(true);
-                    int compressionLevel = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.CompressionLevel").GetValue(6);
+                    CompressorSelect compressorSelect = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.CompressorSelect").GetValue<CompressorSelect>(CompressorSelect.GZip);
+                    int compressionLevel = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.CompressionLevel").GetValue(10);
 
                     var mdrf2WriterConfig = new MDRF2WriterConfig()
                     {
                         PartID = $"{perfSuiteConfig.PartID}.mdrf2",
                         SetupInfo = perfSuiteConfig.MDRFWriterSetupInfo,
-                        WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | (enableCompression ? MDRF2WriterConfigBehavior.UseLZ4Compression : MDRF2WriterConfigBehavior.None),
-                        CompressionLevel = enableCompression ? compressionLevel : 0,
+                        WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking,
+                        CompressorSelect = compressorSelect,
+                        CompressionLevel = compressionLevel,
                     };
                     var mdrf2Writer = new MDRF2Writer(mdrf2WriterConfig);
                     partsList.Add(perfSuite = new PerformanceSuitePart(perfSuiteConfig, mdrf2Writer));

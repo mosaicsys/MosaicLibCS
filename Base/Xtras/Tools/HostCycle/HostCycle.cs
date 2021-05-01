@@ -27,6 +27,7 @@ using System.Text;
 using MosaicLib;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
@@ -592,41 +593,59 @@ namespace HostCycle
 
         private void ReadConfigValues()
         {
+            ConfigValueSetAdapter<Config> configAdapter = new ConfigValueSetAdapter<Config>()
+            {
+                ValueSet = config,
+                SetupIssueEmitter = Log.Debug,
+                ValueNoteEmitter = Log.Trace,
+            }.Setup("Config.HostCycle.");
+
             ConfigValueSetAdapter<E030IDsConfig> e030Adapter = new ConfigValueSetAdapter<E030IDsConfig>()
             {
                 ValueSet = e030IDsConfig,
                 SetupIssueEmitter = Log.Debug,
-                ValueNoteEmitter = Log.Trace
+                ValueNoteEmitter = Log.Trace,
             }.Setup("E030Config.");
 
             ConfigValueSetAdapter<E087IDsConfig> e087Adapter = new ConfigValueSetAdapter<E087IDsConfig>()
             {
                 ValueSet = e087IDsConfig,
                 SetupIssueEmitter = Log.Debug,
-                ValueNoteEmitter = Log.Trace
+                ValueNoteEmitter = Log.Trace,
             }.Setup("E087Config.");
 
             ConfigValueSetAdapter<E040IDsConfig> e040Adapter = new ConfigValueSetAdapter<E040IDsConfig>()
             {
                 ValueSet = e040IDsConfig,
                 SetupIssueEmitter = Log.Debug,
-                ValueNoteEmitter = Log.Trace
+                ValueNoteEmitter = Log.Trace,
             }.Setup("E040Config.");
 
             ConfigValueSetAdapter<E094IDsConfig> e094Adapter = new ConfigValueSetAdapter<E094IDsConfig>()
             {
                 ValueSet = e094IDsConfig,
                 SetupIssueEmitter = Log.Debug,
-                ValueNoteEmitter = Log.Trace
+                ValueNoteEmitter = Log.Trace,
             }.Setup("E094Config.");
 
             ConfigValueSetAdapter<E090IDsConfig> e090Adapter = new ConfigValueSetAdapter<E090IDsConfig>()
             {
                 ValueSet = e090IDsConfig,
                 SetupIssueEmitter = Log.Debug,
-                ValueNoteEmitter = Log.Trace
+                ValueNoteEmitter = Log.Trace,
             }.Setup("E090Config.");
         }
+
+        public class Config
+        {
+            [ConfigItem]
+            public string RecipeNameExtension { get; set; } = ".txt";
+
+            [ConfigItem]
+            public bool CreateJobWithTemporaryRecipe { get; set; } = false;
+        }
+
+        public readonly Config config = new Config();
 
         public readonly E030IDsConfig e030IDsConfig = new E030IDsConfig();
         public readonly E087IDsConfig e087IDsConfig = new E087IDsConfig();
@@ -2811,6 +2830,59 @@ namespace HostCycle
 
             IMessage s16F11Mesg, s14F9Mesg;
 
+            string usePPID = ppid;
+
+            string ec = string.Empty;
+
+            if (parent.config.CreateJobWithTemporaryRecipe && ec.IsNullOrEmpty())
+            {
+                var rcpExt = parent.config.RecipeNameExtension;
+                var ppidHasExtension = ppid.EndsWith(parent.config.RecipeNameExtension);
+
+                usePPID = ppid.RemoveSuffixIfNeeded(parent.config.RecipeNameExtension) + "_Temp";
+                if (ppidHasExtension)
+                    usePPID = usePPID.AddSuffixIfNeeded(parent.config.RecipeNameExtension);
+
+                // get the requested recipe by ppid
+                var pprS7F5 = port.CreateMessage("S7/F5[W]").SetContentBytes(new A(ppid));  // PPR
+
+                ec = pprS7F5.Send().Run();
+
+                string usePPBody = null;
+
+                if (ec.IsNullOrEmpty())
+                {
+                    var replyVCL = pprS7F5.Reply.GetDecodedContents().GetValueL(rethrow: false).MapNullToEmpty();
+
+                    if (replyVCL.Count == 2)
+                        usePPBody = replyVCL.SafeAccess(1).GetValueA(rethrow: false);
+                    else
+                        ec = $"{pprS7F5} failed: ppid not found";
+                }
+
+                // delete the temp recipe name if needed - ignore the result code
+
+                if (ec.IsNullOrEmpty())
+                {
+                    var dpsS7F17 = port.CreateMessage("S7/F17[W]").SetContentBytes(new L() { new A(usePPID) });
+
+                    ec = dpsS7F17.Send().Run();
+                }
+
+                // download the selected recipe body to the temp name
+                var ppsS7f3 = port.CreateMessage("S7F3[W]").SetContentBytes(new L() { new A(usePPID), new A(usePPBody) });
+
+                if (ec.IsNullOrEmpty())
+                {
+                    ec = ppsS7f3.Send().Run();
+
+                    var ackc7 = ppsS7f3.Reply.GetDecodedContents().GetValue<ACKC7?>(rethrow: false) ?? ACKC7.MatrixOverflow;
+
+                    if (ec.IsNullOrEmpty() && ackc7 != ACKC7.Accepted)
+                        ec = $"{ppsS7f3} failed: ACKC7: {ackc7}";
+                }
+            }
+
             var pjDataid = port.GetNextDATAID();
 
             s16F11Mesg = port.CreateMessage("S16/F11[W]").SetContentBytes(
@@ -2820,7 +2892,7 @@ namespace HostCycle
                                 new A(pjID),
                                 new Bi((byte) MF.Carrier),
                                 new L(new L(new A(cid), new L(correctlyOccupiedSlotNumArray.Select(slotNum => new U1((byte) slotNum))))),
-                                new L(new U1((byte)PRRECIPEMETHOD.RecipeOnly), new A(ppid), new L()),
+                                new L(new U1((byte)PRRECIPEMETHOD.RecipeOnly), new A(usePPID), new L()),
                                 new Bo(true),   // PRProcessStart
                                 new L()
                             });
@@ -2846,8 +2918,6 @@ namespace HostCycle
 
             bool pjCreated = false, cjCreated = false;
 
-            string ec = string.Empty;
-
             if (ec.IsNullOrEmpty())
                ec = s16F11Mesg.Send().Run();
 
@@ -2861,6 +2931,24 @@ namespace HostCycle
                     pjCreated = true;
                 else
                     ec = "PJCreate '{0}' failed: {1}".CheckedFormat(pjID, replyBodyVC);
+            }
+
+            // delete the temporarily created recipe if needed
+            if (usePPID != ppid)
+            {
+                var dpsS7F17 = port.CreateMessage("S7/F17[W]").SetContentBytes(new L() { new A(usePPID) });
+
+                if (ec.IsNullOrEmpty())
+                    ec = dpsS7F17.Send().Run();
+                else if (port.BaseState.IsConnected)
+                    dpsS7F17.Send().Run();
+
+                if (ec.IsNullOrEmpty())
+                {
+                    var ackc7 = dpsS7F17.Reply.GetDecodedContents().GetValue<ACKC7?>(rethrow: false) ?? ACKC7.MatrixOverflow;
+                    if (ec.IsNullOrEmpty() && ackc7 != ACKC7.Accepted)
+                        ec = $"{dpsS7F17} failed: ACKC7: {ackc7}";
+                }
             }
 
             if (ec.IsNullOrEmpty() && pjCreated)
