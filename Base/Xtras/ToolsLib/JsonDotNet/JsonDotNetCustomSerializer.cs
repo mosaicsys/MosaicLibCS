@@ -21,11 +21,15 @@
 
 using System;
 using System.IO;
+using System.Linq;
 
-using MosaicLib.Utils;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Common.CustomSerialization;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Mosaic.ToolsLib.JsonDotNet
 {
@@ -83,6 +87,65 @@ namespace Mosaic.ToolsLib.JsonDotNet
                     return serializer.Deserialize(jtr, TargetType);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// ExtensionMethods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This extension method is used to convert the given <paramref name="jToken"/> to its ValueContainer equivalant
+        /// </summary>
+        public static ValueContainer ConvertToVC(this JToken jToken, bool rethrow = false)
+        {
+            switch (jToken.Type)
+            {
+                case JTokenType.Object: return ValueContainer.CreateNVS(((JObject)jToken).ConvertToNVS(rethrow: rethrow));
+                case JTokenType.Property: return ValueContainer.CreateNV(((JProperty)jToken).ConvertToNV(rethrow: rethrow));
+                case JTokenType.Array: return ValueContainer.CreateL(((JArray)jToken).ConvertToVCSet(rethrow: rethrow));
+
+                case JTokenType.None: return ValueContainer.Empty;
+                case JTokenType.Null: return ValueContainer.Null;
+
+                case JTokenType.Boolean: return ValueContainer.CreateBo(jToken.ToObject<bool>());
+                case JTokenType.Integer: return ValueContainer.CreateI8(jToken.ToObject<long>());
+                case JTokenType.Float: return ValueContainer.CreateF8(jToken.ToObject<double>());
+                case JTokenType.String: return ValueContainer.CreateA(jToken.ToObject<string>());
+                case JTokenType.Date: return ValueContainer.CreateDT(jToken.ToObject<DateTime>());
+                case JTokenType.TimeSpan: return ValueContainer.CreateTS(jToken.ToObject<TimeSpan>());
+
+                default:
+                    if (rethrow)
+                        throw new System.InvalidCastException($"JToken type {jToken.Type} is not supported here [{jToken}]");
+                    else
+                        return ValueContainer.CreateA($"Usupported JToken: {jToken}");
+            }
+        }
+
+        /// <summary>
+        /// This extension method is used to convert the given <paramref name="jObject"/> to its INamedValueSet equivalant.
+        /// </summary>
+        public static INamedValueSet ConvertToNVS(this JObject jObject, bool rethrow = false)
+        {
+            return new NamedValueSet(jObject.Properties().Select(JProperty => JProperty.ConvertToNV(rethrow: rethrow))).MakeReadOnly();
+        }
+
+        /// <summary>
+        /// This extension method is used to convert the given <paramref name="jProperty"/> to its INamedValue equivalant.
+        /// </summary>
+        public static INamedValue ConvertToNV(this JProperty jProperty, bool rethrow = false)
+        {
+            return new NamedValue(jProperty.Name, jProperty.Value.ConvertToVC(rethrow: rethrow)).MakeReadOnly();
+        }
+
+        /// <summary>
+        /// This extension method is used to convert the given <paramref name="jArray"/> to its ReadOnlyIList{ValueContainer} equivalant.
+        /// </summary>
+        public static ReadOnlyIList<ValueContainer> ConvertToVCSet(this JArray jArray, bool rethrow = false)
+        {
+            return new ReadOnlyIList<ValueContainer>(jArray.AsJEnumerable().Select(jToken => jToken.ConvertToVC(rethrow: rethrow)));
         }
     }
 }

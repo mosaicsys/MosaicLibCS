@@ -1298,6 +1298,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 {
                     queryTaskSpec.FileSetArray[index] = queryTaskSpec.FileSetArray[index].PopulateIfNeeded(querySpec);
                 }
+
+                if (queryTaskSpec.FileSetArray.Any(fileInfo => !fileInfo.IsUsable))
+                    queryTaskSpec.FileSetArray = queryTaskSpec.FileSetArray.Where(fileInfo => fileInfo.IsUsable).ToArray();
             }
 
             // Determine the expanded PointNamesArray value if needed.

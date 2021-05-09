@@ -1009,9 +1009,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             if (ExternallyProvidedFileStream == null)
             {
-                string mdrf2FileExtension = MDRF2.Common.Constants.mdrf2LZ4FileExtension + compressorSelect.GetFileExtension();
+                string mdrf2FileExtension;
+                switch (compressorSelect)
+                {
+                    case CompressorSelect.None: mdrf2FileExtension = MDRF2.Common.Constants.mdrf2BaseFileExtension; break;
+                    case CompressorSelect.LZ4: mdrf2FileExtension = MDRF2.Common.Constants.mdrf2LZ4FileExtension; break;
+                    case CompressorSelect.GZip: mdrf2FileExtension = MDRF2.Common.Constants.mdrf2GZipFileExtension; break;
+                    default: mdrf2FileExtension = MDRF2.Common.Constants.mdrf2BaseFileExtension + compressorSelect.GetFileExtension(); break;
+                }
 
-                string fileName = $"{0}_{1}{2}".CheckedFormat(setup.FileNamePrefix, dateTimePart, mdrf2FileExtension);
+                string fileName = "{0}_{1}{2}".CheckedFormat(setup.FileNamePrefix, dateTimePart, mdrf2FileExtension);
 
                 currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
             }
