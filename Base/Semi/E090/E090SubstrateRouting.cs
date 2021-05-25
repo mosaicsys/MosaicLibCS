@@ -383,7 +383,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
     /// <summary>
     /// This is enumeration represents a summary of the transfer permissions state for a part that supports this interface.
-    /// <para/>None (0), Available, Busy, AlmostAvailable, NotAvailable
+    /// <para/>None (0), Available, Busy, AlmostAvailable, NotAvailable, Blocked
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum TransferPermissionSummaryStateCode : int

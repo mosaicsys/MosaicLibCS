@@ -143,6 +143,22 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             );
 
             StationToITPRDictionary = new ReadOnlyIDictionary<TestStationEnum, ITransferPermissionRequest>(SRMLocNameToITPRDictionary.Select(kvpIn => KVP.Create(stationNameToEnumDictionary.SafeTryGetValue(kvpIn.Key), kvpIn.Value)).Where(kvp => kvp.Key != TestStationEnum.None));
+
+            StationToIPreparednessStateFactoryDictionary = new ReadOnlyIDictionary<TestStationEnum, Func<IPreparednessState>>(
+                    new KeyValuePair<TestStationEnum, IPrepare<IProcessSpec, IProcessStepSpec>>[]
+                    {
+                        KVP.Create(TestStationEnum.PM1, PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM2, PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM3Input, PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM3Output, PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM4, PM4 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMReject, PMReject as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMAbort, PMAbort as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMReturn, PMReturn as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    }
+                    .Where(kvp => kvp.Value != null)
+                    .Select(kvp => KVP.Create<TestStationEnum, Func<IPreparednessState>>(kvp.Key, () => kvp.Value.StatePublisher.Object))
+                   );
         }
 
         public E041.IANManagerPart ANManagerPart { get; private set; }
@@ -164,6 +180,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public ReadOnlyIDictionary<string, ITransferPermissionRequest> SRMLocNameToITPRDictionary { get; private set; }
         public ReadOnlyIDictionary<TestStationEnum, ITransferPermissionRequest> StationToITPRDictionary { get; private set; }
+        public ReadOnlyIDictionary<TestStationEnum, Func<IPreparednessState>> StationToIPreparednessStateFactoryDictionary { get; private set; }
 
         public TestStationEnum GetStationEnum(string forLocName)
         {
@@ -218,6 +235,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         IClientFacet SetSubstrateProcessSpecs(string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIDsArray);
         IClientFacet SetSJRS(SubstrateJobRequestState sjrs, params E039ObjectID[] substIDsArray);
         IClientFacet VerifyIdle();
+        IClientFacet Sync();
     }
 
     public class TestSchedulerEngine : SimpleActivePartBase, ITestSchedulerEngine, ISubstrateSchedulerPart
@@ -261,6 +279,15 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         public IClientFacet VerifyIdle()
         {
             return new BasicActionImpl(ActionQueue, ipf => PerformVerifyIdle(forDispose: false), CurrentMethodName, ActionLoggingReference);
+        }
+
+        public IClientFacet Sync()
+        {
+            return new BasicActionImpl(ActionQueue, ipf =>
+                {
+                    PerformMainLoopService();
+                    return "";
+                }, CurrentMethodName, ActionLoggingReference);
         }
 
         /// <summary>
@@ -852,7 +879,50 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
 
                 if (serviceEvaluationUpdates)
+                {
                     UpdateEvalInfo(alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, stateToTool: stateToTool);
+
+                    if (Info.SJS == SubstrateJobState.Held && !evalInfo.flags.blockedByInboundHoldRequest)
+                    {
+                        switch (SubstrateJobRequestState)
+                        {
+                            case SubstrateJobRequestState.None: break;
+                            case SubstrateJobRequestState.Run: SetSubstrateJobState((Info.STS == SubstState.AtSource) ? SubstrateJobState.WaitingForStart : SubstrateJobState.Running, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Stop: SetSubstrateJobState(SubstrateJobState.Stopping, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Pause: SetSubstrateJobState(SubstrateJobState.Pausing, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Abort: SetSubstrateJobState(SubstrateJobState.Aborting, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Return: break;
+                            default: break;
+                        }
+                    }
+                    else if (evalInfo.flags.blockedByInboundHoldRequest)
+                    {
+                        switch (SubstrateJobRequestState)
+                        {
+                            case SubstrateJobRequestState.None: break;
+                            case SubstrateJobRequestState.Run:
+                            case SubstrateJobRequestState.Pause:
+                            case SubstrateJobRequestState.Stop:
+                            case SubstrateJobRequestState.Abort:
+                                switch (Info.SJS)
+                                {
+                                    case SubstrateJobState.WaitingForStart:
+                                    case SubstrateJobState.Running:
+                                    case SubstrateJobState.Stopping:
+                                    case SubstrateJobState.Pausing:
+                                    case SubstrateJobState.Aborting:
+                                        SetSubstrateJobState(SubstrateJobState.Held, "Inbound Hold Requested through Prepare Interface at next process location");
+                                        break;
+                                    case SubstrateJobState.Returning:
+                                    case SubstrateJobState.Stranded:
+                                    default: break;
+                                }
+                                break;
+                            case SubstrateJobRequestState.Return: break;
+                            default: break;
+                        }
+                    }
+                }
             }
 
             bool isFinalOrNull = SubstObserver.Object.IsFinalOrNull();
@@ -936,6 +1006,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 case E090.SubstrateJobState.Running:
                 case E090.SubstrateJobState.Stopping:
                 case E090.SubstrateJobState.Pausing:
+                case E090.SubstrateJobState.Held:       // Held is handled like Running for purposes of determining the next loc name list contents
                     if (stepSpec != null)
                     {
                         if (isProcessMaterialMovementEnabled)
@@ -1020,6 +1091,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 case SubstrateJobState.Running:
                 case SubstrateJobState.Stopping:
                 case SubstrateJobState.Pausing:
+                case SubstrateJobState.Held:
                     if (!isProcessMaterialMovementEnabled && !isRecoveryMaterialMovementEnabled)
                         isUsable = false;
                     break;
@@ -1028,6 +1100,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     if (!isRecoveryMaterialMovementEnabled)
                         isUsable = false;
                     break;
+
                 default:
                     isUsable = false;
                     break;
@@ -1101,6 +1174,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             flags.nextStationEvalListIncludesPipelinedPMInput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMInputLocation);
             flags.nextStationEvalListIncludesPipelinedPMOutput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMOutputLocation);
 
+            flags.blockedByInboundHoldRequest = flags.wantsToMove && evalInfo.nextStationEvalList.All(stationEval => stationEval.locationIsRequestingHoldInboundMaterial);
+
             evalInfo.flags = flags;
         }
 
@@ -1133,10 +1208,20 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 public bool isOnRobotArm;
                 public bool nextStationEvalListIncludesPipelinedPMInput;
                 public bool nextStationEvalListIncludesPipelinedPMOutput;
+                public bool blockedByInboundHoldRequest;
 
                 public bool IsAnyFlagSet
                 {
-                    get { return (hasBeenStarted || wantsToBeHere || wantsToMove || isInProcessOrPendingProcess || canStartProcessStepHereNow || canBeMovedNow || canBeSwappedNow || havePossibleAlmostAvailableForApproach || isOnRobotArm); }
+                    get { return (hasBeenStarted 
+                                 || wantsToBeHere || wantsToMove 
+                                 || isInProcessOrPendingProcess || canStartProcessStepHereNow 
+                                 || canBeMovedNow || canBeSwappedNow 
+                                 || havePossibleAlmostAvailableForApproach 
+                                 || isOnRobotArm
+                                 || nextStationEvalListIncludesPipelinedPMInput
+                                 || nextStationEvalListIncludesPipelinedPMOutput
+                                 || blockedByInboundHoldRequest
+                                 ); }
                 }
             }
 
@@ -1166,6 +1251,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 locInfo = (locObs != null ? locObs.Info : default(E090SubstLocInfo));
                 station = ecsParts.GetStationEnum(locInfo.ObjID.Name);
                 itpr = ecsParts.StationToITPRDictionary.SafeTryGetValue(station);
+                var ipsF = ecsParts.StationToIPreparednessStateFactoryDictionary.SafeTryGetValue(station);
+                ips = (ipsF != null ? ipsF() : null);
                 var itps = (itpr != null ? itpr.TransferPermissionStatePublisher.Object : null);
                 var locHasNoITPROrIsAvailable = (itpr == null || itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.Available);
 
@@ -1173,12 +1260,15 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 stAtLocWantsToMove = (stAtLoc != null && stAtLoc.evalInfo.flags.wantsToMove);
                 stAtLocIsBeingProcessed = (stAtLoc != null && stAtLoc.CurrentStationProcessICF != null);
 
-                locationIsNotCurrentlyAccessible = (locObs == null) || locInfo.NotAccessibleReason.IsNeitherNullNorEmpty();
+                locationIsCurrentlyAccessible = (locObs != null) && locInfo.NotAccessibleReason.IsNullOrEmpty();
+                locationIsNotCurrentlyAccessible = !locationIsCurrentlyAccessible;
 
-                isAvailableMoveTarget = !locationIsNotCurrentlyAccessible && locInfo.IsUnoccupied && locHasNoITPROrIsAvailable;
-                isAvailableSwapTarget = !locationIsNotCurrentlyAccessible && (stAtLoc != null) && !stAtLocIsBeingProcessed && stAtLocWantsToMove && locHasNoITPROrIsAvailable;
+                locationIsRequestingHoldInboundMaterial = ((ips != null) && ips.SummaryState.IsSet(QuerySummaryState.HoldInboundMaterial));
 
-                isPossibleAlmostAvailableToApproachTarget = !locationIsNotCurrentlyAccessible && !isAvailableMoveTarget && !isAvailableSwapTarget && itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable;
+                isAvailableMoveTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && locInfo.IsUnoccupied && locHasNoITPROrIsAvailable;
+                isAvailableSwapTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && (stAtLoc != null) && !stAtLocIsBeingProcessed && stAtLocWantsToMove && locHasNoITPROrIsAvailable;
+
+                isPossibleAlmostAvailableToApproachTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && !isAvailableMoveTarget && !isAvailableSwapTarget && itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable;
             }
 
             public E090SubstLocObserver locObs;
@@ -1186,6 +1276,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             public TestSubstrateAndProcessTracker stAtLoc;
             public TestStationEnum station;
             public ITransferPermissionRequest itpr;
+            public IPreparednessState ips;
 
             public bool IsValid { get { return locObs != null && locObs.Info.ObjID.Name.IsNeitherNullNorEmpty(); } }
             public bool IsPipelinedPMInputLocation { get { return station == TestStationEnum.PM4 || station == TestStationEnum.PM3Input; } }
@@ -1193,6 +1284,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             public bool stAtLocIsBeingProcessed;
             public bool stAtLocWantsToMove;
+            public bool locationIsRequestingHoldInboundMaterial;
+            public bool locationIsCurrentlyAccessible;
             public bool locationIsNotCurrentlyAccessible;
 
             public bool isAvailableMoveTarget;
@@ -1236,7 +1329,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             Name = name;
             ECSParts = ecsParts;
             MaxEstimatedAlmostAvailablePeriod = (1.0).FromSeconds();
-            EnableAutoResumeFromHeld = true;
+            EnableAutoResumeFromStranded = true;
             ServiceBasicSJSStateChangeTriggerFlags = SubstrateScheduling.ServiceBasicSJSStateChangeTriggerFlags.All & ~(ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart);
         }
 
@@ -1250,7 +1343,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public TimeSpan MaxEstimatedAlmostAvailablePeriod { get; set; }
 
-        public bool EnableAutoResumeFromHeld { get; set; }
+        public bool EnableAutoResumeFromStranded { get; set; }
 
         public ServiceBasicSJSStateChangeTriggerFlags ServiceBasicSJSStateChangeTriggerFlags { get; set; }
     }
@@ -1462,7 +1555,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return notReadyReasonList.MapEmptyToNull();
         }
 
-        QpcTimer holdStrandedSubstratesTriggerHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 10.0, AutoReset = false };
+        QpcTimer noteStrandedSubstratesTriggerHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 10.0, AutoReset = false };
 
         List<SubstrateRoutingItemBase> srmActionItemBuilderList = new List<SubstrateRoutingItemBase>();
         List<TestSubstrateAndProcessTracker> srmActionItemBuilderSubstTrackerList = new List<TestSubstrateAndProcessTracker>();
@@ -1496,25 +1589,25 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (!isProcessStepExecutionEnabled)
             {
-                holdStrandedSubstratesTriggerHoldoffTimer.StartIfNeeded();
+                noteStrandedSubstratesTriggerHoldoffTimer.StartIfNeeded();
 
-                if (!isRecoveryMaterialMovementEnabled || holdStrandedSubstratesTriggerHoldoffTimer.IsTriggered)
+                if (!isRecoveryMaterialMovementEnabled || noteStrandedSubstratesTriggerHoldoffTimer.IsTriggered)
                 {
                     foreach (var st in substTrackerList.Array)
                     {
                         var sjs = st.Info.SJS;
                         if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart)
-                            st.SetSubstrateJobState(SubstrateJobState.Held, "Part is no longer permitted to run process [{0}]".CheckedFormat(stateToTool));
+                            st.SetSubstrateJobState(SubstrateJobState.Stranded, "Part is no longer permitted to run process [{0}]".CheckedFormat(stateToTool));
                     }
                 }
             }
             else
             {
-                holdStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
+                noteStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
 
-                if (substrateStateTally.sjsHeld > 0 && ToolConfig.EnableAutoResumeFromHeld)
+                if (substrateStateTally.sjsStranded > 0 && ToolConfig.EnableAutoResumeFromStranded)
                 {
-                    foreach (var st in substTrackerList.Array.Where(st => st.Info.SJS == SubstrateJobState.Held))
+                    foreach (var st in substTrackerList.Array.Where(st => st.Info.SJS == SubstrateJobState.Stranded))
                     {
                         if (st.Info.STS.IsAtSource())
                             st.SetSubstrateJobState(SubstrateJobState.WaitingForStart, "Auto resuming held substrate [AtSource]");
@@ -1740,7 +1833,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 PrepareFailedAnnunciator.Clear(reason);
             }
 
-            if (srmAction == null && filteredSubstTrackerList.Count > 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
+            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
             {
                 var stWaitingForStart = filteredSubstTrackerList.Array.FirstOrDefault(st => !st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
                 var anyStartedAtSource = (stWaitingForStart != null) &&  filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
@@ -1798,7 +1891,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         {
             var anState = RouteSequenceFailedAnnunciator.ANState;
 
-            holdStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
+            noteStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
 
             string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
 
@@ -2703,6 +2796,13 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     SetExplicitFaultReason(npv["Reason"].VC.GetValueA(rethrow: true));
                     PerformMainLoopService();
                     return string.Empty;
+
+                case "ReleaseHold":
+                    preparednessState.SummaryState &= ~QuerySummaryState.HoldInboundMaterial;
+                    preparednessState.Reason = serviceName;
+                    PublishPreparednessState();
+                    return string.Empty;
+
                 default:
                     return base.PerformServiceActionEx(ipf, serviceName, npv);
             }
@@ -2852,6 +2952,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         protected IPreparednessState<IProcessSpec, IProcessStepSpec> lastPublishedPreparednessState;
         protected IValueAccessor preparednessStateIVA;
 
+        public INotificationObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> PreparednessStatePublisher { get { return preparednessStatePublisher; } }
+
         INotificationObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> IPrepare<IProcessSpec, IProcessStepSpec>.StatePublisher { get { return preparednessStatePublisher; } }
         protected InterlockedNotificationRefObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> preparednessStatePublisher = new InterlockedNotificationRefObject<IPreparednessState<IProcessSpec, IProcessStepSpec>>();
 
@@ -2937,6 +3039,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 IPF = ipf,
                 SubstObserver = substObserver,
+                ProcssStepSpec = stepSpec,
                 ProcessTime = processTime,
                 AutoAcquireTransferPermissionLocNameAtEnd = autoAcquireTransferPermissionLocNameAtEnd,
                 BusyToken = CreateInternalBusyFlagHolderObject(flagName: "Running Process for {0}".CheckedFormat(substID.FullName)),
@@ -2953,6 +3056,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         {
             public IProviderFacet IPF { get; set; }
             public E090SubstObserver SubstObserver { get; set; }
+            public IProcessStepSpec ProcssStepSpec { get; set; }
             public TimeSpan ProcessTime { get; set; }
             public string AutoAcquireTransferPermissionLocNameAtEnd { get; set; }
             public IDisposable BusyToken { get; set; }
@@ -2987,7 +3091,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             Log.Debug.Emit("EngineState change to {0} [from:{1}, reason:{2}]", engineState, entryEngineState, reason);
 
-            if (entryEngineState == EngineState.RunningProcess && currentProcessTracker != null)
+            if (entryEngineState == EngineState.RunningProcess && nextEngineState != EngineState.RunningProcess && currentProcessTracker != null)
             {
                 var pendingSPS = currentProcessTracker.IPF.NamedParamValues["PendingSPS"].VC.GetValue(rethrow: false, defaultValue: SubstProcState.ProcessStepCompleted);
                 var resultCode = currentProcessTracker.IPF.NamedParamValues["ResultCode"].VC.GetValueA(rethrow: false).MapNullToEmpty();
@@ -3012,7 +3116,21 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             }
 
             if (engineState == EngineState.RunningProcess && currentProcessTracker != null)
+            {
                 E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, SubstProcState.InProcess);
+
+                var requestHoldForSubstrateID = currentProcessTracker.ProcssStepSpec.StepVariables["RequestHoldForSubstrateID"].VC.GetValueA(rethrow: false);
+
+                if (requestHoldForSubstrateID.IsNeitherNullNorEmpty() && requestHoldForSubstrateID == locObserver.ContainsSubstInfo.ObjID.Name)
+                {
+                    Log.Debug.Emit("Requesting hold at start of process for '{0}'", requestHoldForSubstrateID);
+
+                    preparednessState.SummaryState |= QuerySummaryState.HoldInboundMaterial;
+                    preparednessState.Reason = "RequestHoldForSubstrateID triggered";
+
+                    PublishPreparednessState();
+                }
+            }
         }
 
         private void CompletePendingAcquireRequests(bool publish = true, string resultCode = "")

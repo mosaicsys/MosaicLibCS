@@ -609,7 +609,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// <summary>
     /// This flag enumeration is used to define a set of flags that are conveighed via state and query results.
     /// The interpretation, and permitted combinations, of these flags is context dependant in relation to its use in state and query results.
-    /// <para/>None (0x00), NotAvailable (0x01), Ready (0x02), Preparing (0x04), CanPrepare (0x08), Compatible (0x10), ProcessLocked (0x20)
+    /// <para/>None (0x00), NotAvailable (0x01), Ready (0x02), Preparing (0x04), CanPrepare (0x08), Compatible (0x10), ProcessLocked (0x20), HoldInboundMaterial (0x40)
     /// </summary>
     /// <remarks>
     /// This enumeration is used in both preparedness state and query results.
@@ -657,6 +657,17 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         /// </summary>
         [EnumMember]
         ProcessLocked = 0x20,
+
+        /// <summary>
+        /// This flag may be used by a corresponding part to request that the scheduler block arrival of new inbound material, 
+        /// typically in order to then request or automatically perform some maintenance activity that requires it be empty at the time.
+        /// The use of this flag is independent of the use of all other flags.  
+        /// The scheduler is expected to delay requesting the part to prepare until this flag has been cleard.
+        /// <para/>Be aware that the use of this flag is asynchrnous with the scheduler and that their will be latency between when the part first requests this and when
+        /// the scheduler recognizes the request and holds/stops arrival of new inbound materal.
+        /// </summary>
+        [EnumMember]
+        HoldInboundMaterial = 0x40,
     }
 
     /// <summary>
@@ -1074,7 +1085,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         EnableAbortingRules = 0x20,
         EnableRunningRules = 0x40,
         EnableAbortedAtWork = 0x80,
-        EnableHeldRules = 0x100,
+        EnableHeldRules = 0x100,        // now also applies to Stranded
         EnablePausedRules = 0x200,
 
         All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules | EnableHeldRules | EnablePausedRules),
@@ -1389,7 +1400,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             bool enableStoppingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableStoppingRules) != 0);
             bool enableAbortingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableAbortingRules) != 0);
             bool enableRunningRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableRunningRules) != 0);
-            bool enableHeldRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableHeldRules) != 0);
+            bool enableHeldOrStrandedRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableHeldRules) != 0);
             bool enablePausedRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnablePausedRules) != 0);
 
             var stInfo = Info;
@@ -1586,9 +1597,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                         break;
 
                     case E090.SubstrateJobState.Held:
-                        if (enableHeldRules)
+                    case SubstrateJobState.Stranded:
+                        if (enableHeldOrStrandedRules)
                         {
-                            // cover cases where a held NeedsProcessing wafer flagged as Stop or Abort ends up AtSource, tyipcally through manual service actions.
+                            // cover cases where a held NeedsProcessing wafer flagged as Stop or Abort ends up AtSource, typically through manual service actions.
                             if (stsIsAtSource && sps.IsNeedsProcessing() && (SubstrateJobRequestState == E090.SubstrateJobRequestState.Stop || SubstrateJobRequestState == E090.SubstrateJobRequestState.Abort))
                             {
                                 nextSJS = E090.SubstrateJobState.Skipped;
@@ -1708,6 +1720,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstrateJobState.Returned:
                 case SubstrateJobState.Returning:
                 case SubstrateJobState.Held:
+                case SubstrateJobState.Stranded:
                 case SubstrateJobState.RoutingAlarm:
                 default:
                     break;
@@ -1867,7 +1880,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessStepCompleted, spsOther;
 
-        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsOther;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsStranded, sjsOther;
 
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsAbortedAtDestination;
 
@@ -1912,6 +1925,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     && sjsHeld == other.sjsHeld
                     && sjsRoutingAlarm == other.sjsRoutingAlarm
                     && sjsRemoved == other.sjsRemoved
+                    && sjsStranded == other.sjsStranded
                     && sjsOther == other.sjsOther
                     && sjsAbortedAtDestination == other.sjsAbortedAtDestination
                     && motionPendingCount == other.motionPendingCount
@@ -1929,7 +1943,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             spsProcessed = spsStopped = spsRejected = spsAborted = spsSkipped = spsLost = 0;
             spsProcessStepCompleted = spsOther = 0;
 
-            sjsWaitingForStart = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsOther = 0;
+            sjsWaitingForStart = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsStranded = sjsOther = 0;
             sjsAbortedAtDestination = 0;
 
             motionPendingCount = 0;
@@ -2010,6 +2024,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstrateJobState.Held: sjsHeld++; break;
                 case SubstrateJobState.RoutingAlarm: sjsRoutingAlarm++; break;
                 case SubstrateJobState.Removed: sjsRemoved++; break;
+                case SubstrateJobState.Stranded: sjsStranded++; break;
                 default: sjsOther++; break;
             }
         }
@@ -2085,6 +2100,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 { "Held", sjsHeld },
                 { "RoutingAlarm", sjsRoutingAlarm },
                 { "Removed", sjsRemoved },
+                { "Stranded", sjsStranded },
                 { "Other", sjsOther },
             };
         }

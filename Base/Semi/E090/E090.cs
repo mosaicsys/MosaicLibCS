@@ -2419,7 +2419,7 @@ namespace MosaicLib.Semi.E090
     /// This is a target agnostic representation for what the substrate routing and processing engine indicates that it is doing and has done with a given substrate.
     /// Generally this state is intended to react to changes in the substrate's corresponding SubstrateJobRequestState value.  However once this state reaches a terminal
     /// value it will no longer change.
-    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returning (13), Returned (14), Held (15), RoutingAlarm (16), Removed (17)
+    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returning (13), Returned (14), Held (15), RoutingAlarm (16), Removed (17), Stranded (18)
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstrateJobState : int
@@ -2495,6 +2495,10 @@ namespace MosaicLib.Semi.E090
         /// <summary>Indicates that the substrate has been removed from the system in an unexpected location and/or state. [17]</summary>
         [EnumMember]
         Removed = 17,
+
+        /// <summary>Indicates that the substrate can no longer be moved or processed automatically, typically due to a change in scheduler selected behavior. [18]</summary>
+        [EnumMember]
+        Stranded = 18,
     }
 
     public static partial class ExtensionMethods
