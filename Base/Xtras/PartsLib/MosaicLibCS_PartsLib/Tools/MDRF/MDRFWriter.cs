@@ -2429,7 +2429,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             NamedValueSet occurrenceDataNVS = new NamedValueSet() { { "eventName", eventName } }.MergeWith(eventDataNVS, NamedValueMergeBehavior.AddNewItems);
 
-            OccurrenceInfo occurrenceInfo = null;
+            OccurrenceInfo occurrenceInfo;
 
             if (!eventNameToOccurrenceInfoDictionary.TryGetValue(eventName, out occurrenceInfo) || occurrenceInfo == null)
                 occurrenceInfo = defaultRecordEventOccurranceInfo;
@@ -2457,7 +2457,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (!BaseState.IsOnline)
                 return "Part is not Online";
 
-            OccurrenceInfo occurrenceInfo = null;
+            OccurrenceInfo occurrenceInfo;
 
             if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out occurrenceInfo) || occurrenceInfo == null)
                 return "'{0}' not a known occurrence name".CheckedFormat(occurrenceName);
@@ -2580,8 +2580,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                      CST = ContainerStorageType.Object,
                 };
 
-                List<OccurrenceInfo> occuranceInfoList = new List<OccurrenceInfo>();
-                occuranceInfoList.Add(defaultRecordEventOccurranceInfo);
+                List<OccurrenceInfo> occuranceInfoList = new List<OccurrenceInfo>
+                {
+                    defaultRecordEventOccurranceInfo
+                };
 
                 if (!Config.OccurrenceDefinitionItemArray.IsNullOrEmpty())
                 {

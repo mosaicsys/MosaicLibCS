@@ -90,7 +90,7 @@ namespace MosaicLib.Utils
 		/// <returns>The DateTime converted to a string based on the desired format.</returns>
 		public static string CvtToString(ref DateTime dt, DateTimeFormat dtFormat)
 		{
-			string result = string.Empty;
+			string result;
 
 			switch (dtFormat)
 			{

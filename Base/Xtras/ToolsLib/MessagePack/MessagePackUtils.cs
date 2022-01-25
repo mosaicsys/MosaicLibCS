@@ -194,16 +194,14 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                             mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.CSTBase + (sbyte)ContainerStorageType.Object), 0));
                             mpWriter.WriteNil();    // in this particular case we just write Nil since it is unambiguous here.  Reading Nil will produce ValueContainer.Null.
                         }
-                        else if (o is BiArray)
+                        else if (o is BiArray biArray)
                         {
                             mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.ArrayOfCSTBase + (sbyte)ContainerStorageType.Bi), 0));
-                            u1ArrayFormatter.Serialize(ref mpWriter, (byte[])((BiArray)o), options);
+                            u1ArrayFormatter.Serialize(ref mpWriter, (byte[])biArray, options);
                         }
                         else if (oType.IsArray)
                         {
                             var oItemCST = ValueContainer.GetDecodedTypeInfo(oType.GetElementType()).cst;
-                            var oa = (Array)value.o;
-                            var oaLength = oa.Length;
 
                             mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.ArrayOfCSTBase + (sbyte)oItemCST), 0));
 
@@ -632,7 +630,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     VCFormatter.Instance.SkipCurrentVCRecord(ref mpReader);
 
                 return new NamedValue("", $"NVFormater.Deserialize: Invalid NamedValue array length [{arrayLen} != 2]");
@@ -717,7 +715,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return new TypeAndValueCarrier(errorCode: $"TAVCFormatter.Deserialize: Invalid TypeAndValueCarrier array length [{arrayLen} != 5 && != 6]");
@@ -796,7 +794,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return Logging.LogMessage.Generate("ILogMessageFormatter.Deserialize", 0, Logging.MesgType.Error, $"Invalid serialized ILogMessage array length [{arrayLen} != 12]", null, null, true, QpcTimeStamp.Now, 0, 0, 0, null, DateTime.Now);
@@ -875,7 +873,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return new E039Object(new E039ObjectID($"Invalid serialized IE039Object array length [{arrayLen} != 4]", "IE039Object.Deserialize"), E039ObjectFlags.IsFinal, null);
@@ -914,7 +912,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return new E039Link(new E039ObjectID($"Invalid serialized E039ObjectID array length [{arrayLen} != 3]", "E039Link.Deserialize"), E039ObjectID.Empty, "Error");
@@ -967,7 +965,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return new E039ObjectID($"Invalid serialized E039ObjectID array length [{arrayLen} != 3]", "E039ObjectID.Deserialize");
@@ -1317,6 +1315,10 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         /// <summary>When true, the Read method will catch and handle specific errors as indicating end of file (to support read while writing with partially written contents).</summary>
         public bool TreatExpectedDecompressionErrorsAsEndOfFile { get; set; } = true;
 
+        /// <summary>When true, the Read method will catch and handle all errors (exceptions) as indicating end of file (to support read while writing with partially written contents).</summary>
+        public bool TreatAllErrorsAsEndOfFile { get; set; }
+
+        /// <inheritdoc/>
         public MessagePackFileRecordReaderSettings MakeCopyOfThis(bool deepCopy = true)
         {
             return (MessagePackFileRecordReaderSettings) MemberwiseClone();
@@ -1354,6 +1356,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             compressorStream.TreatEndOfStreamExceptionAsEndOfFile = Settings.TreatEndOfStreamExceptionAsEndOfFile;
             compressorStream.TreatExpectedDecompressionErrorsAsEndOfFile = Settings.TreatExpectedDecompressionErrorsAsEndOfFile;
+            compressorStream.TreatAllErrorsAsEndOfFile = Settings.TreatAllErrorsAsEndOfFile;
 
             useStream = compressorStream;
 
@@ -1552,7 +1555,6 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
         bool updateReadOnlySequenceNeeded;
         ReadOnlySequence<byte> readOnlySequence;
-        ReadOnlyMemory<byte> readOnlyMemory;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe void UpdateReadOnlySequenceIfNeeded(bool forceUpdate = false)
@@ -1564,7 +1566,6 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                 int currentBufferCount = CurrentBufferCount;
 
                 readOnlySequence = new ReadOnlySequence<byte>(buffer, getIndex, currentBufferCount);
-                readOnlyMemory = readOnlySequence.First;
 
                 if (currentBufferCount > 0)
                 {
@@ -1707,7 +1708,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         public static MPHeaderByteCode GetHeaderByteCode(ref this ReadOnlyMemory<byte> rom)
         {
             var rawHeaderByteCode = rom.Span[0];
-            return unchecked((MPHeaderByteCode)(rom.Span[0]));
+            return unchecked((MPHeaderByteCode)rawHeaderByteCode);
         }
 
         /// <summary></summary>

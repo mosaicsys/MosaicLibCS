@@ -602,8 +602,7 @@ namespace MosaicLib.Modular.Common
             /// </summary>
             public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
             {
-                DecodedTypeInfo dti = default(DecodedTypeInfo); 
-
+                DecodedTypeInfo dti;
                 if (decodedTypeInfoDictionary.TryGetValue(type, out dti))
                     return dti;
 
@@ -647,7 +646,7 @@ namespace MosaicLib.Modular.Common
                 }
                 else
                 {
-                    dti.isNullable = false;     // this flag is not useful when used with reference types
+                    // enable nullable use with ContainerStorageType.Object to support arbitrary boxed value representation (for boxed structs)
                     dti.cst = ContainerStorageType.Object;
                 }
 
@@ -1261,7 +1260,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
-        public void SetValueA(string value) { cvt = ContainerStorageType.A; o = value; u = new Union() { }; }
+        public void SetValueA(string value) { cvt = ContainerStorageType.A; o = value; u = default(Union); }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public void SetValueTS(TimeSpan value) { cvt = ContainerStorageType.TS; o = null; u = new Union() { TimeSpan = value }; }
@@ -1270,10 +1269,16 @@ namespace MosaicLib.Modular.Common
         public void SetValueDT(DateTime value) { cvt = ContainerStorageType.DT; o = null; u = new Union() { DateTime = value }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
-        public void SetValueLS(IList<string> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.LS; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = new Union() { }; }
+        public void SetValueLS(IList<string> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.LS; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueLS(IEnumerable<string> set, bool mapNullToEmpty = true) { cvt = ContainerStorageType.LS; o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
-        public void SetValueL(IList<ValueContainer> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.L; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = new Union() { }; }
+        public void SetValueL(IList<ValueContainer> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.L; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueL(IEnumerable<ValueContainer> set, bool mapNullToEmpty = true) { cvt = ContainerStorageType.L; o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public void SetValueNVS(INamedValueSet value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.NVS; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
@@ -1281,31 +1286,56 @@ namespace MosaicLib.Modular.Common
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public void SetValueNV(INamedValue value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.NV; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateA(string value) { return new ValueContainer() { cvt = ContainerStorageType.A, o = value, u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateLS(IList<string> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateLS(IEnumerable<string> set, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateLS(string [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateLS(string firstItem, params string[] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = new ReadOnlyIList<string>(firstItem, moreItemsArray), u = default(Union) }; }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateL(IList<ValueContainer> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateL(ValueContainer [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(IEnumerable<ValueContainer> set, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(ValueContainer firstItem, params ValueContainer[] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.L, o = new ReadOnlyIList<ValueContainer>(firstItem, moreItemsArray), u = default(Union) }; }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(object firstItem, params object [] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.L, o = firstItem.Concat(moreItemsArray.MapNullToEmpty()).Select(o => ValueContainer.CreateFromObject(o)).ConvertToReadOnly(), u = default(Union) }; }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(IEnumerable<object> set, bool mapNullToEmpty = true)
+        {
+            var vcROSet = (set != null) ? set.Select(o => ValueContainer.CreateFromObject(o)).ConvertToReadOnly() : (mapNullToEmpty ? ReadOnlyIList<ValueContainer>.Empty : null); ;
+            return new ValueContainer() { cvt = ContainerStorageType.L, o = vcROSet, u = default(Union) };
+        }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(IEnumerable set, bool mapNullToEmpty = true) { return ValueContainer.CreateL(set.SafeToSet(mapNullToEmpty: mapNullToEmpty), mapNullToEmpty: mapNullToEmpty); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateTS(TimeSpan value) { return new ValueContainer() { cvt = ContainerStorageType.TS, u = new Union() { TimeSpan = value } }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateDT(DateTime value) { return new ValueContainer() { cvt = ContainerStorageType.DT, u = new Union() { DateTime = value } }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateNVS(INamedValueSet value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NVS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
-        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateNV(INamedValue value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NV, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         #endregion
@@ -1812,8 +1842,16 @@ namespace MosaicLib.Modular.Common
                     switch (cvt)
                     {
                         case ContainerStorageType.None: value = defaultValue; break;
-                        default: value = (TValueType)o; break;
-                        case ContainerStorageType.Object: value = (TValueType)o; break;
+                        default:
+                            new ValueContainerGetValueException("ContainerStorageType.{0} is not a supported".CheckedFormat(cvt)).Throw();
+                            value = defaultValue;
+                            break;
+                        case ContainerStorageType.Object:
+                            if ((o == null) && (!rethrow || isNullable))
+                                value = defaultValue;
+                            else
+                                value = (TValueType)o;
+                            break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
                         case ContainerStorageType.Boolean: value = (TValueType)((System.Object)u.b); break;
                         case ContainerStorageType.Binary: value = (TValueType)((System.Object)u.bi); break;
@@ -2032,7 +2070,10 @@ namespace MosaicLib.Modular.Common
 
                     if (!conversionDone)
                     {
-                        value = (TValueType)System.Convert.ChangeType(valueAsObject, typeof(TValueType));
+                        if (IsNullOrEmpty && (!rethrow || isNullable))
+                            value = defaultValue;
+                        else
+                            value = (TValueType)System.Convert.ChangeType(valueAsObject, typeof(TValueType));
                     }
                 }
                 else
@@ -5765,53 +5806,54 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Conditional SetKeyword variant as extension method. 
-        /// If the given condition is true then this method Sets the given name as a keyword (vc is empty), 
-        /// otherwise the method does not modify the given nvs.
+        /// Conditional <paramref name="nvs"/>.SetKeyword variant as extension method. 
+        /// If the given <paramref name="condition"/> is true and the given <paramref name="name"/> is non-mepty then this method Sets the given <paramref name="name"/> as a keyword (vc is empty), 
+        /// otherwise the method does not modify the given <paramref name="nvs"/>.
         /// </summary>
         public static NamedValueSet ConditionalSetKeyword(this NamedValueSet nvs, string name, bool condition)
         {
-            if (condition && nvs != null)
+            if (condition && nvs != null && name.IsNeitherNullNorEmpty())
                 nvs.SetKeyword(name);
 
             return nvs;
         }
 
         /// <summary>
-        /// Conditional SetValue variant as extension method. 
-        /// If the given condition is true then this method Sets the given name to the given value, 
-        /// otherwise the method does not modify the given nvs.
+        /// Conditional <paramref name="nvs"/>.SetValue variant as extension method. 
+        /// If the given <paramref name="condition"/> is true and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>, 
+        /// otherwise the method does not modify the given <paramref name="nvs"/>.
         /// </summary>
         public static NamedValueSet ConditionalSetValue<TValueType>(this NamedValueSet nvs, string name, bool condition, TValueType value)
         {
-            if (condition && nvs != null)
+            if (condition && nvs != null && name.IsNeitherNullNorEmpty())
                 nvs.SetValue(name, value);
 
             return nvs;
         }
 
         /// <summary>
-        /// SetValue variant as extension method.  
-        /// If the given nullable value is not null then this method Sets the given name to the given value
+        /// <paramref name="nvs"/>.SetValue variant as extension method.  
+        /// If the given nullable <paramref name="value"/> is not null and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>
         /// otherwise the method does not modify the given nvs.
         /// </summary>
         public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType? value)
             where TValueType : struct
         {
-            if (value != null && nvs != null)
+            if (value != null && nvs != null && name.IsNeitherNullNorEmpty())
                 nvs.SetValue(name, value.GetValueOrDefault());
 
             return nvs;
         }
+
         /// <summary>
-        /// SetValue variant as extension method.  
-        /// If the given nullable value is not null then this method Sets the given name to the given value
+        /// <paramref name="nvs"/>.SetValue variant as extension method.  
+        /// If the given <paramref name="value"/> is not null and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>
         /// otherwise the method does not modify the given nvs.
         /// </summary>
         public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType value)
             where TValueType : class
         {
-            if (value != null && nvs != null)
+            if (value != null && nvs != null && name.IsNeitherNullNorEmpty())
                 nvs.SetValue(name, value);
 
             return nvs;
@@ -5983,8 +6025,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static NamedValue ConvertToNamedValue(this ValueContainer vc, bool asReadOnly = false, bool rethrow = false, bool mapNullToEmpty = true)
         {
-            INamedValue inv = null;
-
+            INamedValue inv;
             switch (vc.cvt)
             {
                 case ContainerStorageType.INamedValue: 

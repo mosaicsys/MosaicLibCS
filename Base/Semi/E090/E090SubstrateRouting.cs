@@ -106,7 +106,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     /// This item has two forms.  In the first it is given a Substrate ID, and in the second it is given the location name of a robot or of a robot arm.
     /// When executed, this item will first determine which robot arm shall be used for the approach, either from the current location of the given substrate, or from the given robot or robot arm location name.
     /// Then it will determine if the arm is occupied and then it will either move to the pre-pick or the pre-place position for that arm and occupation status.
-    /// If MustSucceed is true any issue or failure was encountered with this item then the sequence it is being run within will fail, otherwise an any such issue will be logged but the seuqence will not fail due to this item.
+    /// If MustSucceed is true any issue or failure was encountered with this item then the sequence it is being run within will fail, otherwise an any such issue will be logged but the sequence will not fail due to this item.
     /// </summary>
     public class ApproachLocationItem : SubstrateRoutingItemBase
     {
@@ -420,7 +420,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         AlmostAvailable,
 
         /// <summary>
-        /// Some unexpected condition is active that means that the interface is not availalbe and that it will not automatically become available after some period of time without external intervention.
+        /// Some unexpected condition is active that means that the interface is not available and that it will not automatically become available after some period of time without external intervention.
         /// <para/>Generally the part will indicate the current reason why it is in this state using the Reason property.
         /// <para/>The expected behavior of ITPR Acquire requests in this state is that they will be immediately rejected.
         /// </summary>

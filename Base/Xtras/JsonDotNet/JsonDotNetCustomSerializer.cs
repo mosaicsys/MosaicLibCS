@@ -33,6 +33,7 @@ using Newtonsoft.Json;
 
 namespace Mosaic.JsonDotNet
 {
+    [Obsolete("The use of this assembly and the classes within it are deprecated.  Please change to the use of the corresponding classes in the Mosaic_ToolsLib assembly (2022-01-25)")]
     public class JsonDotNetCustomSerializerFactory : ITypeSerializerItemFactory
     {
         public JsonDotNetCustomSerializerFactory(string factoryName = null)

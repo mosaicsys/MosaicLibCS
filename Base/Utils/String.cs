@@ -556,7 +556,7 @@ namespace MosaicLib.Utils
         #endregion
     }
 
-	#endregion
+    #endregion
 
     #region Extension Methods
 
@@ -573,7 +573,7 @@ namespace MosaicLib.Utils
             sb.Remove(0, sb.Length);
             return sb;
         }
-        
+
         #endregion
 
         #region static System.Text.StringBuilder.CheckedAppendFormat extension methods
@@ -673,6 +673,24 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat("FormatPN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
+
+            return sb;
+        }
+
+        /// <summary>If the given <paramref name="condition"/> is true then this method calls <paramref name="sb"/>.Append(<paramref name="str"/>).  Supports call chaining.</summary>
+        public static StringBuilder ConditionalAppend(this StringBuilder sb, bool condition, string str)
+        {
+            if (condition)
+                sb.Append(str);
+
+            return sb;
+        }
+
+        /// <summary>If the given <paramref name="condition"/> is true then this method calls <paramref name="sb"/>.AppendWithDelimiter(<paramref name="delimiter"/>, <paramref name="str"/>).  Supports call chaining.</summary>
+        public static StringBuilder ConditionalAppendWithDelimiter(this StringBuilder sb, bool condition, string delimiter, string str)
+        {
+            if (condition)
+                sb.AppendWithDelimiter(delimiter, str);
 
             return sb;
         }

@@ -19,24 +19,18 @@
  * limitations under the License.
  */
 
+using Mosaic.ToolsLib.MDRF2.Reader;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Reflection.Attributes;
+using MosaicLib.PartsLib.Tools.MDRF.Common;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-
-using MosaicLib;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Reflection.Attributes;
-using MosaicLib.PartsLib.Tools.MDRF.Common;
-using MosaicLib.PartsLib.Tools.MDRF.Reader;
-using MosaicLib.Time;
-using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-
-using Mosaic.ToolsLib.MDRF2.Reader;
-using Mosaic.ToolsLib.MDRF2.Common;
 
 namespace MosaicLib.Tools.ExtractMDRFtoCSV
 {
@@ -179,7 +173,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         {
             Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras | -IncludeObjects".CheckedFormat(appName));
             Console.WriteLine("       | -NoData | -HeaderAndDataOnly | -MapBool | -group:name | -tag:tag");
-            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period] [fileName.mdrf|.mdrf2|.mdrf2.lz4] ...");
+            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period] [fileName.mdrf|.mdrf2|.mdrf2.lz4|.mdrf2.gz] ...");
             Console.WriteLine("   or: {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo | -ListObjects] [fileName.mdrf] ...".CheckedFormat(appName));
             Console.WriteLine("   or: {0} [-ListOccurrences | -ListMessages] [fileName.mdrf] ...".CheckedFormat(appName));
             Console.WriteLine(" Also accepts: -io, -ie, -iobj, -nd, -hado, -mb, -g:name, -t:tag, -s:dt, -e:dt, -i:interval");
@@ -193,11 +187,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         private static void ProcessFileNameArg(string arg)
         {
             if (!System.IO.Path.HasExtension(arg))
-                arg = arg + ".mdrf2.lz4";
+                arg += ".mdrf2.lz4";
 
             string filePart = System.IO.Path.GetFileName(arg);
             string pathPart = System.IO.Path.GetDirectoryName(arg).MapNullOrEmptyTo(".");
-            string fullPathPart = System.IO.Path.GetFullPath(pathPart);
 
             if (filePart.Contains("?") || filePart.Contains("*"))
             {
@@ -250,7 +243,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                 {
                     Console.WriteLine("File: '{0}' size: {1:f3} kB{2}", Path.GetFileName(fileInfo.FileNameAndRelativePath), fileInfo.FileLength * (1.0 / 1024), fileSummary.EndRecordFound ? "" : ",NotProperlyClosed");
 
-                    ListOccurrencesAndObjectsAndMessages(fileInfo, digestInfo);
+                    ListOccurrencesAndObjectsAndMessages(fileInfo);
 
                     return;
                 }
@@ -285,7 +278,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         sw.CheckedWriteLine("$File.Date.Last,{0:o}", fileSummary.LastFileDTPair.DateTime.ToLocalTime());
                         sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", fileSummary.LastFileDTPair.FileDeltaTime.FromSeconds().TotalHours);
 
-                        foreach (var key in new string[] 
+                        foreach (var key in new string[]
                             {
                                 "HostName",
                                 "Environment.MachineName", "MachineName",
@@ -320,7 +313,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     if (FilteredGroupInfoArray.SafeLength() <= 1)
                         columnNames = columnNames.Concat(FilteredGroupInfoArray.SelectMany(gi => gi.GroupPointInfoArray.Select(gpi => gpi.Name))).ToArray();
                     else
-                        columnNames = columnNames.Concat(FilteredGroupInfoArray.SelectMany((gi, idx) => gi.GroupPointInfoArray.Select(gpi => "{0}:{1}".CheckedFormat(idx+1, gpi.Name)))).ToArray();
+                        columnNames = columnNames.Concat(FilteredGroupInfoArray.SelectMany((gi, idx) => gi.GroupPointInfoArray.Select(gpi => "{0}:{1}".CheckedFormat(idx + 1, gpi.Name)))).ToArray();
 
                     sw.CheckedWriteLine(String.Join(",", columnNames.Select(name => name.GenerateRFC4180EscapedVersion())));
 
@@ -383,7 +376,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                                 {
                                     sw.CheckedWrite("{0:MM/dd/yyyy HH:mm:ss.fff},{1:f6}", dtPair.DateTime.ToLocalTime(), dtPair.FileDeltaTime);
 
-                                    foreach (var vc in (record.DataAsObject as ValueContainer []).MapNullToEmpty())
+                                    foreach (var vc in (record.DataAsObject as ValueContainer[]).MapNullToEmpty())
                                     {
                                         string vcStr;
                                         if (vc.cvt == ContainerStorageType.Boolean && mapBool)
@@ -404,7 +397,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                             case MDRF2QueryItemTypeSelect.Occurrence:
                                 if (includeOccurrences)
                                 {
-                                    var oqrd = (MDRF2OccurrenceQueryRecordData) record.DataAsObject;
+                                    var oqrd = (MDRF2OccurrenceQueryRecordData)record.DataAsObject;
                                     sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3} {4}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), oqrd.OccurrenceInfo.Name, oqrd.VC);
                                 }
                                 break;
@@ -419,8 +412,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                                 break;
                             case MDRF2QueryItemTypeSelect.DecodingIssue:
                                 {
-                                    var ex = record.DataAsObject as System.Exception;
-                                    if (ex == null)
+                                    if (!(record.DataAsObject is System.Exception ex))
                                         sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
                                     else
                                         sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ex.ToString(ExceptionFormat.TypeAndMessage));
@@ -449,7 +441,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                 foreach (var key in new string[] { "Environment.MachineName", "Environment.OSVersion", "MachineName", "OSVersion" })
                 {
                     foreach (var nvs in fileInfo.NonSpecMetaNVS)
-                        nvs.VC.GetValueNVS(rethrow:false).MapNullToEmpty().ConsoleWriteLineKeyIfPresent(key);
+                        nvs.VC.GetValueNVS(rethrow: false).MapNullToEmpty().ConsoleWriteLineKeyIfPresent(key);
                 }
 
                 if (!select.IsSet(Select.ListGroupInfo))
@@ -510,12 +502,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             Console.WriteLine();
         }
 
-        public static void ListOccurrencesAndObjectsAndMessages(IMDRF2FileInfo fileInfo, Tuple<IMDRF2FileInfo, MDRF2QueryFileSummary, Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord[]> digestInfo)
+        public static void ListOccurrencesAndObjectsAndMessages(IMDRF2FileInfo fileInfo)
         {
-            var fileSummary = digestInfo.Item2;
-            var specItemSet = fileInfo.SpecItemSet;
-            var inlineIndexArray = digestInfo.Item3;
-
             bool listMessages = select.IsSet(Select.ListMessages);
             bool listOccurrences = select.IsSet(Select.ListOccurrences);
             bool listObjects = select.IsSet(Select.ListObjects);
@@ -539,7 +527,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                 {
                     case MDRF2QueryItemTypeSelect.Occurrence:
                         {
-                            var queryData = (MDRF2OccurrenceQueryRecordData) record.DataAsObject;
+                            var queryData = (MDRF2OccurrenceQueryRecordData)record.DataAsObject;
                             Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, queryData.OccurrenceInfo.Name, queryData.VC));
                         }
                         break;
@@ -556,9 +544,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         break;
                     case MDRF2QueryItemTypeSelect.DecodingIssue:
                         {
-                            var ex = record.DataAsObject as System.Exception;
-
-                            if (ex == null)
+                            if (!(record.DataAsObject is System.Exception ex))
                                 Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
                             else
                                 Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ex.ToString(ExceptionFormat.TypeAndMessage)));

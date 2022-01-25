@@ -534,7 +534,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             }
         }
 
-        private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session)
+        private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session, string transportEndpointDescription)
         {
             ClientSessionTracker cst = new ClientSessionTracker()
             {
@@ -549,7 +549,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             AddClientSessionTracker(cst);
 
-            Log.Debug.Emit("New client session added [{0} {1} {2}]", session.SessionName, session.ClientUUID, session.ClientInstanceNum);
+            Log.Debug.Emit("New client session added [{0} {1} {2} {3}]", session.SessionName, session.ClientUUID, session.ClientInstanceNum, transportEndpointDescription);
         }
 
         /// <summary>

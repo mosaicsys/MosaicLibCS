@@ -73,10 +73,13 @@ namespace MosaicLib.Modular.Config
                     );
         }
 
-        /// <summary>Flag value indicates that the config key is Required and that it will only be read once, typically early in the application launch cycle.  If it its value is changed later, the application must be restarted to begin using the new (latest) value.</summary>
+        /// <summary>Flag value indicates that the config key will only be read once, typically early in the application launch cycle.  If it its value is changed later, the application must be restarted to begin using the new (latest) value.</summary>
         public bool ReadOnlyOnce { get { return !MayBeChanged; } set { MayBeChanged = !value; } }
 
-        /// <summary>Value that indicates that the config key may accept changes during Update calls.</summary>
+        /// <summary>
+        /// Value that indicates that the requesting client can accept changes to the config key value using the IConfigKeyAccess.Update method.  
+        /// <para/>Note: use of this flag does not indicate that the provided key can actually be changed, only that the client would be able to accept it if the key's value is both changable and gets changed.
+        /// </summary>
         [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
         public bool MayBeChanged { get; set; }
 
@@ -121,7 +124,7 @@ namespace MosaicLib.Modular.Config
 
     /// <summary>
     /// This struct contains values that define specific details about how a provider supports keys (either a specific one or all of them in general)
-    /// <para/>Supported concepts include MayBeChanged, Fixed, KeyNotFound
+    /// <para/>Supported concepts include MayBeChanged, IsFixed, KeysMayBeAddedUsingEnsureExistsOption, IsPersisted, KeyWasNotFound
     /// </summary>
     /// <remarks>
     /// This object is used both at the provider level to define characteristics of this provider in general.  
@@ -606,7 +609,10 @@ namespace MosaicLib.Modular.Config
         /// <summary>Gives the full key name for this item</summary>
         string Key { get; }
 
-        /// <summary>Gives the client access to the set of Flags that are relevant for access to this config key.</summary>
+        /// <summary>
+        /// Gives the client access to the set of Client specified Flags that were requested for use with this config key.
+        /// <para/>Note also see ValueIsFixed which indicates that the value will not change, even if the value of this property indicates that the client did not request ReadOnlyOnce behavior (aka !MayBeChanged).
+        /// </summary>
         ConfigKeyAccessFlags Flags { get; }
 
         /// <summary>
@@ -2038,8 +2044,6 @@ namespace MosaicLib.Modular.Config
             ValueSeqNum = other.ValueSeqNum;
             MetaDataSeqNum = other.MetaDataSeqNum;
 
-            ProviderFlags = other.ProviderFlags;
-
             if (ckaiRoot != null)
             {
                 Provider = ckaiRoot.Provider;
@@ -2059,7 +2063,10 @@ namespace MosaicLib.Modular.Config
         /// <summary>Gives the original CKA from which this CKA was last cloned.  Usually the RootICKA is created, and maintained, by the corresponding provider.</summary>
         internal IConfigKeyAccess RootICKA { get; set; }
         
-        /// <summary>Gives the provider instance that is serving this key.</summary>
+        /// <summary>
+        /// Gives the provider instance that is serving this key.
+        /// <para/>Note: setter also sets the ProviderFlags and ProviderMetaData from the given provider instance, or to default values if the given value is null.
+        /// </summary>
         public IConfigKeyProvider Provider 
         { 
             get { return _provider; } 
@@ -2086,7 +2093,10 @@ namespace MosaicLib.Modular.Config
         /// <summary>Gives the full key name for this item</summary>
         public string Key { get; set; }
 
-        /// <summary>Gives the client access to the set of Flags that are relevant to access to this config key.</summary>
+        /// <summary>
+        /// Gives the client access to the set of Flags that are relevant to access to this config key.
+        /// <para/>This value is generally obtained from the client provided IConfigKeyAccessSpec.Flags when requesting an new config key access instance.
+        /// </summary>
         public ConfigKeyAccessFlags Flags { get; set; }
 
         /// <summary>
@@ -2098,7 +2108,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>Gives the client access to the name of the profvider for this key, or the empty string if this ICKA object does not have a specific provider.</summary>
         public string ProviderName { get { return ((ProviderInfo != null) ? ProviderInfo.Name : String.Empty); } }
 
-        /// <summary>Gives the client access to the set of Flags from the key's provider.  Used to indicate Fixed keys and when the KeyWasNotFound</summary>
+        /// <summary>
+        /// Gives internal access to the set of Flags from the key's provider.  Used to indicate Fixed keys and when the KeyWasNotFound.
+        /// <para/>Note this property is updated directly by the Provider property setter.</summary>
         public ConfigKeyProviderFlags ProviderFlags { get; internal set; }
 
         /// <summary>Returns a readonly copy of the key metadata INamedValueSet for this key as defined by the provider.</summary>
@@ -2167,7 +2179,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public bool UpdateValue(bool forceUpdate = false)
         {
-            // UpdateValue does not do anything when the IConfigKeyAccess flags include Fixed or ReadOnlyOnce.
+            // UpdateValue does not do anything when the IConfigKeyAccess flags include ValueIsFixed or ReadOnlyOnce.
             if (!IsUpdateNeeded && !forceUpdate || ValueIsFixed || (ConfigInternal == null))
                 return false;
 

@@ -180,7 +180,7 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>
             /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
             /// </summary>
-            public INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+            public virtual INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
             {
                 INamedValueSet derivedTypeMetaDataToMerge = GetDerivedTypeMetaDataToMerge();
 

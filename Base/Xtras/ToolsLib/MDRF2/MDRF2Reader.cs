@@ -19,37 +19,31 @@
  * limitations under the License.
  */
 
+using MessagePack;
+
+using Mosaic.ToolsLib.Compression;
+using Mosaic.ToolsLib.MessagePackUtils;
+
+using MosaicLib;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Part;
+using MosaicLib.PartsLib.Tools.MDRF.Common;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
+using MosaicLib.Utils.StringMatching;
+
 using System;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-using MosaicLib;
-using MosaicLib.File;
-using MosaicLib.Modular.Action;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Part;
-using MosaicLib.PartsLib.Tools.MDRF.Common;
-using MosaicLib.Semi.E005.Data;
-using MosaicLib.Time;
-using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-using MosaicLib.Utils.StringMatching;
-
-using Mosaic.ToolsLib.BufferWriter;
-using Mosaic.ToolsLib.MessagePackUtils;
-
 using MDRF = MosaicLib.PartsLib.Tools.MDRF;
-using System.Collections;
-using MessagePack;
-using System.Collections.Concurrent;
-using Mosaic.ToolsLib.Compression;
 
 namespace Mosaic.ToolsLib.MDRF2.Reader
 {
@@ -172,13 +166,27 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public class MDRF2QueryRecord<TItemType> : IMDRF2QueryRecord<TItemType>
     {
+        /// <inheritdoc>
         public IMDRF2FileInfo FileInfo { get; set; }
+
+        /// <inheritdoc>
         public MDRF2QueryItemTypeSelect ItemType { get; set; }
+
+        /// <inheritdoc>
         public ulong UserRowFlagBits { get; set; }
+
+        /// <inheritdoc>
         public Common.MDRF2DateTimeStampPair DTPair { get; set; }
+
+        /// <inheritdoc>
         public TItemType Data { get; set; }
+
         object IMDRF2QueryRecord.DataAsObject { get { return Data; } }
 
+        /// <summary>
+        /// Supports call chaining.  Used internally to update and return a given query record instance with different values for <paramref name="dtPair"/>, <paramref name="data"/> and/or <paramref name="userRowFlagBits"/>
+        /// Used when the caller has requested record re-use for a give query.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public MDRF2QueryRecord<TItemType> Update(in Common.MDRF2DateTimeStampPair dtPair, TItemType data = default, ulong ? userRowFlagBits = null)
         {
@@ -189,6 +197,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return this;
         }
 
+        /// <summary>Logging and Debugging helper method</summary>
         public override string ToString()
         {
             string dataStr = Data.SafeToString(mapNullTo: "[Null]");
@@ -205,6 +214,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public struct MDRF2QueryRecordStruct : IMDRF2QueryRecord
     {
+        /// <summary>Copy constructor.</summary>
         public MDRF2QueryRecordStruct(IMDRF2QueryRecord other)
         {
             FileInfo = other.FileInfo;
@@ -214,12 +224,22 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             DataAsObject = other.DataAsObject;
         }
 
+        /// <inheritdoc>
         public IMDRF2FileInfo FileInfo { get; private set; }
+
+        /// <inheritdoc>
         public Common.MDRF2DateTimeStampPair DTPair { get; private set; }
+
+        /// <inheritdoc>
         public MDRF2QueryItemTypeSelect ItemType { get; private set; }
+
+        /// <inheritdoc>
         public ulong UserRowFlagBits { get; set; }
+
+        /// <inheritdoc>
         public object DataAsObject { get; private set; }
 
+        /// <summary>Logging and Debugging helper method</summary>
         public override string ToString()
         {
             string dataStr = DataAsObject.SafeToString(mapNullTo: "[Null]");
@@ -242,9 +262,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             VC = vc;
         }
 
+        /// <summary>Gives the IOccurrenceInfo for the occurrence that generated the corresponding query record.</summary>
         public IOccurrenceInfo OccurrenceInfo { get; set; }
+
+        /// <summary>Gives the ValueContainer of the value that was attached/include with occurrence when it was recorded.</summary>
         public ValueContainer VC { get; set; }
 
+        /// <summary>Logging and Debugging helper method</summary>
         public override string ToString()
         {
             return $"{OccurrenceInfo} {VC}";
@@ -256,26 +280,53 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public interface IMDRF2FileInfo : ICopyable<MDRF2FileInfo>
     {
+        /// <summary>Gives the file name.  May include any relative path from where it was being searched for.</summary>
         string FileNameAndRelativePath { get; }
+
+        /// <summary>Gives the parital or full path to the file as it was configured.  This is primarily used by the MDRF2DirectoryTracker.</summary>
         string FileNameFromConfiguredPath { get; }
+
+        /// <summary>Gives the full path to the file.</summary>
         string FullPath { get; }
 
+        /// <summary>Gives the length of the MDRF file at the point when this object was generated or updated.</summary>
         ulong FileLength { get; }
+
+        /// <summary>Gives the QpcTimeStamp captured at the point when this record was last generated or updated.</summary>
         QpcTimeStamp ScanTimeStamp { get; }
 
+        /// <summary>When non-null this gives the DateTimeInfo obtained from the file.</summary>
         DateTimeInfo DateTimeInfo { get; }
+
+        /// <summary>When non-null this gives the LibraryInfo obtained from the file.</summary>
         LibraryInfo LibraryInfo { get; }
+
+        /// <summary>When non-null this gives the SetupInfo obtained from the file.</summary>
         SetupInfo SetupInfo { get; }
 
+        /// <summary>This gives the NVS object that was read from the MDRF file and which contains the information about the SetupInfo.  On MDRF1 files this will also contains the information for the LibraryInfo.</summary>
         INamedValueSet SetupInfoNVS { get; }
+
+        /// <summary>Gives the caller direct access to the ClientInfo NVS which is also contained in the SetupInfo.ClientNVS</summary>
         INamedValueSet ClientInfoNVS { get; }
 
+        /// <summary>
+        /// Gives the caller a tree structured NVS containing information from the file.  
+        /// This includes the keyword "MDRF1" or "MDRF2" based on the type of file that was read and sub-keys that give additional information about the file contents.
+        /// For MDRF2 this includes each of the file metadata keys and their values, most of which contain NVS objects.
+        /// </summary>
         INamedValueSet NonSpecMetaNVS { get; }
 
+        /// <summary>Gives the set of NVS objects that enumerate the individual NVS instances used to restore the set of IMetaDataCommonInfo items that make up the SpecItemSet.</summary>
         IList<INamedValueSet> SpecItemNVSSet { get; set; }
+
+        /// <summary>The decoded set of IMetaDataCommonInfo instances and the corresponding set of dictionaries that are used to represent the usable columnar and occurence contents of the file.</summary>
         SpecItemSet SpecItemSet { get; }
 
+        /// <summary>This is set to a non-empty string if there is any issue recognizing the file as a supported mdrf1 or mdrf2 file or if there is any issue reading the header information from that file.</summary>
         string FaultCode { get; }
+
+        /// <summary>Returns true if the FaultCode is empty and the DateTimeInfo, LibraryInfo, SetupInfo and SpecItemSet are all non-null.</summary>
         bool IsUsable { get; }
 
         /// <summary>
@@ -290,8 +341,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public class MDRF2FileInfo : IMDRF2FileInfo
     {
+        /// <summary>default constructor</summary>
         public MDRF2FileInfo() { }
 
+        /// <summary>
+        /// Normal constructor accepts a <paramref name="fileNameAndRelativePath"/> and an optional <paramref name="fileNameFromConfiguredPath"/> and <paramref name="fullPath"/>
+        /// When either optional parameter are given as null (the default value) then the internal copy will be generated using the <paramref name="fileNameAndRelativePath"/></summary>
         public MDRF2FileInfo(string fileNameAndRelativePath, string fileNameFromConfiguredPath = null, string fullPath = null)
         {
             FileNameAndRelativePath = fileNameAndRelativePath;
@@ -299,33 +354,51 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             FullPath = fullPath ?? System.IO.Path.GetFullPath(fileNameAndRelativePath);
         }
 
+        /// <inheritdoc>
         public string FileNameAndRelativePath { get; set; }
+        /// <inheritdoc>
         public string FileNameFromConfiguredPath { get; set; }
+        /// <inheritdoc>
         public string FullPath { get; set; }
 
+        /// <inheritdoc>
         public ulong FileLength { get; set; }
+        /// <inheritdoc>
         public QpcTimeStamp ScanTimeStamp { get; set; }
 
+        /// <inheritdoc>
         public DateTimeInfo DateTimeInfo { get; set; }
+        /// <inheritdoc>
         public LibraryInfo LibraryInfo { get; set; }
+        /// <inheritdoc>
         public SetupInfo SetupInfo { get; set; }
 
+        /// <inheritdoc>
         public INamedValueSet SetupInfoNVS { get; set; }
+        /// <inheritdoc>
         public INamedValueSet ClientInfoNVS { get; set; }
 
+        /// <inheritdoc>
         public INamedValueSet NonSpecMetaNVS { get; set; }
 
+        /// <inheritdoc>
         public IList<INamedValueSet> SpecItemNVSSet { get; set; }
+        /// <inheritdoc>
         public SpecItemSet SpecItemSet { get; set; }
 
+        /// <inheritdoc>
         public string FaultCode { get; set; }
+
+        /// <inheritdoc>
         public bool IsUsable { get { return (FaultCode.IsNullOrEmpty() && DateTimeInfo != null && LibraryInfo != null && SetupInfo != null && SpecItemSet != null); } }
 
+        /// <inheritdoc>
         public MDRF2FileInfo MakeCopyOfThis(bool deepCopy = true)
         {
             return (MDRF2FileInfo)MemberwiseClone();
         }
 
+        /// <summary>Debugging and Logging helper method</summary>
         public override string ToString()
         {
             if (IsUsable)
@@ -346,10 +419,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 if (IsUsable)
                     return this;
 
-                MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior = settings?.MDRF1FileReaderBehavior ?? MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS;
-                MDRF2FileReaderBehavior mdrf2FileReaderBehavior = settings?.MDRF2FileReaderBehavior ?? MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile;
-
-                using (var reader = new MDRF2FileReadingHelper(FullPath, populateIfNeededLogger, mdrf1FileReaderBehavior: mdrf1FileReaderBehavior, mdrf2FileReaderBehavior: mdrf2FileReaderBehavior))
+                using (var reader = new MDRF2FileReadingHelper(FullPath, populateIfNeededLogger, mdrf1FileReaderBehavior: settings?.MDRF1FileReaderBehavior, mdrf2FileReaderBehavior: settings?.MDRF2FileReaderBehavior, mdrf2DecodingIssueHandlingBehavior: settings?.MDRF2DecodingIssueHandlingBehavior))
                 {
                     // attempt to read the header.  This may fail or throw if the file does not have a complete set of header records written to it yet.
                     reader.ReadHeadersIfNeeded();
@@ -390,16 +460,17 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             AllowRecordReuse = other.AllowRecordReuse;
             MDRF2FileReaderBehavior = other.MDRF2FileReaderBehavior;
             MDRF1FileReaderBehavior = other.MDRF1FileReaderBehavior;
+            MDRF2DecodingIssueHandlingBehavior = other.MDRF2DecodingIssueHandlingBehavior;
         }
 
         /// <summary>Client usable name for this query (included any related query execution log messages).  Defaults to "MDRF2QuerySpec"</summary>
         public string Name { get; set; } = "MDRF2QuerySpec";
 
-        /// <summary>Conversion getter/setter for use of StartUTCTimeSince1601 as a DateTime</summary>
-        public DateTime StartDateTime { get { return StartUTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } set { StartUTCTimeSince1601 = value.GetUTCTimeSince1601(); } }
+        /// <summary>Conversion getter/setter for use of StartUTCTimeSince1601 as a DateTime.  Setter converts the given value ToUniversalTime before converting it to UTCTimeSince1601.</summary>
+        public DateTime StartDateTime { get { return StartUTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } set { StartUTCTimeSince1601 = value.ToUniversalTime().GetUTCTimeSince1601(); } }
 
-        /// <summary>Conversion getter/setter for use of EndUTCTimeSince1601 as a DateTime</summary>
-        public DateTime EndDateTime { get { return EndUTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } set { EndUTCTimeSince1601 = value.GetUTCTimeSince1601(); } }
+        /// <summary>Conversion getter/setter for use of EndUTCTimeSince1601 as a DateTime.  Setter converts the given value ToUniversalTime before converting it to UTCTimeSince1601.</summary>
+        public DateTime EndDateTime { get { return EndUTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } set { EndUTCTimeSince1601 = value.ToUniversalTime().GetUTCTimeSince1601(); } }
 
         /// <summary>Gives the first UTCTimeSince1601 for which query records are desired.  The query engine may return records recorded before this time in the regions where it filters which files and file contents to process but will not generally process objects, occurrences or group data that was recorded before this time.  Defaults to NegativeInfinity.</summary>
         public double StartUTCTimeSince1601 { get; set; } = double.NegativeInfinity;
@@ -453,10 +524,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public bool DecompressionEngineExceptionIsEndOfFile { get { return MDRF2FileReaderBehavior.IsSet(MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile); } set { MDRF2FileReaderBehavior = MDRF2FileReaderBehavior.Set(MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile, value); } }
 
         /// <summary>Gives the MDRF2FileReaderBehavior to use when reading MDRF2 files as part of this query.</summary>
-        public MDRF2FileReaderBehavior MDRF2FileReaderBehavior { get; set; } = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile;
+        public MDRF2FileReaderBehavior MDRF2FileReaderBehavior { get; set; } = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile;
 
         /// <summary>Gives the MDRFFileReaderBehavior to use when reading MDRF1 files as part of this query.</summary>
         public MDRF.Reader.MDRFFileReaderBehavior MDRF1FileReaderBehavior { get; set; } = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS;
+
+        /// <summary>Gives the MDRF2DecodingIssueHandlingBehavior to use when reading MDRF2 files as part of this query.</summary>
+        public MDRF2DecodingIssueHandlingBehavior MDRF2DecodingIssueHandlingBehavior { get; set; } = MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord;
     }
 
     /// <summary>
@@ -630,6 +704,38 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         }
     }
 
+    /// <summary>
+    /// This enumeration is used to define the supported behaviors for handling detected decoding issues.
+    /// <para/>SkipToEndOfRecord (0: default value), TreatAsEndOfFile, ThrowDecodingIssueException
+    /// </summary>
+    public enum MDRF2DecodingIssueHandlingBehavior : int
+    {
+        /// <summary>When this behavior is selected a DecodingIssue record will generated (if enabled) and the reader attempt to skip over the current record.  [0: Default value]</summary>
+        SkipToEndOfRecord = 0,
+
+        /// <summary>When this behavior is selected a DecodingIssue record will generated (if enabled) and the reader will be told to handle the case as an end of file condition.</summary>
+        TreatAsEndOfFile,
+
+        /// <summary>When this behavior is selected a new DecodingIssueException will be thrown whenever a decoding issue is detected.</summary>
+        ThrowDecodingIssueException,
+    }
+
+    /// <summary>
+    /// This exception class may be thrown following detection of decoding issues based on the setting of the DecodingIssueHandlingBehavior in the MessagePackFileRecordReaderSettings
+    /// </summary>
+    public class MDRF2DecodingIssueException : System.Exception
+    {
+        /// <summary>Constructor</summary>
+        internal MDRF2DecodingIssueException(IMDRF2QueryRecord<string> decodingIssueRecord, System.Exception innerException = null)
+            : base(decodingIssueRecord.Data, innerException)
+        {
+            DecodingIssueRecord = decodingIssueRecord;
+        }
+
+        /// <summary>Gives access to the decoding issue record for the decoding issue that triggered this exception.</summary>
+        public IMDRF2QueryRecord<string> DecodingIssueRecord { get; private set; }
+    }
+
     #endregion
 
     #region Extension Methods
@@ -733,15 +839,24 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         }
 
 
-        /// <summary>Takes the given <paramref name="queryFactory"/> and <paramref name="fileInfo"/> and produces a tuple with the updated MDRF2FileInfo (if needed), the MDRF2QueryFileSummary and the array of InlineIndexRecords for the given <paramref name="fileInfo"/>.</summary>
+        /// <summary>
+        /// Takes the given <paramref name="queryFactory"/> and <paramref name="fileInfo"/> and produces a tuple with the updated MDRF2FileInfo (if needed), 
+        /// the MDRF2QueryFileSummary and the array of InlineIndexRecords for the given <paramref name="fileInfo"/>.
+        /// </summary>
         public static Tuple<IMDRF2FileInfo, MDRF2QueryFileSummary, Common.InlineIndexRecord[]> GetFileDigestInfo(this IMDRF2QueryFactory queryFactory, IMDRF2FileInfo fileInfo, MDRF2QuerySpec optionalSettings = null)
         {
             var result = queryFactory.GetMDRF2FileDigest(fileInfo, optionalSettings);
             return Tuple.Create(result.FileInfo, result.FileSummary, result.InlineIndexRecordArray);
         }
 
-        /// <summary>Takes the given <paramref name="queryFactory"/> and <paramref name="fileInfo"/> and produces the MDRF2FileDigestResult for it.</summary>
-        public static MDRF2FileDigestResult GetMDRF2FileDigest(this IMDRF2QueryFactory queryFactory, IMDRF2FileInfo fileInfo, MDRF2QuerySpec optionalSettings = null)
+        /// <summary>
+        /// Takes the given <paramref name="queryFactory"/> and <paramref name="fileInfo"/> and produces the MDRF2FileDigestResult for it.
+        /// <para/>This reads each of the inline index records from the file and produces an array of those records combined with the file summary produced by that read operations.
+        /// This operation is relatively fast as it does not actually decode any of the MessagePack block contents from the file, on the inline index block headers.
+        /// This operation does require reading the entire file and decompressing it (as appropriate).  
+        /// This operation is used specifically to obtain the last record time stamp from a file which can only be obtained precisely using this technique.
+        /// </summary>
+        public static MDRF2FileDigestResult GetMDRF2FileDigest(this IMDRF2QueryFactory queryFactory, IMDRF2FileInfo fileInfo, MDRF2QuerySpec optionalSettings = null, bool keepInlineIndexRecords = true)
         {
             MDRF2QuerySpec querySpec = new MDRF2QuerySpec(optionalSettings ?? getDigistInfoFallbackQuerySpec)
             {
@@ -752,28 +867,24 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             };
 
             MDRF2QueryFileSummary fileSummary = null;
-            List<Common.InlineIndexRecord> inlineIndexRecordList = new List<Common.InlineIndexRecord>();
+            List<Common.InlineIndexRecord> inlineIndexRecordList = keepInlineIndexRecords ? new List<Common.InlineIndexRecord>() : null;
 
             foreach (var record in queryFactory.CreateQuery(querySpec, fileInfo))
             {
-                var inlineIndexRecord = record.DataAsObject as Common.InlineIndexRecord;
-
-                if (inlineIndexRecord != null)
+                if (record.DataAsObject is Common.InlineIndexRecord inlineIndexRecord)
                 {
-                    inlineIndexRecordList.Add(inlineIndexRecord);
+                    inlineIndexRecordList?.Add(inlineIndexRecord);
                     continue;
                 }
 
-                var fileSummaryRecord = record.DataAsObject as MDRF2QueryFileSummary;
-
-                if (fileSummaryRecord != null)
+                if (record.DataAsObject is MDRF2QueryFileSummary fileSummaryRecord)
                 {
                     fileSummary = fileSummaryRecord;
                     break;
                 }
             }
 
-            return new MDRF2FileDigestResult() { FileInfo = fileInfo, FileSummary = fileSummary, InlineIndexRecordArray = inlineIndexRecordList.ToArray() };
+            return new MDRF2FileDigestResult() { FileInfo = fileInfo, FileSummary = fileSummary, InlineIndexRecordArray = inlineIndexRecordList.SafeToArray(mapNullToEmpty: false) };
         }
 
         private static readonly MDRF2QuerySpec getDigistInfoFallbackQuerySpec = new MDRF2QuerySpec();
@@ -784,8 +895,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public struct MDRF2FileDigestResult
     {
+        /// <summary>Gives the IMDRF2FileInfo of the file from which this digest was generated.</summary>
         public IMDRF2FileInfo FileInfo { get; set; }
+
+        /// <summary>Gives the MDRF2QueryFileSummary object that was produced while reading the inline index records from the file (but skipping all of the contents of those blocks)</summary>
         public MDRF2QueryFileSummary FileSummary { get; set; }
+
+        /// <summary>Gives the set of inline index records that were obtained while reading the file.</summary>
         public Common.InlineIndexRecord[] InlineIndexRecordArray { get; set; } 
 
         /// <summary>Returns true if the FileInfo IsUsable and the FileSummary and InlineIndexRecordArray are both non-null</summary>
@@ -796,18 +912,33 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
     #region MDRF2DiretoryTrackerConfig, MDRF2DirectoryTracker, MDRF2QueryFactory
 
+    /// <summary>
+    /// The configuration object used when constructing an MDRF2DirectoryTracker
+    /// </summary>
     public class MDRF2DirectoryTrackerConfig : ICopyable<MDRF2DirectoryTrackerConfig>
     {
+        /// <summary>Constructor</summary>
         public MDRF2DirectoryTrackerConfig(string partID)
         {
             PartID = partID;
         }
 
+        /// <summary>Gives the part ID (part name) that will be used.</summary>
         public string PartID { get; private set; }
+
+        /// <summary>Gives the root path to the directory that will be tracked.</summary>
         public string RootDirPath { get; set; } = ".";
+
+        /// <summary>Specifies the interval for which the entire directory will be re-unumerated in the background (used in addition to the file system watcher)</summary>
         public TimeSpan ScanForChangesInterval { get; set; } = (30.0).FromSeconds();
+
+        /// <summary>Specifies the internal buffer size for the FileSystemWatcher instance that will be used by the tracker.</summary>
         public int FSWInternalBufferSize { get; set; } = 65536;
+
+        /// <summary>Used to configure the action logging in the resulting part.</summary>
         public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Trace_Trace.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+
+        /// <summary>When true this triggers the tracker to update MDRF2FileDigestResults automatically.  When false these will only be updated when explicitly requested by a Sync operation.</summary>
         public bool UpdateMDRF2FileDigestResultsAutomatically { get; set; } = false;
 
         [Obsolete("Replace use of this property with use of the corresponding behavior in the MDRF2FileReaderBehavior given below (2021-04-06)")]
@@ -816,12 +947,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         [Obsolete("Replace use of this property with use of the corresponding behavior in the MDRF2FileReaderBehavior given below (2021-04-06)")]
         public bool DecompressionEngineExceptionIsEndOfFile { get { return MDRF2FileReaderBehavior.IsSet(MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile); } set { MDRF2FileReaderBehavior = MDRF2FileReaderBehavior.Set(MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile, value); } }
 
-        /// <summary>Gives the MDRF2FileReaderBehavior to use when reading MDRF2 files as part of this query.</summary>
+        /// <summary>Gives the MDRF2FileReaderBehavior to use when reading MDRF2 files as part of any query created by this tracker.</summary>
         public MDRF2FileReaderBehavior MDRF2FileReaderBehavior { get; set; } = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile;
 
-        /// <summary>Gives the MDRFFileReaderBehavior to use when reading MDRF1 files as part of this query.</summary>
+        /// <summary>Gives the MDRFFileReaderBehavior to use when reading MDRF1 files as part of any query created by this tracker.</summary>
         public MDRF.Reader.MDRFFileReaderBehavior MDRF1FileReaderBehavior { get; set; } = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS;
 
+        /// <summary>Gives the MDRF2DecodingIssueHandlingBehavior to use when reading MDRF2 files as part of any query created by this tracker.</summary>
+        public MDRF2DecodingIssueHandlingBehavior MDRF2DecodingIssueHandlingBehavior { get; set; }
+
+        /// <inheritdoc/>
         public MDRF2DirectoryTrackerConfig MakeCopyOfThis(bool deepCopy = true)
         {
             return (MDRF2DirectoryTrackerConfig) MemberwiseClone();
@@ -830,6 +965,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
     public class MDRF2DirectoryTracker : SimpleActivePartBase, IMDRF2DirectoryTracker
     {
+        /// <summary>Constructor</summary>
         public MDRF2DirectoryTracker(MDRF2DirectoryTrackerConfig config) 
             : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion2)
         {
@@ -846,7 +982,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             AddMainThreadStoppingAction(() => Release());
         }
 
-        public void Release()
+        private void Release()
         {
             ResetFSWAndMarkAllTrackersTouched();
             Fcns.DisposeOfObject(ref fsw);
@@ -856,6 +992,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         private readonly string RootDirFullPath;
         public Logging.ILogger QueryLogger { get; private set; }
 
+        /// <inheritdoc/>
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             if (andInitialize)
@@ -872,7 +1009,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         Filter = "*.*",
                         IncludeSubdirectories = false,
                         EnableRaisingEvents = false,
-                        InternalBufferSize = Config.FSWInternalBufferSize, // defaults to 8192
+                        InternalBufferSize = Config.FSWInternalBufferSize,
                     };
 
                     fsw.Changed += (o, e) => { asyncTouchedFileNamesSet.Add(e.Name); Notify(); };
@@ -895,6 +1032,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return string.Empty;
         }
 
+        /// <inheritdoc/>
         protected override string PerformGoOfflineAction(IProviderActionBase action)
         {
             Release();
@@ -902,6 +1040,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return base.PerformGoOfflineAction(action);
         }
 
+        /// <inheritdoc/>
         protected override void PerformMainLoopService()
         {
             if (BaseState.IsOnlineOrAttemptOnline)
@@ -910,12 +1049,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             base.PerformMainLoopService();
         }
 
+        /// <inheritdoc/>
         public IClientFacet Sync(SyncFlags syncFlags = default)
         {
-            return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, syncFlags), "Sync", ActionLoggingReference, $"{syncFlags}");
+            return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(syncFlags), "Sync", ActionLoggingReference, $"{syncFlags}");
         }
 
-        private string PerformSync(IProviderFacet ipf, SyncFlags syncFlags)
+        private string PerformSync(SyncFlags syncFlags)
         {
             bool fullDirectoryRescan = (syncFlags & SyncFlags.FullDirctoryRescan) != 0;
             bool updateFileDigestResults = (syncFlags & SyncFlags.UpdateMDRF2FileDigestResults) != 0;
@@ -991,7 +1131,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         private bool fullUpdateNeeded, rescanDirectoryNeeded;
         QpcTimer rescanIntervalTimer;
 
-        private int Service(bool forceFullUpdate = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp), bool updateMDRF2FileDigestResults = false)
+        private int Service(bool forceFullUpdate = false, QpcTimeStamp qpcTimeStamp = default, bool updateMDRF2FileDigestResults = false)
         {
             int didCount = 0;
 
@@ -1228,6 +1368,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return didCount;
         }
 
+        /// <inheritdoc/>
         public IMDRF2FileInfo [] FilterFiles(MDRF2QuerySpec querySpec, bool autoSync = true)
         {
             if (autoSync)
@@ -1242,11 +1383,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return fileInfoArray;
         }
 
+        /// <inheritdoc/>
         public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, params IMDRF2FileInfo[] fileInfoParamsArray)
         {
             return CreateQuery(querySpec, fileInfoParamsArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate);
         }
 
+        /// <inheritdoc/>
         public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate, bool enableAutoSync = true)
         {
             // populate fileSetArray as needed - replace a null array with results of calling FilterFiles.
@@ -1262,20 +1405,29 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         private MDRF2QueryFactory queryFactory = null;
     }
 
+    /// <summary>
+    /// This class is the primary implementation object for the IMDRF2QueryFactory interface.
+    /// It supports generation of query execution engines that allow clients to read and process the contents of files.
+    /// These query execution engine's are executed on the caller's thread using a LINQ compatible IEnumerable{IMDRF2QueryRecord} based pattern.
+    /// </summary>
     public class MDRF2QueryFactory : IMDRF2QueryFactory
     {
+        /// <summary>Constructor</summary>
         public MDRF2QueryFactory(Logging.IBasicLogger queryLogger)
         {
             QueryLogger = queryLogger;
         }
 
+        /// <summary>Gives the QueryLogger instance that is being used here (provided to the constructor)</summary>
         public Logging.IBasicLogger QueryLogger { get; private set; }
 
+        /// <inheritdoc/>
         public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, params IMDRF2FileInfo[] fileInfoParamsArray)
         {
             return CreateQuery(querySpec, fileInfoParamsArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate);
         }
 
+        /// <inheritdoc/>
         public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate, bool enableAutoSync = true)
         {
             // Create initial TaskSpec
@@ -1334,6 +1486,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return queryTaskSpec.GenerateRecords();
         }
 
+        /// <summary>
+        /// Outer enumerator factory class that is the root of the query engine created here.
+        /// </summary>
         private class QueryTaskSpec : IDisposable
         {
             public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
@@ -1420,6 +1575,10 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
         }
 
+        /// <summary>
+        /// Inner, per file, enumerator factory object used within QueryTaskSpec objects, especially its GenerateRecords method.
+        /// This class encapsulates all of the file specific aspects of query execution, including all related name to id lookup that is used to support normalization of query execution accross file boundaries.
+        /// </summary>
         private class QueryTaskStepSpec : IDisposable
         {
             public QueryTaskSpec QueryTaskSpec { get; set; }
@@ -1438,7 +1597,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             {
                 var clientQuerySpec = QueryTaskSpec.ClientQuerySpec;
 
-                readerHelper = new MDRF2FileReadingHelper(FileInfo, QueryTaskSpec.Logger, clientQuerySpec.MDRF1FileReaderBehavior, clientQuerySpec.MDRF2FileReaderBehavior);
+                readerHelper = new MDRF2FileReadingHelper(FileInfo, QueryTaskSpec.Logger, clientQuerySpec.MDRF1FileReaderBehavior, clientQuerySpec.MDRF2FileReaderBehavior, clientQuerySpec.MDRF2DecodingIssueHandlingBehavior);
 
                 readerHelper.ReadHeadersIfNeeded();
 
@@ -1806,7 +1965,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
     /// <summary>
     /// bitfield enumeration used to define various MDRF2FileReadingHelper behavior settings
-    /// <para/>None (0x00),  TreatEndOfStreamExceptionAsEndOfFile (0x01),  DecompressionEngineExceptionIsEndOfFile (0x02)
+    /// <para/>None (0x00),  TreatEndOfStreamExceptionAsEndOfFile (0x01),  TreatDecompressionEngineExceptionAsEndOfFile (0x02), TreatAllErrorsAsEndOfFile (0x04)
     /// </summary>
     [Flags]
     public enum MDRF2FileReaderBehavior : int
@@ -1827,9 +1986,19 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// [0x02]
         /// </summary>
         TreatDecompressionEngineExceptionAsEndOfFile = 0x02,
+
+        /// <summary>
+        /// When selected, the reader will catch and handle all errors (exceptions) as indicating end of file (to support read while writing with partially written contents).
+        /// [0x04]
+        /// </summary>
+        TreatAllErrorsAsEndOfFile = 0x04,
     }
 
-
+    /// <summary>
+    /// This is the basic MDRF2 file reading helper object that is used when reading both MDRF1 and MDRF2 files.
+    /// It is used for reading the file headers as required to produce/update a given MDRF2FileInfo object.
+    /// It is also used to implement a unified filtered record reading capability that is used by the query factory above and by other client code.
+    /// </summary>
     public class MDRF2FileReadingHelper : IDisposable
     {
         /// <summary>Returns true if the given fileName has a supported mdrf1 or mdrf2 file extension (.mdrf, .mdrf1, .mdrf2, .mdrf2.lz4, .mdrf2.gz)</summary>
@@ -1972,42 +2141,76 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         }
 
         /// <summary>
-        /// This delegate is called each time a filtered group ID is found.  The mpReader will be pointing at the start of the MP array that contains the record set the group's point's values.
+        /// This delegate is called each time a filtered group ID is found.  It may produce an IMDRF2QueryRecord to be emitted by the enumerator.  The mpReader will be pointing at the start of the MP array that contains the record set the group's point's values.
         /// </summary>
         public delegate IMDRF2QueryRecord GroupDataHandlerDelegate(Filter filter, int groupID, in Common.MDRF2DateTimeStampPair dtPair, ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IGroupInfo groupInfoFromMDRF1);
+
+        /// <summary>
+        /// This delegate is called each time a non-group filtered record is found.  It may produce an IMDRF2QueryRecord to be emitted by the enumerator.
+        /// </summary>
         public delegate IMDRF2QueryRecord NoteOtherRecordDelegate(Filter filter, MDRF2QueryItemTypeSelect recordType, in Common.MDRF2DateTimeStampPair dtPair, object data = null);
 
-        public MDRF2FileReadingHelper(string fileNameAndPath, Logging.IBasicLogger logger, MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS, MDRF2FileReaderBehavior mdrf2FileReaderBehavior = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile)
-               : this(new MDRF2FileInfo(fileNameAndPath), logger, mdrf1FileReaderBehavior, mdrf2FileReaderBehavior)
+        /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF1 File Reader Behavior</summary>
+        public static MDRF.Reader.MDRFFileReaderBehavior MDRF1FallbackDefaultReaderBeahvior { get; set; } = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS;
+
+        /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF2 File Reader Behavior</summary>
+        public static MDRF2FileReaderBehavior MDRF2FallbackDefaultReaderBehavior { get; set; } = (MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile);
+
+        /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF1 Decoding Issue Handling Behavior</summary>
+        public static MDRF2DecodingIssueHandlingBehavior MDRF2FallbackDefaultDecodingIssueHandlingBehavior { get; set; } = MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord;
+
+        /// <summary>
+        /// Alternate constructor
+        /// </summary>
+        public MDRF2FileReadingHelper(string fileNameAndPath, Logging.IBasicLogger logger, MDRF.Reader.MDRFFileReaderBehavior ? mdrf1FileReaderBehavior = null, MDRF2FileReaderBehavior ? mdrf2FileReaderBehavior = null, MDRF2DecodingIssueHandlingBehavior ? mdrf2DecodingIssueHandlingBehavior = null)
+               : this(new MDRF2FileInfo(fileNameAndPath), logger, mdrf1FileReaderBehavior, mdrf2FileReaderBehavior, mdrf2DecodingIssueHandlingBehavior)
         { }
 
-        public MDRF2FileReadingHelper(IMDRF2FileInfo fileInfoIn, Logging.IBasicLogger logger, MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS, MDRF2FileReaderBehavior mdrf2FileReaderBehavior = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile)
+        /// <summary>
+        /// Main constructor
+        /// </summary>
+        /// <param name="fileInfoIn">Specifies the MDRF2 file that this reader is to be used with</param>
+        /// <param name="logger">Specifies the Logging.IBasicLogger instance to use.</param>
+        /// <param name="mdrf1FileReaderBehavior">When non-null this specifies the reader behavior to use with MDRF1 files.  When null the reader uses the MDRF1FallbackDefaultReaderBeahvior value for these files.</param>
+        /// <param name="mdrf2FileReaderBehavior">When non-null this specifies the reader behavior to use with MDRF2 files.  When null the reader uses the MDRF2FallbackDefaultReaderBehavior value for these files.</param>
+        /// <param name="mdrf2DecodingIssueHandlingBehavior">When non-null this specifies the decoding issue handling beahvior for MDRF2 files.  When null the reader uses the MDRF2FallbackDefaultDecodingIssueHandlingBehavior value for these files.</param>
+        public MDRF2FileReadingHelper(IMDRF2FileInfo fileInfoIn, Logging.IBasicLogger logger, MDRF.Reader.MDRFFileReaderBehavior ? mdrf1FileReaderBehavior = null, MDRF2FileReaderBehavior ? mdrf2FileReaderBehavior = null, MDRF2DecodingIssueHandlingBehavior ? mdrf2DecodingIssueHandlingBehavior = null)
         {
             Logger = logger;
             fileInfo = fileInfoIn.MakeCopyOfThis();
 
-            this.mdrf1FileReaderBehavior = mdrf1FileReaderBehavior;
-            this.mdrf2FileReaderBehavior = mdrf2FileReaderBehavior;
+            this.mdrf1FileReaderBehavior = mdrf1FileReaderBehavior ?? MDRF1FallbackDefaultReaderBeahvior;
+            this.mdrf2FileReaderBehavior = mdrf2FileReaderBehavior ?? MDRF2FallbackDefaultReaderBehavior;
+            this.mdrf2DecodingIssueHandlingBehavior = mdrf2DecodingIssueHandlingBehavior ?? MDRF2FallbackDefaultDecodingIssueHandlingBehavior;
 
             var fileName = this.fileInfo.FileNameAndRelativePath;
             var relativePath = this.fileInfo.FileNameFromConfiguredPath;
             var fullPath = this.fileInfo.FullPath;
 
             bool isSupportedMDRF2Extension = IsSupportedMDRF2FileExtension(fileName);
-            bool isSupportedMDRF1Extension = IsSupportedMDRF1FileExtension(fileName);
+            bool isSupportedMDRF1Extension = !isSupportedMDRF2Extension && IsSupportedMDRF1FileExtension(fileName);
 
             mpFileRecordReaderSettings = new MessagePackFileRecordReaderSettings()
             {
-                TreatEndOfStreamExceptionAsEndOfFile = (mdrf2FileReaderBehavior & MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile) != 0,
-                TreatExpectedDecompressionErrorsAsEndOfFile = (mdrf2FileReaderBehavior & MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile) != 0,
+                TreatEndOfStreamExceptionAsEndOfFile = (this.mdrf2FileReaderBehavior & MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile) != 0,
+                TreatExpectedDecompressionErrorsAsEndOfFile = (this.mdrf2FileReaderBehavior & MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile) != 0,
+                TreatAllErrorsAsEndOfFile = (this.mdrf2FileReaderBehavior & MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile) != 0,
             };
 
-            if (isSupportedMDRF1Extension)
+            if (isSupportedMDRF2Extension)
+            {
+                mpFileRecordReader = new MessagePackFileRecordReader().Open(fullPath, mpFileRecordReaderSettings);
+                var fileLength = (ulong)mpFileRecordReader.Counters.FileLength;
+
+                if (fileInfo.FileLength != fileLength)
+                    fileInfo.FileLength = fileLength;
+            }
+            else if(isSupportedMDRF1Extension)
             {
                 if (IsSupportedMDRF1FileExtension(fileName, false))
-                    mdrf1Reader = new MDRF.Reader.MDRFFileReader(fullPath, mdrfFileReaderBehavior: mdrf1FileReaderBehavior);
+                    mdrf1Reader = new MDRF.Reader.MDRFFileReader(fullPath, mdrfFileReaderBehavior: this.mdrf1FileReaderBehavior);
                 else
-                    mdrf1Reader = new MDRF.Reader.MDRFFileReader("", mdrfFileReaderBehavior: mdrf1FileReaderBehavior, externallyProvidedFileStream: fullPath.CreateDecompressor());
+                    mdrf1Reader = new MDRF.Reader.MDRFFileReader("", mdrfFileReaderBehavior: this.mdrf1FileReaderBehavior, externallyProvidedFileStream: fullPath.CreateDecompressor());
 
                 fileInfo.FileLength = (ulong)mdrf1Reader.FileLength;
 
@@ -2033,15 +2236,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 HeadersRead = true;
             }
-            else if (isSupportedMDRF2Extension)
-            {
-                mpFileRecordReader = new MessagePackFileRecordReader().Open(fullPath, mpFileRecordReaderSettings);
-                var fileLength = (ulong)mpFileRecordReader.Counters.FileLength;
-
-                if (fileInfo.FileLength != fileLength)
-                    fileInfo.FileLength = fileLength;
-            }
-            else
+            else 
             {
                 new System.NotSupportedException($"File extension for '{relativePath}' is not recognized and/or supported").Throw();
             }
@@ -2051,7 +2246,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         Logging.IBasicLogger Logger { get; set; }
 
-        private MDRF2FileInfo fileInfo { get; set; }
+        private MDRF2FileInfo fileInfo;
         public IMDRF2FileInfo FileInfo { get; set; }
         private NamedValueSet InlineMapUnionNVS = new NamedValueSet();
         private NamedValueSet NonSpecMetaNVS = new NamedValueSet();
@@ -2076,12 +2271,15 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
         }
 
-        MDRF2FileReaderBehavior mdrf2FileReaderBehavior;
-        MessagePackFileRecordReaderSettings mpFileRecordReaderSettings;
-        MessagePackFileRecordReader mpFileRecordReader;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
+        private readonly MDRF2FileReaderBehavior mdrf2FileReaderBehavior;
+        private readonly MDRF2DecodingIssueHandlingBehavior mdrf2DecodingIssueHandlingBehavior;
+        private readonly MessagePackFileRecordReaderSettings mpFileRecordReaderSettings;
+        private MessagePackFileRecordReader mpFileRecordReader;
 
-        MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior;
-        MDRF.Reader.MDRFFileReader mdrf1Reader;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
+        private readonly MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior;
+        private MDRF.Reader.MDRFFileReader mdrf1Reader;
 
         public bool HeadersRead { get; set; }
         public string FaultCode { get { return _FaultCode.MapNullToEmpty(); } private set { _FaultCode = value; } }
@@ -2162,7 +2360,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             catch (System.Exception ex)
             {
                 // NOTE: the mpReader can throw this exception if it runs off the end of the currently buffered data.
-                if (ex is System.IO.EndOfStreamException && mpFileRecordReaderSettings.TreatEndOfStreamExceptionAsEndOfFile)
+                if (ex is System.IO.EndOfStreamException && mpFileRecordReaderSettings.TreatEndOfStreamExceptionAsEndOfFile || mpFileRecordReaderSettings.TreatAllErrorsAsEndOfFile)
                 {
                     FaultCode = "";
                     HeaderReadFailedReason = $"Headers are not complete [{ex.ToString(ExceptionFormat.TypeAndMessage)}]";
@@ -2629,7 +2827,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                                 }
                                                 catch (System.Exception ex)
                                                 {
-                                                    GenerateAndLogDecodingIssue(filter, $"Unable to deserialize object [{tavc}]: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
+                                                    GenerateLogAndHandleDecodingIssue(filter, ref state, $"Unable to deserialize object [{tavc}]: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
+
+                                                    if (!state.EndRecordFound)
+                                                    {
+                                                        fileSummary.SkippedRecordCount += 1;
+                                                        fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
+                                                    }
                                                 }
                                             }
                                         }
@@ -2643,7 +2847,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                                     default:
                                         // unrecognized object type
-                                        state.AddRecord(GenerateAndLogDecodingIssue(filter, $"Encountered unexpected object known type name '{objKnownTypeName}' in block [{CurrentInlineIndexRecord}]"));
+                                        state.AddRecord(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected object known type name '{objKnownTypeName}' in block [{CurrentInlineIndexRecord}]"));
+
+                                        if (!state.EndRecordFound)
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
+                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
+                                        }
 
                                         break;
                                 }
@@ -2655,7 +2865,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         break;
 
                     default:
-                        state.AddRecord(GenerateAndLogDecodingIssue(filter, $"Encountered unexpected top level MessagePack record type '{mpHeaderByteCode}' ({mpReader.NextMessagePackType}) in block [{CurrentInlineIndexRecord}]"));
+                        {
+                            state.AddRecord(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected top level MessagePack record type '{mpHeaderByteCode}' ({mpReader.NextMessagePackType}) in block [{CurrentInlineIndexRecord}]"));
+
+                            if (!state.EndRecordFound)
+                            {
+                                mpFileRecordReader.AdvancePastCurrentRecord();
+                                RemainingRecordsInThisBlock -= 1;
+                            }
+                        }
+
                         break;
                 }
 
@@ -2672,7 +2891,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 // NOTE: the mpReader can throw this exception if it runs off the end of the currently buffered data.
                 if (ex is System.IO.EndOfStreamException && mpFileRecordReaderSettings.TreatEndOfStreamExceptionAsEndOfFile)
                 {
-                    Logger.Debug.Emit($"Handling EOSE as normal end of file [{ex.ToString(ExceptionFormat.TypeAndMessage)}]");
+                    Logger.Debug.Emit($"Handling EndOfStreamException as normal end of file [{ex.ToString(ExceptionFormat.TypeAndMessage)}]");
+                    state.EndRecordFound = true;
+                }
+                else if (mpFileRecordReaderSettings.TreatAllErrorsAsEndOfFile)
+                {
+                    Logger.Debug.Emit($"Handling exception as normal end of file [{ex.ToString(ExceptionFormat.TypeAndMessage)}]");
                     state.EndRecordFound = true;
                 }
                 else
@@ -2680,6 +2904,34 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     throw;
                 }
             }
+        }
+
+        /// <summary>
+        /// This method is used to generate an query record for this decoding issue, log the corresponding message, and handle the issue based on the configured mdrf2DecodingIssueHandlingBehavior.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private IMDRF2QueryRecord GenerateLogAndHandleDecodingIssue(Filter filter, ref InterationState state, string mesg)
+        {
+            var record = new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = CurrentQRDTPair, ItemType = MDRF2QueryItemTypeSelect.DecodingIssue, Data = mesg };
+
+            Logger.Debug.Emit($"Encountered file decoding issue: {mesg} [{mdrf2DecodingIssueHandlingBehavior}]");
+
+            switch (mdrf2DecodingIssueHandlingBehavior)
+            {
+                case MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord:
+                default:
+                    break;
+
+                case MDRF2DecodingIssueHandlingBehavior.TreatAsEndOfFile:
+                    state.EndRecordFound = true;
+                    break;
+
+                case MDRF2DecodingIssueHandlingBehavior.ThrowDecodingIssueException:
+                    new MDRF2DecodingIssueException(record).Throw();
+                    break;
+            }
+
+            return ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.DecodingIssue) != 0) ? record : null;
         }
 
         private MDRF2QueryRecord<Common.InlineIndexRecord> inlineIndexQueryRecord, inlineIndexWillSkipQueryRecord;
@@ -2879,6 +3131,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             mdrf1_RecordBuffer.Add(mdrf1_LastRecordPosted = record);
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
         IMDRF2QueryRecord mdrf1_LastRecordPosted;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2958,6 +3211,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         private MDRF2QueryFileSummary mdrf1_fileSummary;
         private Common.InlineIndexRecord mdrf1_currentInlineIndexRecord = new Common.InlineIndexRecord();
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
         private FileIndexRowBase mdrf1_LastFileIndexRow = null;
 
         const int retainRecentPCEDataItemCount = 0;
@@ -3000,8 +3254,10 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             {
                 case MDRF.Reader.ProcessContentEvent.RowStart:
                     {
-                        var inlineIndexRecord = new Common.InlineIndexRecord(pceData.Row);
-                        inlineIndexRecord.BlockByteCount = (uint) mdrf1Reader.FileIndexInfo.GetRowLength(pceData.Row, mdrf1Reader.FileLength);
+                        var inlineIndexRecord = new Common.InlineIndexRecord(pceData.Row)
+                        {
+                            BlockByteCount = (uint)mdrf1Reader.FileIndexInfo.GetRowLength(pceData.Row, mdrf1Reader.FileLength)
+                        };
 
                         mdrf1_currentInlineIndexRecord = inlineIndexRecord;
                         mdrf1_LastFileIndexRow = pceData.Row;
@@ -3137,19 +3393,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         #endregion
 
         #region Supporting logic
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IMDRF2QueryRecord GenerateAndLogDecodingIssue(Filter filter, string mesg)
-        {
-            Logger.Debug.Emit("Encountered file decoding issue: {0}", mesg);
-
-            if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.DecodingIssue) != 0)
-            {
-                return new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = CurrentQRDTPair, ItemType = MDRF2QueryItemTypeSelect.DecodingIssue, Data = mesg };
-            }
-
-            return null;
-        }
 
         public Common.MDRF2DateTimeStampPair CurrentQRDTPair { get { return _CurrentQRDTPair; } private set { _CurrentQRDTPair = value; } }
         private Common.MDRF2DateTimeStampPair _CurrentQRDTPair;

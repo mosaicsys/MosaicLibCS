@@ -78,8 +78,19 @@ namespace MosaicLib.PartsLib.Common.Motion
     /// This struct represents the instantanious target and trajectory information at a single point in time.  
     /// Includes the TimeStamp of the time, the target Position, Velocity and Acceleration and an axis specific (feed forward) Output value.
     /// </summary>
-    public struct AxisTarget
+    public struct AxisTarget: IEquatable<AxisTarget>
     {
+        public AxisTarget(AxisTarget other)
+            : this()
+        {
+            TimeStamp = other.TimeStamp;
+            TimeSpanInTrajectory = other.TimeSpanInTrajectory;
+            Position = other.Position;
+            Velocity = other.Velocity;
+            Acceleration = other.Acceleration;
+            Output = other.Output;
+        }
+
         public QpcTimeStamp TimeStamp { get; set; }
         public TimeSpan TimeSpanInTrajectory { get; set; }  // or zero
         public double Position { get; set; }
@@ -88,6 +99,17 @@ namespace MosaicLib.PartsLib.Common.Motion
         public double Output { get; set; }
 
         public bool IsStopped { get { return (Velocity == 0.0 && Acceleration == 0.0); } }
+
+        public bool Equals(AxisTarget other)
+        {
+            return (TimeStamp == other.TimeStamp
+                    && TimeSpanInTrajectory == other.TimeSpanInTrajectory
+                    && Position == other.Position
+                    && Velocity == other.Velocity
+                    && Acceleration == other.Acceleration
+                    && Output == other.Output
+                    );
+        }
 
         public override string ToString()
         {
@@ -177,9 +199,9 @@ namespace MosaicLib.PartsLib.Common.Motion
     /// </summary>
     public class NullTrajectory : TrajectoryBase
     {
-        public NullTrajectory()
+        public NullTrajectory(bool setStartTimeStamp = true)
         {
-            FirstPhaseStartTimeStamp = QpcTimeStamp.Now;
+            FirstPhaseStartTimeStamp = setStartTimeStamp ? QpcTimeStamp.Now : QpcTimeStamp.Zero;
             TrajectoryRunTimeSpan = TimeSpan.Zero;
             TrajectoryEndIsTimeBased = false;   // trajectory never ends
         }
@@ -195,9 +217,9 @@ namespace MosaicLib.PartsLib.Common.Motion
     /// </summary>
     public class ConstantOutputTrajectory : TrajectoryBase
     {
-        public ConstantOutputTrajectory()
+        public ConstantOutputTrajectory(bool setStartTimeStamp = true)
         {
-            FirstPhaseStartTimeStamp = QpcTimeStamp.Now;
+            FirstPhaseStartTimeStamp = setStartTimeStamp ? QpcTimeStamp.Now : QpcTimeStamp.Zero;
             TrajectoryRunTimeSpan = TimeSpan.Zero;
             TrajectoryEndIsTimeBased = false;   // trajectory never ends
         }
@@ -215,9 +237,9 @@ namespace MosaicLib.PartsLib.Common.Motion
     /// </summary>
     public class StoppedTrajectory : TrajectoryBase
     {
-        public StoppedTrajectory()
+        public StoppedTrajectory(bool setStartTimeStamp = true)
         {
-            FirstPhaseStartTimeStamp = QpcTimeStamp.Now;
+            FirstPhaseStartTimeStamp = setStartTimeStamp ? QpcTimeStamp.Now : QpcTimeStamp.Zero;
             TrajectoryRunTimeSpan = TimeSpan.Zero;
             TrajectoryEndIsTimeBased = true;   // trajectory has always ended
         }
@@ -395,6 +417,8 @@ namespace MosaicLib.PartsLib.Common.Motion
                 accelDistance = (0.5 * accel * accelTime * accelTime);
                 decelDistance = (0.5 * decel * decelTime * decelTime);
                 cruiseDistance = 0.0;
+
+                cruiseVelocity = Math.Min(accel * accelTime, decel * decelTime);
             }
             else
             {

@@ -1362,14 +1362,22 @@ namespace MosaicLib.Modular.Action
 			CompleteRequest(resultCode);
 		}
 
+        /// <summary>
+        /// Sets the state to ActionStateCode.Issues.  Used internally and by unit test code.
+        /// </summary>
+        public void SetStateIssued()
+        {
+            lock (actionStateMutex)
+            {
+                actionState.SetStateIssued(logging);
+                NoteActionStateUpdated();
+            }
+        }
+
         /// <summary>Provider invokes this to dispatch the mark the action as issued and invoke its delegate method.</summary>
         public void IssueAndInvokeAction()
 		{
-			lock (actionStateMutex) 
-			{ 
-				actionState.SetStateIssued(logging);
-                NoteActionStateUpdated();
-			}
+            SetStateIssued();
 
 			if (IsCancelRequestActive)
 			{
@@ -1561,7 +1569,7 @@ namespace MosaicLib.Modular.Action
         /// the ActionQueue object that the Part will use for this Action.
         /// </summary>
         /// <exception cref="System.InvalidCastException">Thown if paramProvided is true and given paramValueObj cannot be casted to this implementation's ParamType.</exception>
-        public string Start(object paramValueObj, bool paramProvided)
+        public string Start(object paramValueObj, bool paramProvided, string nullQueueResultCode = "The ActionQ is null")
 		{
 			lock (actionStateMutex)
 			{
@@ -1596,8 +1604,11 @@ namespace MosaicLib.Modular.Action
                 NoteActionStateUpdated();
 			}
 
-			return actionQ.Enqueue(this);
-		}
+            if (actionQ != null)
+    			return actionQ.Enqueue(this);
+            else
+                return nullQueueResultCode;
+        }
 
 
 		#endregion

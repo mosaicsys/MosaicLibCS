@@ -431,7 +431,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                         QpcTimeStamp lapTime0 = QpcTimeStamp.Now;
 
                         var mdrfFileName = item.mdrfFileName;
-                        var mdrfReader = new MDRF2FileReadingHelper(mdrfFileName, appLogger, MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS);
+                        var mdrfReader = new MDRF2FileReadingHelper(mdrfFileName, appLogger);
 
                         mdrfReader.ReadHeadersIfNeeded();
 
@@ -575,7 +575,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             Console.WriteLine($"Usage: {appName} [configFileName.ini] [fileName.mdrf] ...");
             Console.WriteLine("    This program generally reads the ini file contents to configure its operation and then processes all of the indicated mdrf files using that selected configuration.");
             Console.WriteLine("    See 'ExtractMDRFtoDB ReadMe.txt' for more details on the operation and use of this program.  This file is generally provided with the executable.");
-            Console.WriteLine("Supported mdrf file extensions: .mdrf, .mdrf2, .mdrf2.lz4");
+            Console.WriteLine("Supported mdrf file extensions: .mdrf, .mdrf2, .mdrf2.lz4, .mdrf2.gz");
             Console.WriteLine();
 
             Console.WriteLine($"Assembly: {currentExecAssy.GetSummaryNameAndVersion()}");

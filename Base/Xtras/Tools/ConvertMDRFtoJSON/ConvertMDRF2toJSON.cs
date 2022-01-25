@@ -46,6 +46,8 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
 
         static void Main(string[] args)
         {
+            var logger = new Logging.Logger(Fcns.CurrentClassLeafName);
+
             try
             {
                 Config.AddStandardProviders(ref args);
@@ -71,16 +73,16 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
                     if (stopProcessingArgs)
                         break;
 
-                    ProcessFileNameArg(arg);
+                    ProcessFileNameArg(arg, logger);
                 }
             }
             catch (System.Exception ex)
             {
-                appLogger.Error.Emit("{0}: failed with exception: {1}".CheckedFormat(appName, ex.ToString(ExceptionFormat.AllButStackTrace)));
+                logger.Error.Emit("{0}: failed with exception: {1}".CheckedFormat(appName, ex.ToString(ExceptionFormat.AllButStackTrace)));
             }
         }
 
-        static Logging.ILogger appLogger = new Logging.Logger(Fcns.CurrentClassLeafName);
+        public static readonly Logging.IBasicLogger nullBasicLogger = new Logging.NullBasicLogger();
 
         private static void WriteUsage()
         {
@@ -90,42 +92,44 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
             Console.WriteLine("Assembly: {0}", currentExecAssy.GetSummaryNameAndVersion());
         }
 
-        private static void ProcessFileNameArg(string arg)
+        /// <remarks>This method is public so that it may be used from other assemblies and in other contexts such as under dotnet interactive</remarks>
+        public static void ProcessFileNameArg(string arg, Logging.IBasicLogger logger = null)
         {
             bool isWildCard = arg.Contains("?") || arg.Contains("*");
 
             if (!System.IO.Path.HasExtension(arg) && !isWildCard)
-                arg = arg + ".mdrf2.lz4";
+                arg += ".mdrf2.lz4";
 
-            string filePart = System.IO.Path.GetFileName(arg);
-            string pathPart = System.IO.Path.GetDirectoryName(arg).MapNullOrEmptyTo(".");
-            string fullPathPart = System.IO.Path.GetFullPath(pathPart);
-            var taskFactory = new TaskFactory();
+            var filePart = System.IO.Path.GetFileName(arg);
+            var pathPart = System.IO.Path.GetDirectoryName(arg).MapNullOrEmptyTo(".");
 
             if (filePart.Contains("?") || filePart.Contains("*"))
             {
-                foreach (string fpath in System.IO.Directory.EnumerateFiles(pathPart, filePart, System.IO.SearchOption.AllDirectories))
+                foreach (var fpath in System.IO.Directory.EnumerateFiles(pathPart, filePart, System.IO.SearchOption.AllDirectories))
                 {
                     if (System.IO.Directory.Exists(fpath))
                         continue;
 
-                    using (var rateTrace = new Logging.RateTrace(appLogger.Debug, $"file:{fpath}"))
+                    using (var rateTrace = new Logging.RateTrace(logger.Debug, $"file:{fpath}"))
                     {
-                        rateTrace.Count = ProcessMDRFFile(fpath);
+                        rateTrace.Count = ProcessMDRFFile(fpath, logger);
                     }
                 }
             }
             else
             {
-                using (var rateTrace = new Logging.RateTrace(appLogger.Debug, $"file:{arg}"))
+                using (var rateTrace = new Logging.RateTrace(logger.Debug, $"file:{arg}"))
                 {
-                    rateTrace.Count = ProcessMDRFFile(arg);
+                    rateTrace.Count = ProcessMDRFFile(arg, logger);
                 }
             }
         }
 
-        private static long ProcessMDRFFile(string mdrfFilePath)
+        /// <remarks>This method is public so that it may be used from other assemblies and in other contexts such as under dotnet interactive</remarks>
+        public static long ProcessMDRFFile(string mdrfFilePath, Logging.IBasicLogger logger = null)
         {
+            logger = logger ?? nullBasicLogger;
+
             var settings = new MessagePackFileRecordReaderSettings()
             {
                 BufferArrayPool = ArrayPool<byte>.Shared,
@@ -176,7 +180,7 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
                 catch (System.Exception ex)
                 {
                     string mesg;
-                    Console.WriteLine(mesg = $"Processing for file '{mdrfFilePath}' failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
+                    logger.Error.Emit(mesg = $"Processing for file '{mdrfFilePath}' failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
                 }
 
                 var counters = mpFileRecordReader.Counters;

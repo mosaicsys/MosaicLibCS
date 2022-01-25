@@ -267,7 +267,7 @@ namespace MosaicLib.Semi.E005.Manager
 
                 IClientFacet[] icfArray = relevantPortArray.Select(port => port.CreateGoOnlineAction(initializePorts).StartInline()).ToArray();
 
-                var firstFailedICF = icfArray.WaitUntilSetComplete(completionType: Modular.Action.ExtentionMethods.WaitForSetCompletionType.All).FirstOrDefault(icf => icf.ActionState.Failed);
+                var firstFailedICF = icfArray.WaitUntilSetComplete(completionType: Modular.Action.ExtensionMethods.WaitForSetCompletionType.All).FirstOrDefault(icf => icf.ActionState.Failed);
                 ec = (firstFailedICF != null) ? firstFailedICF.ActionState.ResultCode : string.Empty;
 
                 return ec;
@@ -282,7 +282,7 @@ namespace MosaicLib.Semi.E005.Manager
 
                 IClientFacet[] icfArray = portArray.Where(port => { var baseState = port.BaseState; return baseState.IsOnlineOrAttemptOnline; }).Select(port => port.CreateGoOfflineAction().StartInline()).ToArray();
 
-                var firstFailedICF = icfArray.WaitUntilSetComplete(completionType: Modular.Action.ExtentionMethods.WaitForSetCompletionType.All).FirstOrDefault(icf => icf.ActionState.Failed);
+                var firstFailedICF = icfArray.WaitUntilSetComplete(completionType: Modular.Action.ExtensionMethods.WaitForSetCompletionType.All).FirstOrDefault(icf => icf.ActionState.Failed);
                 string ec = (firstFailedICF != null) ? firstFailedICF.ActionState.ResultCode : string.Empty;
 
                 foreach (var port in portArray)

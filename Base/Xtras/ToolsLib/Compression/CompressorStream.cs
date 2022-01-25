@@ -439,6 +439,9 @@ namespace Mosaic.ToolsLib.Compression
         /// <summary>Defines the default value of the TreatExpectedDecompressionErrorsAsEndOfFile property for newly constructed DecompressorStreamBase instances when the provided nvs does not explicitly define the falue to use.  Defaults to true.</summary>
         public static bool DefaultTreatExpectedDecompressionErrorsAsEndOfFile { get; set; } = true;
 
+        /// <summary>Defines the default value of the TreatAllErrorsAsEndOfFile property for newly constructed DecompressorStreamBase instances when the provided nvs does not explicitly define the value to use.  Defaults to false.</summary>
+        public static bool DefaultTreatAllErrorsAsEndOfFile { get; set; }
+
         /// <summary>
         /// Protected constructor
         /// </summary>
@@ -452,6 +455,7 @@ namespace Mosaic.ToolsLib.Compression
             BufferSize = (NVS["bufferSize"].VC.GetValue<int?>(rethrow: false) ?? Constants.DefaultBufferSize).Clip(1024, 1024 * 1024);
             TreatEndOfStreamExceptionAsEndOfFile = NVS["treatEndOfStreamExceptionAsEndOfFile"].VC.GetValue<bool?>(rethrow: false) ?? DefaultTreatEndOfStreamExceptionAsEndOfFile;
             TreatExpectedDecompressionErrorsAsEndOfFile = NVS["treatExpectedDecompressionErrorsAsEndOfFile"].VC.GetValue<bool?>(rethrow: false) ?? DefaultTreatExpectedDecompressionErrorsAsEndOfFile;
+            TreatAllErrorsAsEndOfFile = NVS["treatAllErrorsAsEndOfFile"].VC.GetValue<bool?>(rethrow: false) ?? DefaultTreatAllErrorsAsEndOfFile;
         }
 
         /// <summary>
@@ -487,6 +491,9 @@ namespace Mosaic.ToolsLib.Compression
 
         /// <summary>When true, the Read method will catch and handle specific errors as indicating end of file (to support read while writing with partially written contents).</summary>
         public bool TreatExpectedDecompressionErrorsAsEndOfFile { get; set; }
+
+        /// <summary>When true, the Read method will catch and handle all errors (exceptions) as indicating end of file (to support read while writing with partially written contents).</summary>
+        public bool TreatAllErrorsAsEndOfFile { get; set; }
 
         /// <summary>A nomninal buffer size parameter</summary>
         protected int BufferSize { get; private set; }
@@ -598,7 +605,9 @@ namespace Mosaic.ToolsLib.Compression
             {
                 var exType = ex.GetType();
                 var recognized = (TreatEndOfStreamExceptionAsEndOfFile && exType == typeof(System.IO.EndOfStreamException))
-                               || (TreatExpectedDecompressionErrorsAsEndOfFile && exceptionFullNamePrefixStringsToTreatAsEndOfStream.Any(prefix => exType.FullName.StartsWith(prefix)));
+                               || (TreatExpectedDecompressionErrorsAsEndOfFile && exceptionFullNamePrefixStringsToTreatAsEndOfStream.Any(prefix => exType.FullName.StartsWith(prefix)))
+                               || TreatAllErrorsAsEndOfFile
+                               ;
 
                 if (recognized)
                     CloseAndDisposeEngine();

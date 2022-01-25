@@ -21,12 +21,9 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
-using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
 
 namespace MosaicLib.File
@@ -235,9 +232,12 @@ namespace MosaicLib.File
         /// <summary>This emitter container contains the emitter that is used for all debug messages</summary>
         [Logging.MesgEmitterProperty]
         public Logging.MesgEmitterContainer Debug { get; set; }
+        /// <summary>This emitter container contains the emitter that is used for all trace messages</summary>
+        [Logging.MesgEmitterProperty]
+        public Logging.MesgEmitterContainer Trace { get; set; }
 
         /// <summary>
-        /// This set only property may be used to set the object's emitter containers to contain the desired emitters.  There are three named emitters: Issue, Info, and Debug
+        /// This set only property may be used to set the object's emitter containers to contain the desired emitters.  The following are the named emitters: Issue, Info, Debug, Trace
         /// </summary>
         public IDictionary<string, Logging.IMesgEmitter> EmitterDictionary
         {
@@ -254,6 +254,7 @@ namespace MosaicLib.File
                     Issue = new Logging.MesgEmitterContainer(Logger.Info);
                     Info = new Logging.MesgEmitterContainer(Logger.Info);
                     Debug = new Logging.MesgEmitterContainer(Logger.Debug);
+                    Trace = new Logging.MesgEmitterContainer(Logger.Trace);
                 }
             }
         }
@@ -274,7 +275,7 @@ namespace MosaicLib.File
         private Time.QpcTimer blockPruningUntilAfterTimer = new MosaicLib.Time.QpcTimer() { SelectedBehavior = MosaicLib.Time.QpcTimer.Behavior.NewDefault };
 
         /// <summary>Returns true if pruning is currently blocked for a period of time</summary>
-        protected bool IsPruningBlocked { get { return (blockPruningUntilAfterTimer.Started && !blockPruningUntilAfterTimer.IsTriggered); } }
+        public bool IsPruningBlocked { get { return (blockPruningUntilAfterTimer.Started && !blockPruningUntilAfterTimer.IsTriggered); } }
 
         /// <summary>Sets the timer that is used to block pruning for the given blockPeriod TimeSpan</summary>
         protected void BlockPruningForPeriod(TimeSpan blockPeriod)
@@ -282,7 +283,13 @@ namespace MosaicLib.File
             if (blockPeriod > TimeSpan.Zero)
                 blockPruningUntilAfterTimer.Start(blockPeriod);
             else
-                blockPruningUntilAfterTimer.Stop();
+                ResetPruningBlock();
+        }
+
+        /// <summary>Releases any time based prune holdoff by stopping the blockPruningUntilAfterTimer.</summary>
+        public void ResetPruningBlock()
+        {
+            blockPruningUntilAfterTimer.Stop();
         }
 
         #endregion
@@ -334,7 +341,7 @@ namespace MosaicLib.File
             {
                 string treePruningNeededReason = TreePruningNeededReason;
 
-                if (!treePruningNeededReason.IsNullOrEmpty())
+                if (treePruningNeededReason.IsNeitherNullNorEmpty())
                 {
                     if (PerformIncrementalPrune(treePruningNeededReason))
                         didAnything = true;
@@ -387,12 +394,15 @@ namespace MosaicLib.File
             }
         }
 
-        /// <summary>Gives the total size of this tree and all of the sub-nodes under this node</summary>
-        public Int64 TreeContentsSize { get { Service(false); return treeRootEntry.TreeContentsSize; } }
         /// <summary>Gives the oldest file creation time or directory modification time for this tree or any of its sub-nodes</summary>
         public DateTime OldestUtcTime { get { Service(false); return treeRootEntry.OldestUtcTime; } }
+
+        /// <summary>Gives the total size of this tree and all of the sub-nodes under this node</summary>
+        public Int64 TreeContentsSize { get { Service(false); return treeRootEntry.TreeContentsSize; } }
+
         /// <summary>Gives the total number of items under and including this tree root node.</summary>
         public int TreeItemCount { get { Service(false); return treeRootEntry.TreeItemCount; } }
+        
         /// <summary>Gives the total number of file items under and including this tree.</summary>
         public int TreeFileCount { get { Service(false); return treeRootEntry.TreeFileCount; } }
 
@@ -451,12 +461,15 @@ namespace MosaicLib.File
         /// </summary>
         /// <param name="pruneItemList">List to which new that have been removed from the tree are added - these items must be deleted from the file system separately</param>
         /// <param name="issueEmitter">Gives the IMesgEmitter to which error messages and other Tree traversal issues are given during this process.</param>
-        public void ExtractNextListOfIncrementalItemsToPrune(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter issueEmitter)
+        /// <param name="traceEmitter">Gives the IMesgEmitter to which some likely repetitious messages will be reported.</param>
+        public void ExtractNextListOfIncrementalItemsToPrune(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter traceEmitter = null)
         {
             if (config.PruneMode == PruneMode.PruneDirectories)
-                treeRootEntry.AppendAndRemoveOldestTreeDirectory(pruneItemList, config.MaxEntriesToDeletePerIteration, issueEmitter);
+                treeRootEntry.AppendAndRemoveOldestTreeDirectory(pruneItemList, config.MaxEntriesToDeletePerIteration, issueEmitter, traceEmitter);
             else
-                treeRootEntry.AppendAndRemoveOldestTreeItem(pruneItemList, issueEmitter);
+                treeRootEntry.AppendAndRemoveOldestTreeItem(pruneItemList, issueEmitter, traceEmitter);
+
+            treeRootEntry.UpdateTree(issueEmitter);
         }
 
         /// <summary>
@@ -467,8 +480,12 @@ namespace MosaicLib.File
         /// <param name="deleteEmitter">Gives the IMesgEmitter that will recieve messages about the successful deletions</param>
         /// <param name="issueEmitter">Gives the IMesgEmitter that will receive any messages about failures while attempting to delete each item.</param>
         /// <param name="reason">Gives the string description for the reason that these items are to be deleted.  Null or Empty will be replaced with [NoReasonGiven]</param>
+        /// <param name="traceEmitter">Gives the IMesgEmitter that will be used when reporting the inability to delete a file because it is missing.  When null the <paramref name="issueEmitter"/> will be used instead.</param>
         /// <returns>The number of items that were successfully deleted.</returns>
-        public int DeletePrunedItems(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter deleteEmitter, Logging.IMesgEmitter issueEmitter, string reason = null)
+        /// <remarks>
+        /// NOTE: the <paramref name="traceEmitter"/> may be used for repeated messages as pruning failures may be reported more than once if the underlying issue is not resolved.
+        /// </remarks>
+        public int DeletePrunedItems(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter deleteEmitter, Logging.IMesgEmitter issueEmitter, string reason = null, Logging.IMesgEmitter traceEmitter = null)
         {
             int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
 
@@ -484,9 +501,16 @@ namespace MosaicLib.File
                 {
                     try
                     {
-                        System.IO.File.Delete(entryToDelete.Path);
-                        deletedItemCount++;
-                        deleteEmitter.Emit("Pruned file:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        if (entryToDelete.IsExistingFile)
+                        {
+                            System.IO.File.Delete(entryToDelete.Path);
+                            deletedItemCount++;
+                            deleteEmitter.Emit("Pruned file:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        }
+                        else
+                        {
+                            (traceEmitter ?? issueEmitter).Emit("Unable to prune non-existant file:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        }
                     }
                     catch (System.Exception ex)
                     {
@@ -497,9 +521,16 @@ namespace MosaicLib.File
                 {
                     try
                     {
-                        System.IO.Directory.Delete(entryToDelete.Path);
-                        deletedItemCount++;
-                        deleteEmitter.Emit("Pruned directory:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        if (entryToDelete.IsExistingDirectory)
+                        {
+                            System.IO.Directory.Delete(entryToDelete.Path);
+                            deletedItemCount++;
+                            deleteEmitter.Emit("Pruned directory:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        }
+                        else
+                        {
+                            (traceEmitter ?? issueEmitter).Emit("Unable to prune non-existant directory:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
+                        }
                     }
                     catch (System.Exception ex)
                     {
@@ -522,7 +553,7 @@ namespace MosaicLib.File
         /// </summary>
         /// <returns>true if any tree items where deleted, false otherwise.</returns>
         /// <remarks>Number of deletions is limited by config.maxEntriesToDeletePerIteration</remarks>
-        public bool PerformIncrementalPrune(string initialTreePruningNeededReason = null)
+        public bool PerformIncrementalPrune(string initialTreePruningNeededReason = null, List<DirectoryEntryInfo> prunedItemList = null)
         {
             int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
             bool incrementalPruneFailed = false;
@@ -536,10 +567,10 @@ namespace MosaicLib.File
             {
                 pruneItemList.Clear();
 
-                ExtractNextListOfIncrementalItemsToPrune(pruneItemList, Info.Emitter);
+                ExtractNextListOfIncrementalItemsToPrune(pruneItemList, Info.Emitter, Trace.Emitter);
 
                 int iterationItemsToDelete = pruneItemList.Count;
-                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Info.Emitter, Issue.Emitter, reason: treePruningNeededReason);
+                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Info.Emitter, Issue.Emitter, traceEmitter: Trace.Emitter, reason: treePruningNeededReason);
                 deletedItemCount += iterationDeletedItemsCount;
 
                 if (iterationItemsToDelete == 0)
@@ -552,6 +583,9 @@ namespace MosaicLib.File
                     Debug.Emitter.Emit("DeleteItems was not able to delete all of the items during this iteration: items:{0}, deleted items:{1}", iterationItemsToDelete, iterationDeletedItemsCount);
                     incrementalPruneFailed = true;
                 }
+
+                if (prunedItemList != null && pruneItemList.Count > 0)
+                    prunedItemList.AddRange(pruneItemList);
 
                 treePruningNeededReason = TreePruningNeededReason;
             }
@@ -696,4 +730,4 @@ namespace MosaicLib.File
 
     #endregion
 
-} // namespace MosaicLib.File
+}

@@ -37,6 +37,7 @@ namespace Mosaic.JsonDotNet
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>
+    [Obsolete("The use of this assembly and the classes within it are deprecated.  Please change to the use of the corresponding classes in the Mosaic_ToolsLib assembly (2022-01-25)")]
     public class PersistentJsonDotNetTextFileRingProvider : PersistentSerializedTextFileRingProviderBase
     {
         /// <summary>

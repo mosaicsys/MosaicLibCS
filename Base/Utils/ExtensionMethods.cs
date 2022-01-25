@@ -747,8 +747,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static TValue SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue fallbackValue = default(TValue))
         {
-            TValue value = default(TValue);
-
+            TValue value;
             if (dict != null && !Object.ReferenceEquals(key, null) && dict.TryGetValue(key, out value))
                 return value;
 
@@ -1593,7 +1592,7 @@ namespace MosaicLib.Utils
             return InnerConcat(item, set ?? EmptyArrayFactory<TItem>.Instance);
         }
 
-        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/></summary>
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/> where the null <paramref name="array"/> is handled as if it is empty.</summary>
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, TItem [] array)
         {
             return InnerConcat(item, array ?? EmptyArrayFactory<TItem>.Instance);
@@ -1881,13 +1880,15 @@ namespace MosaicLib.Utils
 
         #region FileSystemInfo, FileInfo EMs (SafeGetOldestDateTimeUtc, SafeGetCreationAge, SafeExists, SafeLength)
 
-        /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, last modified time, and last accessed time, in UTC.</summary>
-        public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime))
+        /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, its last modified time, and (optionally) its last access time, in UTC.</summary>
+        public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime), bool includeLastAccess = true)
         {
-            if (fsi.SafeExists())
+            if (!fsi.SafeExists())
+                return fallbackValue;
+            else if (includeLastAccess)
                 return fsi.CreationTimeUtc.Min(fsi.LastWriteTimeUtc).Min(fsi.LastAccessTimeUtc);
             else
-                return fallbackValue;
+                return fsi.CreationTimeUtc.Min(fsi.LastWriteTimeUtc);
         }
 
         /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a TimeSpan (returns zero if the given <paramref name="fsi"/> instance is null)</summary>
@@ -1899,7 +1900,7 @@ namespace MosaicLib.Utils
                 return fallbackValue;
         }
 
-        /// <summary>Returns true if the given <paramref name="fsi"/> is not null and it Exists</summary>
+        /// <summary>Returns true if the given <paramref name="fsi"/> is not null and fsi.Exists is true</summary>
         public static bool SafeExists(this FileSystemInfo fsi)
         {
             return (fsi != null && fsi.Exists);

@@ -27,6 +27,32 @@ namespace MosaicLib.Semi.E094
     // E094-0306
 
     /// <summary>
+    /// Enumeration to go with CJ "State" property.  Used in U1 format
+    /// </summary>
+    [DataContract(Namespace = Constants.E094NameSpace)]
+    public enum CJState : byte
+    {
+        [EnumMember]
+        Queued = 0,
+        [EnumMember]
+        Selected = 1,
+        [EnumMember]
+        WaitingForStart = 2,
+        [EnumMember]
+        Executing = 3,
+        [EnumMember]
+        Paused = 4,
+        [EnumMember]
+        Completed = 5,
+        [EnumMember]
+        Removed = 253,    // locally defined value
+        [EnumMember]
+        Created = 254,      // locally defined value
+        [EnumMember]
+        Invalid = 255,      // locally defined value
+    }
+
+    /// <summary>
     /// Specifies the known values for Process order management (used during CJ creation).  Used in U1 format.
     /// </summary>
     [DataContract(Namespace = Constants.E094NameSpace)]

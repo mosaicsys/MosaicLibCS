@@ -339,12 +339,12 @@ namespace MosaicLib.Modular.Action
 
     #endregion
 
-    #region IActionState and IClientFacet ExtentionMethods
+    #region IActionState and IClientFacet ExtensionMethods
 
     /// <summary>
     /// Extension Methods
     /// </summary>
-    public static partial class ExtentionMethods
+    public static partial class ExtensionMethods
     {
         /// <summary>
         /// Returns true if the given actionState has the same contents as ActionStateImplBase.Empty.
@@ -504,29 +504,33 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>
-        /// Returns the ActionState from the first failed icf's of the given set, the ActionState from the last successful icf if all of them succeeded, or the given <paramref name="fallbackValue"/>.
+        /// Returns the ActionState from the first failed (or incomplete) icf's of the given <paramref name="actionSetArray"/>, the ActionState from the last successful icf if all of them succeeded, or a fallback success ActionState if the <paramref name="actionSetArray"/> is null or empty.
         /// </summary>
-        public static IActionState GetFirstFailureOrAllSuccessState(this IClientFacet[] actionSetArray, IActionState fallbackValue = null)
+        public static IActionState GetFirstFailureOrAllSuccessState(this IClientFacet[] actionSetArray)
         {
-            int numThatHaveNotCompleted = 0;
             IActionState lastSuccess = null;
 
-            foreach (var icf in actionSetArray)
+            foreach (var icf in actionSetArray.MapNullToEmpty())
             {
                 var actionState = icf.ActionState;
 
-                if (!actionState.IsComplete)
-                    numThatHaveNotCompleted++;
-                else if (actionState.Failed)
+                if (actionState.Failed || !actionState.IsComplete)
                     return actionState;
                 else
                     lastSuccess = actionState;
             }
 
-            if (numThatHaveNotCompleted == 0)
-                return lastSuccess;
+            return lastSuccess ?? fallbackSuccessActionState;
+        }
 
-            return fallbackValue;
+        private static readonly IActionState fallbackSuccessActionState = new ActionStateCopy(ActionStateCode.Complete, string.Empty, NamedValueSet.Empty);
+
+        /// <summary>
+        /// Returns the AstionState.ResultCode from the first failed (or incomplete) icf in the given <paramref name="actionSetArray"/>, the empty string if all of them succeeded.
+        /// </summary>
+        public static string GetFirstFailureOrAllSuccessResultCode(this IClientFacet[] actionSetArray)
+        {
+            return actionSetArray.GetFirstFailureOrAllSuccessState().ResultCode;
         }
 
         /// <summary>
@@ -636,6 +640,30 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>
+        /// This method captures a copy of the current ActionState from the given <paramref name="icf"/> and verifies ActionState.Succeeded.
+        /// If this verification fails then this method throws an <see cref="ActionFailedException"/> with a description of the details of where verification step failed along with the given <paramref name="icf"/> value and
+        /// the captured ActionState which was directly verified.
+        /// </summary>
+        /// <remarks>
+        /// This EM is primarilly intended to support simplified use patterns in unit test code.  
+        /// It may also be usefull in production code when throw on failure code paths are being intentionally used.
+        /// </remarks>
+        public static TClientFacetType VerifySucceeded<TClientFacetType>(this TClientFacetType icf) 
+            where TClientFacetType : IClientFacet
+        {
+            var capturedActionState = icf.ActionState;
+
+            if (capturedActionState == null)
+                new ActionFailedException("Internal: ActionState is null", icf, capturedActionState).Throw();
+            else if (capturedActionState.Failed)
+                new ActionFailedException("Action Failed [{0} {1}]".CheckedFormat(icf.ToString(ToStringSelect.MesgAndDetail), capturedActionState), icf, capturedActionState).Throw();
+            else if (!capturedActionState.Succeeded)
+                new ActionFailedException("Action did not succeed [{0} {1}]".CheckedFormat(icf.ToString(ToStringSelect.MesgAndDetail), capturedActionState), icf, capturedActionState).Throw();
+
+            return icf;
+        }
+
+        /// <summary>
         /// This enumeration is used with the IEnumerable variant of the WaitUntilComplete extension methods.  
         /// It determines if the WaitUntilComplete method is intended to wait for 
         /// </summary>
@@ -653,6 +681,26 @@ namespace MosaicLib.Modular.Action
 
         private static readonly TimeSpan spinIntervalClipRangeMinValue = (1.0).FromMilliseconds();
         private static readonly TimeSpan spinIntervalClipRangeMaxValue = (0.5).FromSeconds(); 
+    }
+
+    /// <summary>
+    /// This exception class is thrown to indicate failures from action completion success verification EMs (above) such as VerifySucceeded.
+    /// </summary>
+    public class ActionFailedException : System.Exception
+    {
+        /// <summary>Constructor</summary>
+        public ActionFailedException(string mesg, IClientFacet iClientFacet, IActionState capturedActionState, System.Exception innerException = null)
+            : base(mesg, innerException)
+        {
+            IClientFacet = iClientFacet;
+            CapturedActionState = capturedActionState;
+        }
+
+        /// <summary>Gives the original IClientFacet from which the CapturedActionState was captured.</summary>
+        public IClientFacet IClientFacet { get; private set; }
+
+        /// <summary>Gives the IActionState value that was captured and which did not indicate success during the verify succeeded operation that generated this exception</summary>
+        public IActionState CapturedActionState { get; private set; }
     }
 
     #endregion

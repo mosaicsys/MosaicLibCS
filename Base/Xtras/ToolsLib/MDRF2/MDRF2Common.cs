@@ -321,7 +321,9 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             return this;
         }
 
-        double blockFDTTimeSpan, oneOverBlockFDTTimeSpan;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "used for debugging")]
+        double blockFDTTimeSpan;
+        double oneOverBlockFDTTimeSpan;
         double blockUDT1601TimeSpan;
 
         /// <summary>
@@ -412,18 +414,20 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             else
                 new MDRF2ReaderException($"Encountered unexpected {headerByteCode2} record while attempting to Deserialize an InlineIndex [expected FixArray8 at:{mpReader.Position}]");
 
-            InlineIndexRecord record = new InlineIndexRecord();
-            record.BlockByteCount = mpReader.ReadUInt32();
-            record.BlockRecordCount = mpReader.ReadUInt32();
-            record.BlockFirstFileDeltaTime = mpReader.ReadDouble();
-            record.BlockLastFileDeltaTime = mpReader.ReadDouble();
-            record.BlockFirstUDTTimeSince1601 = mpReader.ReadDouble();
-            record.BlockLastUDTTimeSince1601 = mpReader.ReadDouble();
-            record.BlockFileIndexRowFlagBits = unchecked((FileIndexRowFlagBits)mpReader.ReadUInt16());
-            record.BlockUserRowFlagBits = mpReader.ReadUInt64();
-            record.BlockGroupSetCount = mpReader.ReadUInt32();
-            record.BlockOccurrenceCount = mpReader.ReadUInt32();
-            record.BlockObjectCount = mpReader.ReadUInt32();
+            InlineIndexRecord record = new InlineIndexRecord
+            {
+                BlockByteCount = mpReader.ReadUInt32(),
+                BlockRecordCount = mpReader.ReadUInt32(),
+                BlockFirstFileDeltaTime = mpReader.ReadDouble(),
+                BlockLastFileDeltaTime = mpReader.ReadDouble(),
+                BlockFirstUDTTimeSince1601 = mpReader.ReadDouble(),
+                BlockLastUDTTimeSince1601 = mpReader.ReadDouble(),
+                BlockFileIndexRowFlagBits = unchecked((FileIndexRowFlagBits)mpReader.ReadUInt16()),
+                BlockUserRowFlagBits = mpReader.ReadUInt64(),
+                BlockGroupSetCount = mpReader.ReadUInt32(),
+                BlockOccurrenceCount = mpReader.ReadUInt32(),
+                BlockObjectCount = mpReader.ReadUInt32()
+            };
 
             return record;
         }
@@ -461,7 +465,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             }
             else
             {
-                foreach (var idx in Enumerable.Range(0, arrayLen))
+                foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
                 return Tuple.Create($"Invalid serialized Mesg or Error body array length [{arrayLen} != 3]", MDRF2DateTimeStampPair.NowUTCTimeSince1601Only);

@@ -57,6 +57,8 @@ namespace MosaicLib.Semi.E040
         [EnumMember]
         Aborted = 11,
         [EnumMember]
+        Removed = 253,    // locally defined value
+        [EnumMember]
         Created = 254,      // locally defined value
         [EnumMember]
         Invalid = 255,      // locally defined value

@@ -799,7 +799,7 @@ namespace MosaicLib.Semi.E039
         [OnDeserialized]
         void OnDeserialized(StreamingContext sc)
         {
-            FullName = GenerateFullName(Type, Name);
+            FullName = IsEmpty ? string.Empty : GenerateFullName(Type, Name);
         }
 
         /// <summary>If either the given <paramref name="type"/> or the given <paramref name="name"/> are non-null and non-empty then this method returns the string <paramref name="type"/>:<paramref name="name"/>.  Otherwise it return the empty string.</summary>
@@ -810,7 +810,7 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>Returns the reference Empty E039ObjectID</summary>
         public static E039ObjectID Empty { get { return _empty; } }
-        private static readonly E039ObjectID _empty = new E039ObjectID() { };
+        private static readonly E039ObjectID _empty = new E039ObjectID() { FullName = string.Empty };
 
         /// <summary>
         /// IEquatable{E039ObjectID} implementation method.  

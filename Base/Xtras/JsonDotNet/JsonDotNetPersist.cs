@@ -41,6 +41,7 @@ namespace Mosaic.JsonDotNet
     /// The templatized object type on which this adapter is defined.  
     /// Must be a DataContract or compatible object type in order to be usable by this adapter.
     /// </typeparam>
+    [Obsolete("The use of this assembly and the classes within it are deprecated.  Please change to the use of the corresponding classes in the Mosaic_ToolsLib assembly (2022-01-25)")]
     public class DataContractJsonDotNetAdapter<TObjectType>
         : DataContractAdapterBase<TObjectType>
     {
@@ -158,6 +159,7 @@ namespace Mosaic.JsonDotNet
     /// <typeparam name="ObjType">
     /// Defines the ObjType on which the IPersistentStorage operates.  Must be a class with default constructor that implements the IPersistSequenceable interface.
     /// </typeparam>
+    [Obsolete("The use of this assembly and the classes within it are deprecated.  Please change to the use of the corresponding classes in the Mosaic_ToolsLib assembly (2022-01-25)")]
     public class DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ObjType>
         : PersistentObjectFileRingStorageAdapterBase<ObjType>
         , IPersistentStorage<ObjType>

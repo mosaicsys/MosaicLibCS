@@ -57,7 +57,9 @@ namespace MosaicLib.Modular.Config
             Logger = new Logging.Logger("Config.Provider." + name);
             Name = name;
 
-            ProviderMetaData = new NamedValueSet() { { "Provider", Name } }.MergeWith(providerMetaData).MakeReadOnly();
+            originalProviderMetaData = providerMetaData;
+
+            UpdateProviderMetaData();
         }
 
         /// <summary>
@@ -72,8 +74,20 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public string Name { get; private set; }
 
-        /// <summary>Indicates the Basic Flags values that will be common to all keys that are served by this provider.  Currently used to indicate if all keys are Fixed.</summary>
-        public ConfigKeyProviderFlags BaseFlags { get; protected set; }
+        /// <summary>Indicates the Basic Flags values that will be common to all keys that are served by this provider [<see cref="ConfigKeyProviderFlags"/>]</summary>
+        public ConfigKeyProviderFlags BaseFlags 
+        { 
+            get { return _BaseFlags; }
+            protected set
+            {
+                if (!_BaseFlags.Equals(value))
+                {
+                    _BaseFlags = value;
+                    UpdateProviderMetaData();
+                }
+            }
+        }
+        private ConfigKeyProviderFlags _BaseFlags;
 
         /// <summary>
         /// This property is used by the provider to prefix all of the partial key names that it creates with a common prefix.  When this string is not empty
@@ -84,8 +98,28 @@ namespace MosaicLib.Modular.Config
         private string keyPrefix;
 
         /// <summary>Gives the default INamedValueSet that is put into each config key provided by this provider.</summary>
-        public INamedValueSet ProviderMetaData { get { return providerMetaData; } private set { providerMetaData = value.ConvertToReadOnly(); } }
-        private INamedValueSet providerMetaData;
+        public INamedValueSet ProviderMetaData { get; private set; }
+
+        private INamedValueSet originalProviderMetaData;
+
+        protected void UpdateProviderMetaData()
+        {
+            ConfigKeyProviderFlags baseFlags = BaseFlags;
+
+            var baseFlagsListBuilder = new List<string>()
+                .ConditionalAddItems(baseFlags.IsFixed, "IsFixed")
+                .ConditionalAddItems(baseFlags.IsPersisted, "ValuesArePersisted")
+                .ConditionalAddItems(baseFlags.KeysMayBeAddedUsingEnsureExistsOption, "SupportsEE")
+                ;
+
+            ProviderMetaData = new NamedValueSet()
+                {
+                    { "Provider", Name },
+                    { "ProviderFlags", baseFlagsListBuilder },
+                }
+                .MergeWith(originalProviderMetaData)
+                .MakeReadOnly();
+        }
 
         #endregion
 
@@ -1177,7 +1211,6 @@ namespace MosaicLib.Modular.Config
             if (isReadWrite)
             {
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
-                defaultAccessFlags.MayBeChanged = true;
             }
 
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();

@@ -12,7 +12,7 @@ Unlike the prior ExtractMDRFtoCSV, this tool includes the following primary impr
 * Supports table centric output file formats.
 * Supports extraction of Occurrence data into a MDRF_Occurrences table so that they may be used to better inform and index the extracted tabular data where appropriate.
 * Supports use with .ini style configuration files to support a wide range of pre-defined tasks.
-* Command line parsing has been adjusted to improve usefulness with drag and drop style of program useage.  Expected use patterns include dragging a single .ini file or dragging an .ini file and set of .mdrf files to the program (or a to a shortcut to it).
+* Command line parsing has been adjusted to improve usefulness with drag and drop style of program useage.  Expected use patterns include dragging a single .ini file or dragging an .ini file and set of mdrf files to the program (or a to a shortcut to it).
 
 This tool supports the following filtering abilities when performing extraction tasks:
 
@@ -43,7 +43,7 @@ This tool processes its command line and selected files in phases:
 On launch the application processes the arguments given on the command line.  These are expected to include any of three patterns:
  
 * optional INI file
-* MDRF files
+* MDRF files (.mdrf, .mdrf2, .mdrf2.lz4, .mdrf2.gz)
 * parameter values (key=value)
 
 The application processes all of the parameter values first through the use of '''Config.AddStandardProviders(ref args, StandardProviderSelect.All);''' 
@@ -60,7 +60,7 @@ For each such file it reads the file's contents using the selected filter criter
 
 ## configuration files: supported keys and usage
 
-* MDRFFileSpec (string, may be used to specify the set of mdrf files to process, usually as *.mdrf.  Multiple file names may be specified if seperated by '|' (the pipe symbol) as in 'a.mdrf|b.mdrf')
+* MDRFFileSpec (string, may be used to specify the set of mdrf files to process, usually as *.mdrf, *.mdrf2, *.mdrf2.lz4, or *.mdrf2.gz.  Multiple file names may be specified if seperated by '|' (the pipe symbol) as in 'a.mdrf|b.mdrf')
 * AutoCDToIniFileDirectory (boolean - defaults to true)
 * DataFileType (one of SQLite3, CSV)
 * DateFileName (string)

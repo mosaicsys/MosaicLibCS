@@ -370,7 +370,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     try
                     {
-                        StartNewBlockIfNeeded(blockBufferWriter, ref dtPair);
+                        StartNewBlockIfNeeded(ref dtPair);
                         var mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
 
                         UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
@@ -443,7 +443,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         }
 
         /// <inheritdoc/>
-        public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false)
+        public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false)
         {
             if (occurrenceInfo == null)
                 return "{0} failed:  occurrenceInfo parameter cannot be null".CheckedFormat(CurrentMethodName);
@@ -483,7 +483,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     try
                     {
-                        StartNewBlockIfNeeded(blockBufferWriter, ref dtPair);
+                        StartNewBlockIfNeeded(ref dtPair);
 
                         var mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
 
@@ -541,7 +541,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     try
                     {
-                        StartNewBlockIfNeeded(blockBufferWriter, ref dtPair);
+                        StartNewBlockIfNeeded(ref dtPair);
 
                         var mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
 
@@ -646,7 +646,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         private string InnerFlush(MDRF.Writer.FlushFlags flushFlags, ref MDRF2DateTimeStampPair dtPair, bool rethrow = false)
         {
-            string ec = string.Empty;
+            string ec;
 
             try
             {
@@ -698,7 +698,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             get
             {
                 if (IsDisposed)
-                    return default(MDRF.Writer.FileInfo);
+                    return default;
 
                 using (var scopedLock = new ScopedLock(mutex))
                 {
@@ -713,7 +713,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             get
             {
                 if (IsDisposed)
-                    return default(MDRF.Writer.FileInfo);
+                    return default;
 
                 using (var scopedLock = new ScopedLock(mutex))
                 {
@@ -1070,7 +1070,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     // generate and write the first file header block with single InlineMAP
                     if (ec.IsNullOrEmpty())
                     {
-                        StartNewBlockIfNeeded(metaDataBlockBufferWriter, ref dtPair);
+                        StartNewBlockIfNeeded(ref dtPair);
 
                         AddInlineMap1_StartAndDateTime(ref mpWriter, ref dtPair);
 
@@ -1083,7 +1083,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     // generate and write the first file header block with single InlineMAP
                     if (ec.IsNullOrEmpty())
                     {
-                        StartNewBlockIfNeeded(metaDataBlockBufferWriter, ref dtPair);
+                        StartNewBlockIfNeeded(ref dtPair);
 
                         AddInlineMap2_LibSessionClientAndSpecItems(ref mpWriter);
 
@@ -1302,6 +1302,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     if (fileStream != null)
                     {
                         fileStream.Flush();
+
+                        lastFileInfo.FileSize = (int)fileStream.Position;
+
                         fileStream.Close();
                         Fcns.DisposeOfObject(ref fileStream);
                     }
@@ -1328,7 +1331,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             {
                 try
                 {
-                    StartNewBlockIfNeeded(blockBufferWriter, ref dtPair);
+                    StartNewBlockIfNeeded(ref dtPair);
 
                     MessagePack.MessagePackWriter mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
 
@@ -1412,7 +1415,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     {
                         try
                         {
-                            StartNewBlockIfNeeded(blockBufferWriter, ref dtPair);
+                            StartNewBlockIfNeeded(ref dtPair);
 
                             MessagePack.MessagePackWriter mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
 
@@ -1751,6 +1754,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                     if (flush)
                         outputStream.Flush();
+
+                    if (fileStream != null)
+                        currentFileInfo.FileSize = (int)fileStream.Position;
+                    else
+                        currentFileInfo.FileSize += (inlineIndexBlockBufferWriter.CurrentCount + bufferWriter.CurrentCount);
                 }
                 else
                 {
@@ -1844,8 +1852,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 dtPair.UTCTimeSince1601 = DateTime.Now.GetUTCTimeSince1601();
         }
 
+        /// <summary>
+        /// If needed this method changes the internal writer state to reflect that the given <paramref name="dtPair"/> is the first DateTimeStamp pair for a new block (inline index) and flags that a block has been started.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void StartNewBlockIfNeeded(ByteArrayBufferWriter bufferWriter, ref MDRF2DateTimeStampPair dtPair)
+        private void StartNewBlockIfNeeded(ref MDRF2DateTimeStampPair dtPair)
         {
             if (HasBlockBeenStarted)
                 return;
@@ -1872,6 +1883,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         private InlineIndexRecord inlineIndexRecord = new InlineIndexRecord();
         private MDRF2DateTimeStampPair blockBufferFirstDTPair = default;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging.")]
         private int numBlocksWritten = 0;
 
         #endregion
@@ -2190,7 +2202,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// </summary>
         public IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null, bool writeAll = false)
         {
-            ActionMethodDelegateActionArgStrResult<string, NullObj> performRecordEventDelegate = (actionProviderFacet) => PerformRecordEvent(actionProviderFacet, writeAll);
+            string performRecordEventDelegate(IProviderActionBase<string, NullObj> actionProviderFacet) => PerformRecordEvent(actionProviderFacet, writeAll);
             IStringParamAction action = new StringActionImpl(actionQ, eventName, performRecordEventDelegate, writeAll ? "RecordEvent+writeAll" : "RecordEvent", ActionLoggingReference);
 
             if (!eventDataNVS.IsNullOrEmpty())
@@ -2209,9 +2221,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             NamedValueSet occurrenceDataNVS = new NamedValueSet() { { "eventName", eventName } }.MergeWith(eventDataNVS, NamedValueMergeBehavior.AddNewItems);
 
-            MDRF.Writer.OccurrenceInfo occurrenceInfo = null;
-
-            if (!eventNameToOccurrenceInfoDictionary.TryGetValue(eventName, out occurrenceInfo) || occurrenceInfo == null)
+            if (!eventNameToOccurrenceInfoDictionary.TryGetValue(eventName, out MDRF.Writer.OccurrenceInfo occurrenceInfo) || occurrenceInfo == null)
                 occurrenceInfo = defaultRecordEventOccurranceInfo;
 
             lastWriterClientOpRequestCount++;
@@ -2239,9 +2249,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (!BaseState.IsOnline)
                 return "Part is not Online";
 
-            MDRF.Writer.OccurrenceInfo occurrenceInfo = null;
-
-            if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out occurrenceInfo) || occurrenceInfo == null)
+            if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out MDRF.Writer.OccurrenceInfo occurrenceInfo) || occurrenceInfo == null)
                 return "'{0}' not a known occurrence name".CheckedFormat(occurrenceName);
 
             lastWriterClientOpRequestCount++;
@@ -2423,8 +2431,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     CST = ContainerStorageType.Object,
                 };
 
-                List<MDRF.Writer.OccurrenceInfo> occuranceInfoList = new List<MDRF.Writer.OccurrenceInfo>();
-                occuranceInfoList.Add(defaultRecordEventOccurranceInfo);
+                var occuranceInfoList = new List<MDRF.Writer.OccurrenceInfo>()
+                {
+                    defaultRecordEventOccurranceInfo,
+                };
 
                 if (!Config.OccurrenceDefinitionItemArray.IsNullOrEmpty())
                 {
@@ -2612,11 +2622,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// </summary>
         public MDRF2LogMessageHandlerAdapterConfig Setup(string prefixName = "Logging.LMH.MDRF2LogMessageHandler.", IConfig config = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null)
         {
-            ConfigValueSetAdapter<MDRF2LogMessageHandlerAdapterConfig> adapter = new ConfigValueSetAdapter<MDRF2LogMessageHandlerAdapterConfig>(config) 
+            var _ = new ConfigValueSetAdapter<MDRF2LogMessageHandlerAdapterConfig>(config) 
             { 
                 ValueSet = this, 
-                SetupIssueEmitter = issueEmitter, 
-                UpdateIssueEmitter = issueEmitter, 
+                SetupIssueEmitter = issueEmitter,
+                UpdateIssueEmitter = issueEmitter,
                 ValueNoteEmitter = valueEmitter 
             }.Setup(prefixName);
 
@@ -2639,8 +2649,17 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         IMDRF2Writer mdrfWriter;
         MDRF2LogMessageHandlerAdapterConfig Config { get; set; }
 
+        /// <summary>
+        /// Enable property that may be used by client to disable log forwarding to mdrfWriter before mdrfWriter has been closed (to prevent accidental re-activation of writer).
+        /// </summary>
+        public bool Enable { get => enable; set => enable = value; }
+        private volatile bool enable = true;
+
         public override void HandleLogMessages(Logging.LogMessage[] lmArray)
         {
+            if (!Enable)
+                return;
+
             int lmArrayLen = lmArray.SafeLength();
 
             if (lmArrayLen == 1)
@@ -2651,11 +2670,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     InnerInnerHandleLogMessage(lm, blockFlush: true);
                 }
-
-                if (Config.FlushFlagsToUseAfterEachMessageBlock != MDRF.Writer.FlushFlags.None && mdrfWriter?.IsFileOpen == true)
-                    mdrfWriter?.Flush(Config.FlushFlagsToUseAfterEachMessageBlock);
             }
 
+            if (Config.FlushFlagsToUseAfterEachMessageBlock != MDRF.Writer.FlushFlags.None && mdrfWriter?.IsFileOpen == true)
+                mdrfWriter?.Flush(Config.FlushFlagsToUseAfterEachMessageBlock);
 
             NoteMessagesHaveBeenDelivered();
         }
@@ -2668,7 +2686,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InnerInnerHandleLogMessage(Logging.LogMessage lm, bool blockFlush = false, bool forceFlush = false)
         {
-            if (!IsMessageTypeEnabled(lm) || lm.NamedValueSet.Contains("noMDRF") || (Config.OnlyRecordMessagesIfFileIsAlreadyActive && mdrfWriter?.IsFileOpen != true))
+            if (!Enable || !IsMessageTypeEnabled(lm) || lm.NamedValueSet.Contains("noMDRF") || (Config.OnlyRecordMessagesIfFileIsAlreadyActive && mdrfWriter?.IsFileOpen != true))
                 return;
 
             Logging.MesgType mesgType = lm.MesgType;

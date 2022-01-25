@@ -321,6 +321,7 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Support for DataContract serialization of this object</summary>
         [DataMember(Order = 300, Name = "ActionState")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This property is used for DataContract serialization")]
         private ActionStateCopy ActionStateCopy
         {
             get { return new ActionStateCopy(ActionState); }
@@ -965,7 +966,6 @@ namespace MosaicLib.Modular.Part
 					threadWakeupNotifier.Notify();
 
 					mainThread.Join();
-                    joinedThread = mainThread;
 					mainThread = null;
 				}
 
@@ -1638,7 +1638,6 @@ namespace MosaicLib.Modular.Part
         protected readonly WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 
         private System.Threading.Thread mainThread = null;
-        private System.Threading.Thread joinedThread = null;
 
         /// <summary>Protected field used to define the default ActionLogging instance that is cloned when creating new actions.</summary>
         private ActionLogging actionLoggingReference = null;
@@ -1670,10 +1669,10 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOnlineAction, RunGoOfflineActionInline, RunGoOfflineAction, RunServiceActionInline, RunServiceAction)
+    #region IClientFacet ExtensionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOnlineAction, RunGoOfflineActionInline, RunGoOfflineAction, RunServiceActionInline, RunServiceAction)
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
-    public static partial class ExtentionMethods
+    public static partial class ExtensionMethods
     {
         /// <summary>Calls StartPart on the given part.  Returns the given part to support call chaining.</summary>
         public static TPartType StartPartInline<TPartType>(this TPartType part) where TPartType : IActivePartBase

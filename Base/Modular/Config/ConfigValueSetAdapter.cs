@@ -63,6 +63,7 @@ namespace MosaicLib.Modular.Config
 
             /// <summary>
             /// This property is true when the config key's value will follow the MayBeChanged update behavior.  (defaults to false)
+            /// <para/>Note: use of this flag does not indicate that the provided key can actually be changed, only that the client would be able to accept it if the key's value is both changable and gets changed.
             /// </summary>
             public bool UpdateNormally { get { return accessFlags.MayBeChanged; } set { accessFlags.MayBeChanged = value; } }
 
@@ -91,6 +92,77 @@ namespace MosaicLib.Modular.Config
             /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
             /// </summary>
             public string DefaultProviderName { get { return accessFlags.DefaultProviderName.MapNullToEmpty(); } set { accessFlags.DefaultProviderName = value; } }
+
+            /// <summary>When non-null set the Type named meta data value to the given value.</summary>
+            public string Type { get; set; }
+
+            /// <summary>When this property is true and the attribute's Deafult value is non-null or the value set's initial value's container storage type is not None, then the Type named value is set to the corresponding CST type (as a string).</summary>
+            public bool AutoType { get; set; }
+
+            /// <summary>When non-null set the Default named meta data value to the given value.</summary>
+            public object Default { get; set; }
+
+            /// <summary>When the attribute's Default property is null and this property is true then the value set's initial value is used to set the Default named meta data value.</summary>
+            public bool AutoDefault { get; set; }
+
+            /// <summary>When non-null set the Min named meta data value to the given value.</summary>
+            public object Min { get; set; }
+
+            /// <summary>When non-null set the Max named meta data value to the given value.</summary>
+            public object Max { get; set; }
+
+            /// <summary>When non-null set the UnitOfMeasure named meta data value to the given value.</summary>
+            public string UnitOfMeasure { get; set; }
+
+            /// <summary>When non-null set the Description named meta data value to the given value.</summary>
+            public string Description { get; set; }
+
+            /// <summary>When non-null set the Custom named meta data value to the given value.</summary>
+            public string Custom { get; set; }
+
+            /// <summary>
+            /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
+            /// </summary>
+            public override INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+            {
+                var localNVS = new NamedValueSet()
+                    .SetValueIfNotNull(TypeKeyword, Type)
+                    .SetValueIfNotNull(DefaultKeyword, Default)
+                    .SetValueIfNotNull(MinKeyword, Min)
+                    .SetValueIfNotNull(MaxKeyword, Max)
+                    .SetValueIfNotNull(UnitOfMeasureKeyword, UnitOfMeasure)
+                    .SetValueIfNotNull(DescriptionKeyword, Description)
+                    .SetValueIfNotNull(CustomKeyword, Custom)
+                    ;
+
+                var mdNvs = base.GetMergedMetaData(mergeWithMetaData, mergeBehavior);
+
+                if (localNVS.IsNeitherNullNorEmpty())
+                    mdNvs = mdNvs.MergeWith(localNVS, mergeBehavior).ConvertToReadOnly();
+
+                return mdNvs;
+            }
+
+            /// <summary>Keyword used for Custom meta data named value</summary>
+            public static string TypeKeyword = "Type";
+
+            /// <summary>Keyword used for Default meta data named value</summary>
+            public static string DefaultKeyword = "Default";
+
+            /// <summary>Keyword used for Min meta data named value</summary>
+            public static string MinKeyword = "Min";
+
+            /// <summary>Keyword used for Max meta data named value</summary>
+            public static string MaxKeyword = "Max";
+
+            /// <summary>Keyword used for UnitOfMeasure meta data named value</summary>
+            public static string UnitOfMeasureKeyword = "UnitOfMeasure";
+
+            /// <summary>Keyword used for Description meta data named value</summary>
+            public static string DescriptionKeyword = "Description";
+
+            /// <summary>Keyword used for Custom meta data named value</summary>
+            public static string CustomKeyword = "Custom";
         }
     }
 
@@ -253,25 +325,35 @@ namespace MosaicLib.Modular.Config
                     FullItemName = fullKeyName,
                 };
 
-                ValueContainer defaultValue = default(ValueContainer);
-
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
                 keySetupInfo.MemberVCValueGetter = keySetupInfo.ItemInfo.GenerateGetMemberToVCFunc<TConfigValueSet>();
 
+                ValueContainer defaultValue = (keySetupInfo.MemberVCValueGetter != null) ? keySetupInfo.MemberVCValueGetter(ValueSet, setupIssueEmitter, valueNoteEmitter, rethrow: false) : default(ValueContainer);
+
+                if (defaultValue.IsEmpty && itemAttribute.Default != null)
+                    defaultValue = ValueContainer.CreateFromObject(itemAttribute.Default);
+
+                if (!defaultValue.IsEmpty)
+                {
+                    var localNVS = new NamedValueSet()
+                        .ConditionalSetValue(ConfigItemAttribute.TypeKeyword, (itemAttribute.Type == null &&  itemAttribute.AutoType), defaultValue.cvt)
+                        .ConditionalSetValue(ConfigItemAttribute.DefaultKeyword, (itemAttribute.Default == null && itemAttribute.AutoDefault), defaultValue)
+                        ;
+
+                    if (localNVS.IsNeitherNullNorEmpty())
+                        combindKeyMetaData = combindKeyMetaData.MergeWith(localNVS, KeyMetaDataMergeBehavior);
+                }
+
                 if (customAccessFlags.EnsureExists ?? false)
                 {
-                    if (keySetupInfo.MemberVCValueGetter != null)
-                    {
-                        defaultValue = keySetupInfo.MemberVCValueGetter(ValueSet, setupIssueEmitter, valueNoteEmitter, rethrow: false);
-                    }
-                    else
+                    if (keySetupInfo.MemberVCValueGetter == null)
                     {
                         setupIssueEmitter.Emit("EnsureExists requested for item '{0}' which does not support getter access.  Key cannot be created with empty value.", itemInfo);
                         anySetupIssues |= !itemAttribute.SilenceIssues;
                     }
                 }
 
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData.ConvertToReadOnly(), MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
                 keySetupInfo.KeyAccess = keyAccess;
 
                 if (!keyAccess.IsUsable)

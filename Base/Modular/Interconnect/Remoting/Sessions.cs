@@ -179,7 +179,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         }
     }
 
-    public delegate void HandleNewSessionDelegate(QpcTimeStamp qpcTimeStamp, IMessageSessionFacet clientSession);
+    public delegate void HandleNewSessionDelegate(QpcTimeStamp qpcTimeStamp, IMessageSessionFacet clientSession, string transportEndpointDescription);
 
     public delegate void HandleMessageDelegate(QpcTimeStamp qpcTimeStamp, ushort stream, Messages.Message message);
 
@@ -531,7 +531,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                                 HandleNewSessionDelegate handleNewSessionDelegate = HandleNewSessionDelegate;
                                 if (handleNewSessionDelegate != null)
-                                    handleNewSessionDelegate(qpcTimeStamp, newClientSession);
+                                {
+                                    var tranportConnectionType = TransportParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false).MapNullOrEmptyTo("Unknown");
+                                    handleNewSessionDelegate(qpcTimeStamp, newClientSession, "{0}_{1}".CheckedFormat(tranportConnectionType, transportEndpoint));
+                                }
 
                                 newClientSession.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, buffer);
 

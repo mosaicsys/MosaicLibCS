@@ -229,8 +229,8 @@ namespace MosaicLib
                     {
                         System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
 
-                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
-                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from any file we just deleted
+                        System.IO.File.SetCreationTimeUtc(activeFilePath, DateTime.UtcNow);
                     }
 
                     // establish the open mode.  if we are supposed to advance to a new file

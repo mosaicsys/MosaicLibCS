@@ -42,6 +42,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     /// <summary>
     /// Setup information that is used to configure an MDRFWriter in order to write to an MDRF file.
+    /// <para/>On a reader this gives the client access to the information that the writer was originally given including the ClientNVS which carries client specific meta data that is global to the file.
     /// </summary>
     public class SetupInfo
     {
@@ -330,19 +331,36 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #region ILibraryInfo, LibraryInfo
 
+    /// <summary>
+    /// Gives information about the assembly or software library that was used to record this mdrf file.
+    /// </summary>
     public interface ILibraryInfo
     {
+        /// <summary>Gives the type of file that this record has been included in.</summary>
         string Type { get; }
+
+        /// <summary>Gives the name of the library that was used to generate this file.</summary>
         string Name { get; }
+
+        /// <summary>Gives the version (and date) of the library that was used to generate this file.</summary>
         string Version { get; }
 
+        /// <summary>
+        /// Gives the NVS version of this LibraryInfo which is recorded in the MDRF file.  
+        /// This NVS generally contains additional information as the same NVS in the MDRF file may be used to carry/record additional meta data about the file.
+        /// </summary>
         INamedValueSet NVS { get; }
 
+        /// <summary>This method is used to update the given <paramref name="nvs"/> to contain the lib.Type, lib.Name and lib.Version keywords that are used to carry the values from this library info object.</summary>
         NamedValueSet UpdateNVSFromThis(NamedValueSet nvs);
     }
 
+    /// <summary>
+    /// This is the standard implementation class for the ILibraryInfo interface.
+    /// </summary>
     public class LibraryInfo : ILibraryInfo
     {
+        /// <summary>Default constructor.  Sets the NVS, Type, Name and Version to be Empty.</summary>
         public LibraryInfo()
         {
             NVS = NamedValueSet.Empty;
@@ -351,6 +369,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             Version = string.Empty;
         }
 
+        /// <summary>Copy constructor.  Sets the NVS to be empty and the Type, Name and Version from the given <paramref name="other"/> instance.</summary>
         public LibraryInfo(ILibraryInfo other)
         {
             NVS = NamedValueSet.Empty;
@@ -359,12 +378,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             Version = other.Version;
         }
 
+        /// <inheritdoc/>
         public INamedValueSet NVS { get; set; }
 
+        /// <inheritdoc/>
         public string Type { get; set; }
+
+        /// <inheritdoc/>
         public string Name { get; set; }
+
+        /// <inheritdoc/>
         public string Version { get; set; }
 
+        /// <summary>Logging and Debugging helper method.</summary>
         public override string ToString()
         {
             string nvsStr = (NVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(NVS.ToStringSML()));
@@ -372,6 +398,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return "LibInfo Type:'{0}' Name:'{1}' Version:'{2}'{3}".CheckedFormat(Type, Name, Version, nvsStr);
         }
 
+        /// <summary>Updates this object's Type, Name and Version, and optionally its NVS, from the contents of the given NVS using the standard lib.Type, lib.Name, lib.Version keys.</summary>
         public LibraryInfo UpdateFrom(INamedValueSet nvs, bool updateNVSProperty = true)
         {
             if (NVS == null || updateNVSProperty)
@@ -384,6 +411,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <inheritdoc/>
         public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
         {
             nvs.SetValue("lib.Type", Type);
@@ -398,20 +426,44 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #region DateTimeInfo
 
+    /// <summary>
+    /// Gives information about the date, time, QpcTime and time zone taken when creating the headers for an mdrf file when it is being created.
+    /// </summary>
     public class DateTimeInfo
     {
+        /// <summary>
+        /// When non-null, this gives the NVS instance that is used to record, or reconstruct, the contents of this object.
+        /// </summary>
         public INamedValueSet NVS { get; set; }
 
+        /// <summary>Gives the file delta time at the point when this object was generated.  Normally this value is expected to be zero.</summary>
         public double BlockDeltaTimeStamp { get; set; }
+
+        /// <summary>Gives the QPCTime (F8 seconds since system power on) at the point when this object was generated.</summary>
         public double QPCTime { get; set; }
+
+        /// <summary>Gives the current DateTime converted UTC and represented as an F8 measurement of seconds since 1601 (same offset used with Win32 FTIME)</summary>
         public double UTCTimeSince1601 { get; set; }
+
+        /// <summary>Getter returns the UTCTimeSince1601 converted to a DateTime in UTC format.</summary>
         public DateTime UTCDateTime { get { return UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } }
+
+        /// <summary>Updated by UpdateFrom which sets this to the value from TimeZoneInfo.BaseUtcOffset.TotalSeconds for the given TimeZoneInfo and DateTime which are passed to the method</summary>
         public int TimeZoneOffset { get; set; }
+
+        /// <summary>Updated by UpdateFrom which sets this to the value from TimeZoneInfo.IsDaylightSavingTime() method for the given TimeZoneInfo and DateTime which are passed to the method</summary>
         public bool DSTIsActive { get; set; }
+
+        /// <summary>Updated by UpdateFrom as the difference between the current GetUtcOffset and the BaseUtcOffset for the given TimeZoneInfo and DateTime which are passed to the method</summary>
         public int DSTBias { get; set; }
+
+        /// <summary>Updated by UpdateFrom to give the name of the StandardTime for the TimeZoneInfo which was passed to the methoed.</summary>
         public string TZName0 { get; set; }
+
+        /// <summary>Updated by UpdateFrom to give the name of the DaylightTime for the TimeZoneInfo which was passed to the methoed.</summary>
         public string TZName1 { get; set; }
 
+        /// <summary>Default constructor</summary>
         public DateTimeInfo()
         {
             NVS = NamedValueSet.Empty;
@@ -419,24 +471,29 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             TZName1 = string.Empty;
         }
 
-        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, DateTime dtNow, double utcTimeSince1601)
+        /// <summary>
+        /// Initializes/Updates the given instance using the given <paramref name="qpcTimeStamp"/>, <paramref name="fileDeltaTimeStamp"/>, <paramref name="dtNow"/> normally in UTC format, <paramref name="utcTimeSince1601"/> and  optional <paramref name="useTZI"/>.
+        /// When <paramref name="useTZI"/> is given as null (the default), TimeZoneInfo.Local will be used in its place.
+        /// </summary>
+        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, DateTime dtNow, double utcTimeSince1601, TimeZoneInfo useTZI = null)
         {
-            var isDST = TimeZoneInfo.Local.IsDaylightSavingTime(dtNow);
-            var utcOffset = TimeZoneInfo.Local.GetUtcOffset(dtNow);
-            TimeZoneInfo localTZ = TimeZoneInfo.Local;
+            useTZI = useTZI ?? TimeZoneInfo.Local;
+            var isDST = useTZI.IsDaylightSavingTime(dtNow);
+            var utcOffset = useTZI.GetUtcOffset(dtNow);
 
             BlockDeltaTimeStamp = fileDeltaTimeStamp;
             QPCTime = qpcTimeStamp.Time;
             UTCTimeSince1601 = utcTimeSince1601;
-            TimeZoneOffset = (int)Math.Round(localTZ.BaseUtcOffset.TotalSeconds);
+            TimeZoneOffset = (int)Math.Round(useTZI.BaseUtcOffset.TotalSeconds);
             DSTIsActive = isDST;
-            DSTBias = (int)Math.Round((utcOffset - localTZ.BaseUtcOffset).TotalSeconds);
-            TZName0 = localTZ.StandardName;
-            TZName1 = localTZ.DaylightName;
+            DSTBias = (int)Math.Round((utcOffset - useTZI.BaseUtcOffset).TotalSeconds);
+            TZName0 = useTZI.StandardName;
+            TZName1 = useTZI.DaylightName;
 
             return this;
         }
 
+        /// <summary>Updates this object's contents, and optionally its NVS, from the contents of the given NVS using the standard set of keys. (key names are property names in this case)</summary>
         public DateTimeInfo UpdateFrom(INamedValueSet nvs, bool updateNVSProperty = true)
         {
             if (NVS == null || updateNVSProperty)
@@ -454,6 +511,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <summary>Updates the given <paramref name="nvs"/> from the contents this object's properies using the standard set of keys. (key names are property names in this case)</summary>
         public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
         {
             nvs.SetValue("BlockDeltaTimeStamp", BlockDeltaTimeStamp);
@@ -478,12 +536,22 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// This object generally represents a pairing of a FileDeltaTime and a DateTime.  
     /// It is also used to generate FileDeltaTime values during recording
     /// </summary>
+    /// <remarks>
+    /// There are a number of variations on how this object is used.  
+    /// Internally this object is typically generated by a top level method in one of the writer objects used here and is then used by the subordinate methods as needed.
+    /// In some cases the original creator of this object may choose to only populate the qpcTimeStamp.  
+    /// If the resulting dtPair actually needs a matching DateTime then one will be captured and used to update this object contents at that point.
+    /// </remarks>
     public class DateTimeStampPair : ICopyable<DateTimeStampPair>
     {
+        /// <summary>When non-Empty (aka non-zero) this gives the QpcTimeStamp for this pair.</summary>
         public QpcTimeStamp qpcTimeStamp;
+        /// <summary>When non-default (aka non-zero) this gives the DateTime for this pair.</summary>
         public DateTime dateTime;
+        /// <summary>When non-zero this gives the utc time zine 1601 for the given dateTime.</summary>
         public double utcTimeSince1601;
 
+        /// <summary>When correctly set this gives the FileDeltaTime (aka the difference between this QpcTime and the file's initial QpcTime)</summary>
         public double fileDeltaTimeStamp;
 
         /// <summary>Logging and debug helper</summary>
@@ -635,8 +703,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #endregion
 
-    #region FileIndexInfo, FileIndexRowBase, FileIndexLastBlockInfoBase
+    #region FileIndexInfo, TFileIndexInfo<>, FileIndexRowBase, FileIndexLastBlockInfoBase
 
+    /// <summary>
+    /// Only used with MDRF1.
+    /// </summary>
     public class FileIndexInfo : TFileIndexInfo<FileIndexRowBase, FileIndexLastBlockInfoBase>
     {
         public FileIndexInfo(SetupInfo setupInfo) : base(setupInfo) { }
@@ -663,6 +734,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
     }
 
+    /// <summary>
+    /// Only used with MDRF1.
+    /// </summary>
     public class TFileIndexInfo<TRowType, TLastBlockInfoType> 
         where TRowType: FileIndexRowBase, new()
         where TLastBlockInfoType: FileIndexLastBlockInfoBase, new()
@@ -759,7 +833,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
             int lowIndex = 0, highIndex = NumRows - 1;
 
-            FileIndexRowBase testRow = null;
+            FileIndexRowBase testRow;
 
             for (; ; )
             {
@@ -814,6 +888,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
     }
 
+    /// <summary>
+    /// Only used with MDRF1.
+    /// </summary>
     public class FileIndexRowBase
     {
         public int RowIndex { get; internal set; }
@@ -873,6 +950,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
     }
 
+    /// <summary>
+    /// Only used with MDRF1.
+    /// </summary>
     public class FileIndexLastBlockInfoBase
     {
         public Int32 FileOffsetToStartOfBlock { get; internal set; }  // 0..3
@@ -899,59 +979,115 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// </summary>
     public interface IMetaDataCommonInfo
     {
+        /// <summary>Gives the item type of this item (None, Source, Group, Occurrence)</summary>
         MDItemType ItemType { get; }
+
+        /// <summary>Gives the item's Name</summary>
         string Name { get; }
+
+        /// <summary>Gives any client provided comment for this item.</summary>
         string Comment { get; }
+
+        /// <summary>Gives the assigned FileID for this item.</summary>
         int FileID { get; }
+
+        /// <summary>Gives the ItemType specific ID for this item (if any)</summary>
         int ClientID { get; }
+
+        /// <summary>Gives the ContainerStorageType to be used with this item (as appropriate)</summary>
         ContainerStorageType CST { get; }
+
+        /// <summary>Gives the Semi.E005.Data.ItemFormatCode to be used with this item (as appropriate).  This field is only used with MDRF1 files.</summary>
         Semi.E005.Data.ItemFormatCode IFC { get; }
 
+        /// <summary>Gives the client provided NVS containing any client metadata that is to be associated with this item.</summary>
         INamedValueSet ClientNVS { get; }
     }
 
+    /// <summary>Gives information about an client defined MDRF Group</summary>
     public interface IGroupInfo : IMetaDataCommonInfo
     {
+        /// <summary>Gives the user row flag bit value that is to be recorded (merged) into any index when this group is recorded</summary>
         UInt64 FileIndexUserRowFlagBits { get; }
 
+        /// <summary>Gives the FileID values of the GroupPointInfo objects that are associated with this group.</summary>
         IList<int> GroupPointFileIDList { get; }
+
+        /// <summary>Gives the array of IGroupPointInfo instances that are associated with this group.</summary>
         IGroupPointInfo[] GroupPointInfoArray { get; }
-        
+
+        /// <summary>Gives the GroupID for this group (this is a proxy for the ClientID)</summary>
         int GroupID { get; }
 
+        /// <summary>This boolean propery is generlaly used to indicate that the group should be recoded by the mdrf writer when processing a RecordGroups method call (which then clears it).</summary>
         bool Touched { get; set; }
     }
 
+    /// <summary>Gives information about an value source point which is a member of an MDRF Group</summary>
     public interface IGroupPointInfo : IMetaDataCommonInfo
     {
+        /// <summary>Gives the current value of the point that will be recorded when the point's group is next recorded using the mdrf writer's RecordGroups method.</summary>
         ValueContainer VC { get; set; }
 
+        /// <summary>Gives the SourceID for this point (this is a proxy for the ClientID)</summary>
         int SourceID { get; }
 
+        /// <summary>Gives the IGroupInfo instance of the group that this source point is recored within.</summary>
         IGroupInfo GroupInfo { get; }
+
+        /// <summary>Gives the full name of the point (aka GroupName.PointName)</summary>
         string FullName { get; }
     }
 
+    /// <summary>Gives information about a client defined MDRF Occurrence</summary>
     public interface IOccurrenceInfo : IMetaDataCommonInfo
     {
+        /// <summary>Gives the user row flag bit value that is to be recorded (merged) into any index when this occurrence is recorded</summary>
         UInt64 FileIndexUserRowFlagBits { get; }
+
+        /// <summary>
+        /// Set to true if this occurrence is considered to be a high priority occurrence.  
+        /// When recording a group that is marked as being high priority, the FileIndexRowFlagBits.ContainsHighPriorityOccurrence will be set in the index when this occurence is recorded.
+        /// </summary>
         bool IsHighPriority { get; }
 
+        /// <summary>Gives the OccurenceID for this occurence (this is a proxy for the ClientID)</summary>
         int OccurrenceID { get; }
     }
 
+    /// <summary>
+    /// Base implementation class for IMetaDataCommonInfo objects.
+    /// </summary>
     public class MetaDataCommonInfoBase : IMetaDataCommonInfo
     {
+        /// <inheritdoc/>
         public MDItemType ItemType { get; set; }
+
+        /// <inheritdoc/>
         public string Name { get; set; }
+
+        /// <inheritdoc/>
         public string Comment { get; set; }
+
+        /// <inheritdoc/>
         public int FileID { get; set; }
+
+        /// <inheritdoc/>
         public int ClientID { get; set; }
+
+        /// <inheritdoc/>
         public ContainerStorageType CST { get; set; }
+
+        /// <inheritdoc/>
         public Semi.E005.Data.ItemFormatCode IFC { get; set; }
+
+        /// <inheritdoc/>
         public INamedValueSet ClientNVS { get; set; }
 
+        /// <summary>Default constructor</summary>
         public MetaDataCommonInfoBase() {}
+
+        /// <summary>Copy constructor</summary>
         public MetaDataCommonInfoBase(MetaDataCommonInfoBase other)
         {
             ItemType = other.ItemType;
@@ -964,6 +1100,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             ClientNVS = other.ClientNVS;
         }
 
+        /// <summary>Logging and Debugging helper method</summary>
         public override string ToString()
         {
             string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
@@ -973,12 +1110,31 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
     }
 
+    /// <summary>
+    /// Contains the union of all of the IMDRFDataCommonInfo items that are used with a given file or writter along with corresponding dictionary instances that are used with these SpecItems.
+    /// This class is generally only used with MDRF2 readers.
+    /// </summary>
     public class SpecItemSet
     {
+        /// <summary>Gives the set of all spec items that are associated with a given writter, or which have been read from a given file's header information.</summary>
         public IMetaDataCommonInfo[] SpecItems { get; set; }
+
+        /// <summary>Gives a dictionary of all of the IOccurrenceInfo type SpecItem instances indexed by their Names.</summary>
         public IDictionaryWithCachedArrays<string, IOccurrenceInfo> OccurrenceDictionary { get; set; }
+
+        /// <summary>Gives a dictionary of all of the IGroupInfo type SpecItem instances indexed by their Names.</summary>
         public IDictionaryWithCachedArrays<string, IGroupInfo> GroupDictionary { get; set; }
+
+        /// <summary>Gives a dictionary of all of the IGroupPointInfo type SpecItem instances indexed by their FullNames.</summary>
         public IDictionaryWithCachedArrays<string, IGroupPointInfo> PointFullNameDictionary { get; set; }
+
+        /// <summary>
+        /// Gives a dictionary of the IGroupPointInfo type SpecItem instances indexed by their Alias(es) as appropriate.
+        /// <para/>Point aliases are established at the point level using the Alias [A] or Aliases [LS] keys in the point's ClientNVS 
+        /// or by using the PointAliases [NVS] key in a group's ClientNVS or in the file wide ClientNVS.  
+        /// In a group the PointAliases NVS gives alias=pointName while at the global level the PointAliases NVS gives alias=pointFullName.
+        /// Each alias key is required to be unique within the space of all the file's aliases.
+        /// </summary>
         public IDictionaryWithCachedArrays<string, IGroupPointInfo> PointAliasDictionary { get; set; }
     }
 
@@ -987,6 +1143,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// </summary>
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// This EM takes a given <paramref name="mdci"/> instance and updates a given <paramref name="nvs"/> with its' (ItemType specific) values.
+        /// The keys used here match the property names.
+        /// </summary>
         public static NamedValueSet UpdateNVSFromThis(this IMetaDataCommonInfo mdci, NamedValueSet nvs)
         {
             nvs.SetValue("Name", mdci.Name);
@@ -1016,6 +1176,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return nvs;
         }
 
+        /// <summary>
+        /// This EM takes a given <paramref name="setupInfoNVSSet"/> list of NVS instances and generates a SpecItemSet from the set of SpecItemNVS items it contains including generation of each of the related dictionaries.
+        /// </summary>
         public static SpecItemSet CreateSpecItemSet(this IList<INamedValueSet> setupInfoNVSSet, INamedValueSet clientNVS = null, bool rethrow = true)
         {
             var specItems = setupInfoNVSSet.Select(nvs => nvs.CreateMDCI(rethrow: rethrow)).WhereIsNotDefault().ToArray();
@@ -1074,6 +1237,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return specSet;
         }
 
+        /// <summary>
+        /// This EM takes a given SpecItem <paramref name="nvs"/> and generates and returns a specific type of IMetaDataCommonInfo instance based on the contents of the NVS.
+        /// This method currently supports Occurence, Group and Source ItemTypes.
+        /// </summary>
         public static IMetaDataCommonInfo CreateMDCI(this INamedValueSet nvs, bool rethrow = true, IMetaDataCommonInfo fallbackValue = null)
         {
             var itemTypeVC = nvs["ItemType"].VC;
@@ -1142,6 +1309,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return fallbackValue;
         }
 
+        /// <summary>
+        /// This method is used to "merge" multiple SpecItemSets, from multiple MDRF files, into a single merged SpecItemSet that is returned.
+        /// In general the resulting dictionaries will contain the names and last IMetaDataCommonInfo instance from any of the given SpecItemSet instances that were given.
+        /// </summary>
         public static SpecItemSet Merge(this IEnumerable<SpecItemSet> specItemSetSet)
         {
             Dictionary<string, IMetaDataCommonInfo> specItemDict = new Dictionary<string, IMetaDataCommonInfo>();
@@ -1173,43 +1344,76 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
     }
 
+    /// <summary>
+    /// Common implementation class for the IGroupInfo interface.
+    /// </summary>
     public class GroupInfo : MetaDataCommonInfoBase, IGroupInfo
     {
+        /// <inheritdoc/>
         public UInt64 FileIndexUserRowFlagBits { get; internal set; }
 
+        /// <inheritdoc/>
         public IList<int> GroupPointFileIDList { get; internal set; }
+
+        /// <inheritdoc/>
         public IGroupPointInfo[] GroupPointInfoArray { get; internal set; }
 
+        /// <inheritdoc/>
         public int GroupID { get { return ClientID; } }
 
+        /// <inheritdoc/>
         public bool Touched { get; set; }
 
+        /// <summary>Default constructor</summary>
         public GroupInfo() { }
+
+        /// <summary>Copy constructor</summary>
         public GroupInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
     }
 
+    /// <summary>
+    /// Common implementation class for the IGroupPointInfo interface.
+    /// </summary>
     public class GroupPointInfo : MetaDataCommonInfoBase, IGroupPointInfo
     {
+        /// <inheritdoc/>
         public ValueContainer VC { get; set; }
 
+        /// <inheritdoc/>
         public int SourceID { get { return ClientID; } }
 
+        /// <inheritdoc/>
         public IGroupInfo GroupInfo { get; set; }
+
+        /// <inheritdoc/>
         public string FullName { get { return _FullName ?? (_FullName = "{0}.{1}".CheckedFormat(GroupInfo.Name, Name)); } }
         private string _FullName;
 
+        /// <summary>Default constructor</summary>
         public GroupPointInfo() { }
+
+        /// <summary>Copy constructor</summary>
         public GroupPointInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
     }
 
+    /// <summary>
+    /// Common implementation class for the IOccurenceInfo interface.
+    /// </summary>
     public class OccurrenceInfo : MetaDataCommonInfoBase, IOccurrenceInfo
     {
+        /// <inheritdoc/>
         public UInt64 FileIndexUserRowFlagBits { get; internal set; }
+
+        /// <inheritdoc/>
         public bool IsHighPriority { get; internal set; }
 
+        /// <inheritdoc/>
         public int OccurrenceID { get { return ClientID; } }
 
+        /// <summary>Default constructor</summary>
         public OccurrenceInfo() { }
+
+        /// <summary>Copy constructor</summary>
         public OccurrenceInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
     }
 
@@ -1219,21 +1423,25 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public static partial class ExtensionMethods
     {
+        /// <summary>EM converts the given <paramref name="igiArray"/> set of IGroupInfo instances to a NamedValueSet of of NVSs (one per group info)</summary>
         public static INamedValueSet ConvertToNVS(this IGroupInfo[] igiArray)
         {
             return new NamedValueSet(igiArray.Select(igi => igi.ConvertToNV())).MakeReadOnly();
         }
 
+        /// <summary>EM converts the given <paramref name="igpiArray"/> set of IGroupPointInfo instances to a NamedValueSet of of NVSs (one per group point info)</summary>
         public static INamedValueSet ConvertToNVS(this IGroupPointInfo[] igpiArray)
         {
             return new NamedValueSet(igpiArray.Select(igpi => igpi.ConvertToNV())).MakeReadOnly();
         }
 
+        /// <summary>EM converts the given <paramref name="ioiArray"/> set of IOccurrenceInfo instances to a NamedValueSet of of NVSs (one per group info)</summary>
         public static INamedValueSet ConvertToNVS(this IOccurrenceInfo[] ioiArray)
         {
             return new NamedValueSet(ioiArray.Select(ioi => ioi.ConvertToNV())).MakeReadOnly();
         }
 
+        /// <summary>EM converts the given <paramref name="igi"/> IGroupInfo instance to a NamedValue containing an NVS</summary>
         public static INamedValue ConvertToNV(this IGroupInfo igi)
         {
             return new NamedValue(igi.Name, new NamedValueSet() 
@@ -1245,6 +1453,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 }).MakeReadOnly();
         }
 
+        /// <summary>EM converts the given <paramref name="igpi"/> IGroupPointInfo instance to a NamedValue containing an NVS</summary>
         public static INamedValue ConvertToNV(this IGroupPointInfo igpi)
         {
             return new NamedValue(igpi.Name, new NamedValueSet() 
@@ -1256,6 +1465,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 }).MakeReadOnly();
         }
 
+        /// <summary>EM converts the given <paramref name="ioi"/> IOccurrenceInfo instance to a NamedValue containing an NVS</summary>
         public static INamedValue ConvertToNV(this IOccurrenceInfo ioi)
         {
             return new NamedValue(ioi.Name, new NamedValueSet() 
@@ -1272,19 +1482,35 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #region IMessageInfo
 
+    /// <summary>Only used with MDRF1 file reader.</summary>
     public interface IMessageInfo
     {
+        /// <summary>Gives the "FixedBlockTypeID" of the records from which this message was obtained.  Typically either ErrorV1 or MessageV1</summary>
         FixedBlockTypeID FixedBlockTypeID { get; }
+
+        /// <summary>Gives the FileDeltaTimeStamp of this record</summary>
         double FileDeltaTimeStamp { get; }
+
+        /// <summary>Gives the UTC1602 DateTime value when this message was generated.</summary>
         double MessageRecordedUtcTime { get; }
+
+        /// <summary>Gives the contained message (text/string)</summary>
         string Message { get; }
     }
 
+    /// <summary>Only used with MDRF1 file reader.</summary>
     public class MessageInfo : IMessageInfo
     {
+        /// <inheritdoc/>
         public FixedBlockTypeID FixedBlockTypeID { get; set; }
+
+        /// <inheritdoc/>
         public double FileDeltaTimeStamp { get; set; }
+
+        /// <inheritdoc/>
         public double MessageRecordedUtcTime { get; set; }
+
+        /// <inheritdoc/>
         public string Message { get; set; }
     }
 
@@ -1296,6 +1522,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// This leaves the entire usable range of 16383 2 byte ID values to be used by the client while still supporting 32 bit
     /// centric library versions.
     /// <para/>This library uses predefined fixed block IDs in the range of 0x00000000 through 0x0000000f, 0x3fff0000 through 0x3fffffff and 0x7fff0000 through 0x7fffffff
+    /// <para/>None (0x0), TiomeStampUpdateV1 (0x01), Object (0x02), FirstDynamicallyAssignedID (0x10), FileHeaderV1 (0x7fffba5e), FileEndV1 (0x7fffc105), FileIndexV1 (0x3fff0001), MetaDataV1 (0x3fff0002), ErrorV1 (0x3fff0003), MessageV1 (0x3fff0004), DateTimeV1 (0x3fff0006)
     /// </summary>
     public enum FixedBlockTypeID : int
     {
@@ -1419,15 +1646,26 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         #region F4 <-> U4, F8 <-> U8 conversion
 
+        /// <summary>EM re-interprets the binary contents of the given <paramref name="u4"/> as an F4 (uses ValueContainer.Union)</summary>
         public static Single CastToF4(this UInt32 u4) { ValueContainer.Union u = emptyU; u.u32 = u4; return u.f32; }
+
+        /// <summary>EM re-interprets the binary contents of the given <paramref name="u8"/> as an F8 (uses ValueContainer.Union)</summary>
         public static Double CastToF8(this UInt64 u8) { ValueContainer.Union u = emptyU; u.u64 = u8; return u.f64; }
+
+        /// <summary>EM re-interprets the binary contents of the given <paramref name="f4"/> as an U4 (uses ValueContainer.Union)</summary>
         public static UInt32 CastToU4(this Single f4) { ValueContainer.Union u = emptyU; u.f32 = f4; return u.u32; }
+
+        /// <summary>EM re-interprets the binary contents of the given <paramref name="f8"/> as an U8 (uses ValueContainer.Union)</summary>
         public static UInt64 CastToU8(this Double f8) { ValueContainer.Union u = emptyU; u.f64 = f8; return u.u64; }
 
         #endregion
 
         #region U8Auto (et. al.) related: DecodeU8Auto, AppendU8Auto, AppendU4Auto, AppendU2Auto
 
+        /// <summary>
+        /// MDRF1 only: decodes bytes from <paramref name="byteArray"/> at the given <paramref name="startIndex"/> as a variable length U8.  
+        /// Sets the given <paramref name="ec"/> to be non-empty if the bytes do not specify a valid variable length encoded U8.
+        /// </summary>
         public static UInt64 DecodeU8Auto(this byte[] byteArray, ref int startIndex, ref string ec)
         {
             UInt64 u64 = 0;
@@ -1500,6 +1738,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return u64;
         }
 
+        /// <summary>
+        /// This EM encodes the given <paramref name="valueU8"/> as a variable length U8 and appends the resulting bytes to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendU8Auto(this List<byte> byteArrayBuilder, UInt64 valueU8)
         {
             if ((valueU8 & ~0x0ffffu) == 0)
@@ -1565,6 +1806,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             }
         }
 
+        /// <summary>
+        /// This EM encodes the given <paramref name="valueU4"/> as a variable length U8 and appends the resulting bytes to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendU4Auto(this List<byte> byteArrayBuilder, UInt32 valueU4)
         {
             if ((valueU4 & ~0x0ffffu) == 0)
@@ -1599,6 +1843,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             }
         }
 
+        /// <summary>
+        /// This EM encodes the given <paramref name="valueU2"/> as a variable length U8 and appends the resulting bytes to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendU2Auto(this List<byte> byteArrayBuilder, UInt16 valueU2)
         {
             byte b0, b1;

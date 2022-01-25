@@ -14,7 +14,7 @@ and charting software.
 
 ## System requirements
 
-This tool has been tested on Windows 10, Windows 7, and Windows XP.  
+This tool has been tested on Windows 10, Windows 7.  
 
 This tool requires that the target computer already has the Microsoft DotNet 4 Client Profile product 
 installed (or any superset of that such as the full version of Microsoft DotNet 4).
@@ -40,7 +40,7 @@ as Excel.
 
 This program is typically run from a Console command line or using a batch file.  The use of a batch 
 file simplifies the ability to perform a set of pre-defined extraction operations and is typically 
-used on all MDRF files in a given directory by using wildcard expansion (*.mdrf for example).
+used on all MDRF files in a given directory by using wildcard expansion (*.mdrf or *.mdrf2.lz4 for example).
 
 If the program is run without any arguments it will produce (nearly) the following usage (help) 
 output:
@@ -48,9 +48,9 @@ output:
 ```
 Usage: 
 
-ExtractMDRFtoCSV [-IncludeOccurrences | -IncludeExtras | -Sparse | -NoData | -HeaderAndDataOnly | -MapBool | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period | -group:name | -tag:tag] [fileName.mdrf] ...
+ExtractMDRFtoCSV [-IncludeOccurrences | -IncludeExtras | -Sparse | -NoData | -HeaderAndDataOnly | -MapBool | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period | -group:name | -tag:tag] [fileName.mdrf|.mdrf2|.mdrf2.lz4|.mdrf2.gz] ...
 
-ExtractMDRFtoCSV [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo | -ListOccurrences | -ListMessages] [fileName.mdrf] ...
+ExtractMDRFtoCSV [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo | -ListOccurrences | -ListMessages] [fileName.mdrf|.mdrf2|.mdrf2.lz4|.mdrf2.gz] ...
 
     Also accepts alternates -io, -ie, -s, -nd, -hado, -mb, -i:interval, -s:dt, -e:dt, -g:name, -t:tag, -l, -li, -lgi, -loi, -lo, and -lm
 ```

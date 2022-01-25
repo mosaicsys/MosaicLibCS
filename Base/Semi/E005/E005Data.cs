@@ -215,7 +215,7 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.String: ifc = ItemFormatCode.A; return true;      // this can actually be either A or W
                 case ContainerStorageType.Boolean: ifc = ItemFormatCode.Bo; return true;
                 case ContainerStorageType.Binary: ifc = ItemFormatCode.Bi; return true;
-                case ContainerStorageType.Object: ifc = ItemFormatCode.L; return true;
+                case ContainerStorageType.Object: ifc = ItemFormatCode.L; return true;  // this is not a great choice
                 case ContainerStorageType.SByte: ifc = ItemFormatCode.I1; return true;
                 case ContainerStorageType.Int16: ifc = ItemFormatCode.I2; return true;
                 case ContainerStorageType.Int32: ifc = ItemFormatCode.I4; return true;
@@ -1479,9 +1479,7 @@ namespace MosaicLib.Semi.E005.Data
         }
     }
 
-    /// <summary>
-    /// Helper class for generating a list representation of a NamedValueSet.
-    /// </summary>
+    /// <summary>Helper class for generating a list representation of a NamedValueSet.</summary>
     public class NamedValueSetBuilder : ValueContainerBuilderBase, System.Collections.IEnumerable
     {
         /// <summary>
@@ -1594,11 +1592,18 @@ namespace MosaicLib.Semi.E005.Data
         }
     }
 
-    /// <summary>
-    /// Helper class for generating a list representation of a single NamedValue object
-    /// </summary>
+    /// <summary>Helper class for generating a list representation of a single NamedValue object</summary>
     public class NamedValueBuilder : ValueContainerBuilderBase
     {
+        /// <summary>Default Constructor</summary>
+        public NamedValueBuilder() { }
+
+        /// <summary>Content builder variant</summary>
+        public NamedValueBuilder(string name, ValueContainer vc) { NamedValue = new NamedValue(name, vc); }
+
+        /// <summary>Content builder variant</summary>
+        public NamedValueBuilder(string name, object value) { NamedValue = new NamedValue(name, value); }
+
         /// <summary>
         /// Gives the INamedValue instance that the contents will be built from.
         /// </summary>
@@ -1848,7 +1853,7 @@ namespace MosaicLib.Semi.E005.Data
 
     #endregion
 
-    #region Shorthand types (L, VCB, A, W, Bi, Bo, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, ShorthandValueBuilderBase<>)
+    #region Shorthand types (L, VCB, A, W, Bi, Bo, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, ShorthandValueBuilderBase<>, NV, NVS)
 
     /// <summary>
     /// Shorthand for simplified version of ListValueBuilder
@@ -2045,6 +2050,23 @@ namespace MosaicLib.Semi.E005.Data
 
         private TValueType _value = default(TValueType);
     }
+
+    /// <summary>Shorthand name version of helper class for generating a list representation of a single NamedValue object</summary>
+    public class NVB : NamedValueBuilder
+    {
+        /// <summary>Default Constructor</summary>
+        public NVB() : base() { }
+
+        /// <summary>Content builder variant</summary>
+        public NVB(string name, ValueContainer vc) : base(name, vc) { }
+
+        /// <summary>Content builder variant</summary>
+        public NVB(string name, object value) : base(name, value) { }
+    }
+
+    /// <summary>Shorthand name version of helper class for generating a list representation of a NamedValueSet.</summary>
+    public class NVSB : NamedValueSetBuilder
+    { }
 
     #endregion
 

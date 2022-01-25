@@ -22,11 +22,9 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
-using MosaicLib;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
 

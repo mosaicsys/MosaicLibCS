@@ -1071,7 +1071,9 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// <summary>
     /// Flags used with ISubstrateTrackerBase.ServiceBasicSJSStateChangeTriggers to control which of its available behaviors shall be enabled for a given use situation.
     /// <para/>None (0x00), EnableInfoTriggeredRules (0x01), EnableWaitingForStartRules (0x02), EnableAutoStart (0x04), EnablePausingRules (0x08),
-    /// EnableStoppingRules (0x10), EnableAbortingRules (0x20), EnableRunningRules (0x40), EnableAbortedAtWork(0x80), EnableHeldRules(0x100), EnablePausedRules(0x200), All (0x3ff)
+    /// EnableStoppingRules (0x10), EnableAbortingRules (0x20), EnableRunningRules (0x40), EnableAbortedAtWork(0x80), EnableHeldRules(0x100), EnablePausedRules(0x200), 
+    /// EnableWaitingForPrepareRules (0x400), UseWaitingForPrepare (0x800),
+    /// All (0x7ff)
     /// </summary>
     [Flags]
     public enum ServiceBasicSJSStateChangeTriggerFlags : int
@@ -1087,8 +1089,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         EnableAbortedAtWork = 0x80,
         EnableHeldRules = 0x100,        // now also applies to Stranded
         EnablePausedRules = 0x200,
+        EnableWaitingForPrepareRules = 0x400,
+        UseWaitingForPrepare = 0x800,
 
-        All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules | EnableHeldRules | EnablePausedRules),
+        All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules | EnableHeldRules | EnablePausedRules | EnableWaitingForPrepareRules),
     }
 
     /// <summary>
@@ -1395,6 +1399,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             bool enableInfoTriggeredRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableInfoTriggeredRules) != 0);
             bool enableWaitingForStartRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableWaitingForStartRules) != 0);
+            bool enableWaitingForPrepareRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableWaitingForPrepareRules) != 0);
             bool enableAutoStart = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart) != 0);
             bool enablePausingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnablePausingRules) != 0);
             bool enableStoppingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableStoppingRules) != 0);
@@ -1402,6 +1407,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             bool enableRunningRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableRunningRules) != 0);
             bool enableHeldOrStrandedRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableHeldRules) != 0);
             bool enablePausedRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnablePausedRules) != 0);
+            bool useWaitingForPrepare = ((flags & ServiceBasicSJSStateChangeTriggerFlags.UseWaitingForPrepare) != 0);
 
             var stInfo = Info;
             bool isUpdateNeededOrIsMotionPending = IsUpdateNeeded || IsMotionPending;
@@ -1480,10 +1486,31 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                         {
                             if (SubstrateJobRequestState == SubstrateJobRequestState.Run && enableAutoStart)
                             {
-                                nextSJS = SubstrateJobState.Running;
+                                nextSJS = (useWaitingForPrepare) ? SubstrateJobState.WaitingForPrepare : SubstrateJobState.Running;
                                 reason = "Run requested";
                             }
                             else if (SubstrateJobRequestState == SubstrateJobRequestState.Pause)
+                            {
+                                nextSJS = SubstrateJobState.Pausing;
+                                reason = "Pause requested";
+                            }
+                            else if (SubstrateJobRequestState == SubstrateJobRequestState.Stop)
+                            {
+                                nextSJS = SubstrateJobState.Stopping;
+                                reason = "Stop requested";
+                            }
+                            else if (SubstrateJobRequestState == SubstrateJobRequestState.Abort)
+                            {
+                                nextSJS = SubstrateJobState.Aborting;
+                                reason = "Abort requested";
+                            }
+                        }
+                        break;
+
+                    case SubstrateJobState.WaitingForPrepare:
+                        if (enableWaitingForPrepareRules)
+                        {
+                            if (SubstrateJobRequestState == SubstrateJobRequestState.Pause)
                             {
                                 nextSJS = SubstrateJobState.Pausing;
                                 reason = "Pause requested";
@@ -1559,7 +1586,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                             else if (stsIsAtSource)
                             {
                                 nextSJS = SubstrateJobState.Skipped;
-                                reason = "Stop completed (skipped)";
+                                reason = "Stop completed (Skipped)";
                             }
                         }
                         break;
@@ -1570,7 +1597,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                             if (stsIsAtSource)
                             {
                                 nextSJS = SubstrateJobState.Skipped;
-                                reason = "Abort completed (skipped)";
+                                reason = "Abort completed (Skipped)";
                             }
                         }
                         break;
@@ -1624,11 +1651,22 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
             }
 
-            // perform common Skipped detection and handling on transition to nextSJS for Stopping and Aborting cases
-            if ((nextSJS == SubstrateJobState.Stopping || nextSJS == SubstrateJobState.Aborting) && stsIsAtSource && !isFinalOrNull)
+            // perform common Skipped and Paused detection and handling on transition to nextSJS for Stopping and Aborting cases
+            if (stsIsAtSource && !isFinalOrNull)
             {
-                nextSJS = SubstrateJobState.Skipped;
-                reason = "{0} (skip)".CheckedFormat(reason);
+                switch (nextSJS)
+                {
+                    case SubstrateJobState.Pausing:
+                        nextSJS = SubstrateJobState.Paused;
+                        reason = "{0} (Paused AtSource)".CheckedFormat(reason);
+                        break;
+                    case SubstrateJobState.Stopping:
+                    case SubstrateJobState.Aborting:
+                        nextSJS = SubstrateJobState.Skipped;
+                        reason = "{0} (Skipped AtSource)".CheckedFormat(reason);
+                        break;
+                    default: break;
+                }
             }
 
             if (nextSJS != SubstrateJobState.Initial && stInfo.SJS != nextSJS)
@@ -1880,7 +1918,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessStepCompleted, spsOther;
 
-        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsStranded, sjsOther;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsWaitingForStart, sjsWaitingForPrepare, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsStranded, sjsOther;
 
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsAbortedAtDestination;
 
@@ -1909,6 +1947,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     && spsProcessStepCompleted == other.spsProcessStepCompleted
                     && spsOther == other.spsOther
                     && sjsWaitingForStart == other.sjsWaitingForStart
+                    && sjsWaitingForPrepare == other.sjsWaitingForPrepare
                     && sjsRunning == other.sjsRunning
                     && sjsProcessed == other.sjsProcessed
                     && sjsRejected == other.sjsRejected
@@ -1943,7 +1982,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             spsProcessed = spsStopped = spsRejected = spsAborted = spsSkipped = spsLost = 0;
             spsProcessStepCompleted = spsOther = 0;
 
-            sjsWaitingForStart = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsStranded = sjsOther = 0;
+            sjsWaitingForStart = sjsWaitingForPrepare = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsStranded = sjsOther = 0;
             sjsAbortedAtDestination = 0;
 
             motionPendingCount = 0;
@@ -2008,6 +2047,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             switch (inferredSJS)
             {
                 case SubstrateJobState.WaitingForStart: sjsWaitingForStart++; break;
+                case SubstrateJobState.WaitingForPrepare: sjsWaitingForPrepare++; break;
                 case SubstrateJobState.Running: sjsRunning++; break;
                 case SubstrateJobState.Processed: sjsProcessed++; break;
                 case SubstrateJobState.Rejected: sjsRejected++; break;
@@ -2084,6 +2124,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             return new NamedValueSet()
             {
                 { "WaitingForStart", sjsWaitingForStart },
+                { "WaitingForPrepare", sjsWaitingForPrepare },
                 { "Running", sjsRunning },
                 { "Processed", sjsProcessed },
                 { "Rejected", sjsRejected },

@@ -470,7 +470,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
         }
 
         System.Diagnostics.Process[] processes;
-        TimeSpan getElpased;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "debugging support")]
+        private TimeSpan getElpased;
 
         Dictionary<int, ProcessTracker> trackedProcessDictionary = new Dictionary<int, ProcessTracker>();
 
@@ -484,7 +485,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
         {
             foreach (var p in processes)
             {
-                ProcessTracker pt = null;
+                ProcessTracker pt;
 
                 if (trackedProcessDictionary.TryGetValue(p.Id, out pt) && pt != null)
                 {

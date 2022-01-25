@@ -592,6 +592,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 if (substrateStateTally.sjsWaitingForStart > 0)
                     nextBusyReason = "Substrates are waiting for start";
+                else if (substrateStateTally.sjsWaitingForPrepare > 0)
+                    nextBusyReason = "Substrates are waiting for prepare";
                 else if (substrateStateTally.sjsRunning > 0)
                     nextBusyReason = "Substrates are in process";
                 else if (substrateStateTally.sjsStopping + substrateStateTally.sjsAborting + substrateStateTally.sjsPausing + substrateStateTally.sjsReturning > 0)
@@ -907,6 +909,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                                 switch (Info.SJS)
                                 {
                                     case SubstrateJobState.WaitingForStart:
+                                    case SubstrateJobState.WaitingForPrepare:
                                     case SubstrateJobState.Running:
                                     case SubstrateJobState.Stopping:
                                     case SubstrateJobState.Pausing:
@@ -988,7 +991,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             switch (Info.SJS)
             {
-                case E090.SubstrateJobState.WaitingForStart:
+                case SubstrateJobState.WaitingForStart:
+                case SubstrateJobState.WaitingForPrepare:
                     if (stepSpec != null && isProcessMaterialMovementEnabled)
                     {
                         // tell the caller where the substrate needs to be next in order to be able to start processing - this allows the caller to delay the running transition until the next process location is ready/empty if desired.
@@ -1003,10 +1007,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         return ReadOnlyIList<string>.Empty;
                     }
 
-                case E090.SubstrateJobState.Running:
-                case E090.SubstrateJobState.Stopping:
-                case E090.SubstrateJobState.Pausing:
-                case E090.SubstrateJobState.Held:       // Held is handled like Running for purposes of determining the next loc name list contents
+                case SubstrateJobState.Running:
+                case SubstrateJobState.Stopping:
+                case SubstrateJobState.Pausing:
+                case SubstrateJobState.Held:       // Held is handled like Running for purposes of determining the next loc name list contents
                     if (stepSpec != null)
                     {
                         if (isProcessMaterialMovementEnabled)
@@ -1049,8 +1053,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         return ReadOnlyIList<string>.Empty;
                     }
 
-                case E090.SubstrateJobState.Returning:
-                case E090.SubstrateJobState.Aborting:
+                case SubstrateJobState.Returning:
+                case SubstrateJobState.Aborting:
                     if (Info.STS.IsAtWork() && isRecoveryMaterialMovementEnabled)
                         return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
                     else
@@ -1078,6 +1082,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             evalInfo.Clear();
 
             var isProcessMaterialMovementEnabled = stateToTool.IsProcessMaterialMovementEnabled();
+            var isProcssStepExecutionEnabled = stateToTool.IsProcessStepExecutionEnabled();
             var isRecoveryMaterialMovementEnabled = stateToTool.IsRecoveryMaterialMovementEnabled();
 
             bool isUsable = true;
@@ -1085,7 +1090,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             switch (st.Info.SJS)
             {
                 case SubstrateJobState.WaitingForStart:
-                    if (alreadyFoundFirstWaitingForStartSubstrate || !isProcessMaterialMovementEnabled)
+                    if (alreadyFoundFirstWaitingForStartSubstrate || !isProcessMaterialMovementEnabled || !isProcssStepExecutionEnabled)
+                        isUsable = false;
+                    break;
+                case SubstrateJobState.WaitingForPrepare:
+                    if (!isProcessMaterialMovementEnabled || !isProcssStepExecutionEnabled)
                         isUsable = false;
                     break;
                 case SubstrateJobState.Running:
@@ -1143,26 +1152,37 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             evalInfo.nextStationEvalList.AddRange((nextLocNameList ?? ReadOnlyIList<string>.Empty).Select(locName => new StationEvaluationItem(AllLocObserverDictionary.SafeTryGetValue(locName), ECSParts)));
 
+            bool isAtWork = st.Info.STS.IsAtWork(); // aka it is not at source or destination.
+
             EvaluationInfo.Flags flags = default(EvaluationInfo.Flags);
 
-            flags.hasBeenStarted = (st.Info.SJS != SubstrateJobState.WaitingForStart);
+            flags.readyToStart = (st.Info.SJS == SubstrateJobState.WaitingForStart && st.Info.SJRS == SubstrateJobRequestState.Run);
+            flags.hasBeenStarted = (st.Info.SJS != SubstrateJobState.WaitingForStart && st.Info.SJS != SubstrateJobState.Paused);
+            flags.readyToPrepare = (st.Info.SJS == SubstrateJobState.WaitingForPrepare && st.Info.SJRS == SubstrateJobRequestState.Run);
+            flags.hasBeenPrepared = flags.hasBeenStarted && (st.Info.SJS != SubstrateJobState.WaitingForPrepare);
+            flags.readyToRun = !flags.readyToStart && !flags.readyToPrepare && (isAtWork || st.Info.SJRS == SubstrateJobRequestState.Run);
+
             bool isSJSRunningOrStoppingOrPausing = (st.Info.SJS == SubstrateJobState.Running || st.Info.SJS == SubstrateJobState.Stopping || st.Info.SJS == SubstrateJobState.Pausing);
 
             flags.wantsToBeHere = (nextLocNameList ?? ReadOnlyIList<string>.Empty).Contains(st.Info.LocID);
             flags.wantsToMove = !nextLocNameList.IsNullOrEmpty() && !flags.wantsToBeHere;
+
             flags.isInProcessOrPendingProcess = (st.CurrentStationProcessICF != null);
-            flags.canStartProcessStepHereNow = (flags.wantsToBeHere && isSJSRunningOrStoppingOrPausing && !flags.isInProcessOrPendingProcess);
+            flags.canStartProcessStepHereNow = (isAtWork && flags.wantsToBeHere && isSJSRunningOrStoppingOrPausing && !flags.isInProcessOrPendingProcess);
 
             if (flags.wantsToMove && !flags.isInProcessOrPendingProcess)
             {
                 evalInfo.firstCanMoveToStationEval = evalInfo.nextStationEvalList.FirstOrDefault(stationEval => stationEval.isAvailableMoveTarget);
                 evalInfo.firstCanSwapAtStationEval = evalInfo.nextStationEvalList.FirstOrDefault(stationEval => stationEval.isAvailableSwapTarget);
 
-                flags.canBeMovedNow = !flags.isInProcessOrPendingProcess && evalInfo.firstCanMoveToStationEval.isAvailableMoveTarget;
-                flags.canBeSwappedNow = !flags.isInProcessOrPendingProcess && evalInfo.firstCanSwapAtStationEval.isAvailableSwapTarget;
+                flags.haveAvailableMoveTarget = !flags.isInProcessOrPendingProcess && evalInfo.firstCanMoveToStationEval.isAvailableMoveTarget;
+                flags.haveAvailableSwapTarget = !flags.isInProcessOrPendingProcess && evalInfo.firstCanSwapAtStationEval.isAvailableSwapTarget;
+
+                flags.canBeMovedNow = flags.hasBeenStarted && flags.haveAvailableMoveTarget;
+                flags.canBeSwappedNow = flags.hasBeenStarted && flags.haveAvailableSwapTarget;
             }
 
-            if (flags.wantsToMove && !flags.canBeMovedNow && !flags.canBeSwappedNow && !flags.isInProcessOrPendingProcess)
+            if (flags.hasBeenStarted && flags.wantsToMove && !flags.haveAvailableMoveTarget && !flags.haveAvailableSwapTarget && !flags.isInProcessOrPendingProcess)
             {
                 evalInfo.firstPossibleAlmostAvailableForApproachToStationEval = evalInfo.nextStationEvalList.Where(stationEval => stationEval.isPossibleAlmostAvailableToApproachTarget).OrderBy(stationEval => stationEval.GetITPS().GetEstimatedTimeToAvailable(qpcTimeStamp)).FirstOrDefault();
 
@@ -1200,9 +1220,22 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             public struct Flags
             {
+                /// <summary>SJS is WaitingForStart and SJRS is Run</summary>
+                public bool readyToStart;
+                /// <summary>SJS is not WaitingForStart and is not Paused</summary>
                 public bool hasBeenStarted;
+
+                /// <summary>SJS is WaitingForPrepare and SJRS is Run</summary>
+                public bool readyToPrepare;
+                /// <summary>SJS is neither WaitingForStart nor WaitingForPrepare</summary>
+                public bool hasBeenPrepared;
+
+                /// <summary>!readyToStart &amp;&amp; !readyToPrepare &amp;&amp; (!isAtSource || SRJS == Run)</summary>
+                public bool readyToRun;
+
                 public bool wantsToBeHere, wantsToMove;
                 public bool isInProcessOrPendingProcess, canStartProcessStepHereNow;
+                public bool haveAvailableMoveTarget, haveAvailableSwapTarget;
                 public bool canBeMovedNow, canBeSwappedNow;
                 public bool havePossibleAlmostAvailableForApproach;
                 public bool isOnRobotArm;
@@ -1212,9 +1245,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 public bool IsAnyFlagSet
                 {
-                    get { return (hasBeenStarted 
+                    get { return (readyToStart || hasBeenStarted || readyToPrepare || hasBeenPrepared
+                                 || readyToRun
                                  || wantsToBeHere || wantsToMove 
                                  || isInProcessOrPendingProcess || canStartProcessStepHereNow 
+                                 || haveAvailableMoveTarget || haveAvailableSwapTarget
                                  || canBeMovedNow || canBeSwappedNow 
                                  || havePossibleAlmostAvailableForApproach 
                                  || isOnRobotArm
@@ -1346,6 +1381,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         public bool EnableAutoResumeFromStranded { get; set; }
 
         public ServiceBasicSJSStateChangeTriggerFlags ServiceBasicSJSStateChangeTriggerFlags { get; set; }
+
+        public bool UseWaitingForPrepare
+        {
+            get { return ServiceBasicSJSStateChangeTriggerFlags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.UseWaitingForPrepare); }
+            set { ServiceBasicSJSStateChangeTriggerFlags = ServiceBasicSJSStateChangeTriggerFlags.Set(ServiceBasicSJSStateChangeTriggerFlags.UseWaitingForPrepare, value); }
+        }
     }
 
     public class TestSubstrateSchedulerTool: ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
@@ -1596,7 +1637,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     foreach (var st in substTrackerList.Array)
                     {
                         var sjs = st.Info.SJS;
-                        if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart)
+                        if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart || sjs == SubstrateJobState.WaitingForPrepare)
                             st.SetSubstrateJobState(SubstrateJobState.Stranded, "Part is no longer permitted to run process [{0}]".CheckedFormat(stateToTool));
                     }
                 }
@@ -1699,7 +1740,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms >= 2 && !anyCanBeMovedNow)
                 {
-                    var stToMoveToArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeSwappedNow || (!st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp))));
+                    var stToMoveToArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && (st.evalInfo.flags.canBeSwappedNow || (!st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp))));
                     if (stToMoveToArm != null)
                     {
                         var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
@@ -1719,13 +1760,13 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 // if there is a substrate on the one arm and the other arm is empty and the substrate on the arm can be swapped then swap the wafer with the one at the target location.
                 if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms > 0 && numOccupiedUsableArms > 0)
                 {
-                    var stOnArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeSwappedNow);
+                    var stOnArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeSwappedNow);
 
                     if (stOnArm != null)
                     {
                         candidateSwapAtStationLocNameSet.Clear();
 
-                        filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.wantsToMove && st.evalInfo.currentLocObs != null).DoForEach(st => candidateSwapAtStationLocNameSet.SafeAddIfNeeded(st.evalInfo.currentLocObs.ID.Name));
+                        filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.wantsToMove && st.evalInfo.currentLocObs != null).DoForEach(st => candidateSwapAtStationLocNameSet.SafeAddIfNeeded(st.evalInfo.currentLocObs.ID.Name));
 
                         var swapAtStationEvalItem = stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableSwapTarget && candidateSwapAtStationLocNameSet.Contains(stationEval.locInfo.ObjID.Name)).FirstOrDefault();
 
@@ -1738,7 +1779,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 // if either substrate on the robot arm is available to be moved to its next location them move it (in some cases this creates and starts a pending process after the move is complete)
                 if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms >= 1 && anyCanBeMovedNow)
                 {
-                    foreach (var stOnArm in filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow))
+                    foreach (var stOnArm in filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.readyToRun && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow))
                     {
                         foreach (var tryAvailableMoveTargetStationEval in stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableMoveTarget))
                         {
@@ -1759,7 +1800,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                     bool atLeastTwoArmsAreEmpty = (numEmptyUsableArms >= 2);
 
-                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow && !st.evalInfo.nextLocNameList.Any(locName => hashSetOfSubstrateTrackerOnRobotNextLocNames.Contains(locName)) && (atLeastTwoArmsAreEmpty || !st.evalInfo.flags.nextStationEvalListIncludesPipelinedPMOutput));
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow && !st.evalInfo.nextLocNameList.Any(locName => hashSetOfSubstrateTrackerOnRobotNextLocNames.Contains(locName)) && (atLeastTwoArmsAreEmpty || !st.evalInfo.flags.nextStationEvalListIncludesPipelinedPMOutput));
                     if (stToGet != null)
                     {
                         var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
@@ -1774,7 +1815,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 // if there is a substrate that is going to PM4 and both arms are empty then move the substrate to an arm
                 if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms == 0)
                 {
-                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)) && st.evalInfo.firstCanMoveToStationEval.IsPipelinedPMOutputLocation);
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)) && st.evalInfo.firstCanMoveToStationEval.IsPipelinedPMOutputLocation);
                     if (stToGet != null)
                     {
                         var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
@@ -1801,21 +1842,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
             }
 
-            if (PrepareFailedAnnunciator.ANState.IsSignaling)
-            {
-                bool canProceed = ServicePrepareFailedAnnunciator(stateToTool, ref requestAndStatusOutFromTool, ref deltaCount, ref qpcTimeStamp);
-
-                if (!canProceed)
-                    return deltaCount;
-            }
-
             if (pendingPrepareList.Count > 0)
             {
-                var failedPrepareSet = pendingPrepareList.FilterAndRemove(icf => icf.ActionState.IsComplete).ToArray().Where(icf => icf.ActionState.Failed).ToArray();
+                var completedPrepareSet = pendingPrepareList.FilterAndRemove(icf => icf.ActionState.IsComplete).ToArray();
+                var failedPrepareSet = completedPrepareSet.Where(icf => icf.ActionState.Failed).ToArray();
 
                 if (!failedPrepareSet.IsNullOrEmpty())
                 {
                     PostPrepareFailedError(stateToTool, "Prepare failed for one or more modules: [{0}]".CheckedFormat(string.Join(", ", failedPrepareSet.Select(icf => icf.ToString()))));
+
+                    pendingPrepareList.SafeTakeAll().DoForEach(icf => icf.RequestCancel());
                 }
                 else if (pendingPrepareList.Count  == 0 && PrepareFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndActionActive)
                 {
@@ -1825,7 +1861,13 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     PrepareFailedAnnunciator.Clear(reason);
                 }
             }
-            
+            else if (PrepareFailedAnnunciator.ANState.IsSignaling)
+            {
+                ServicePrepareFailedAnnunciator(stateToTool, ref requestAndStatusOutFromTool, ref deltaCount, ref qpcTimeStamp);
+
+                return deltaCount;
+            }
+
             if (pendingPrepareList.Count == 0 && PrepareFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndActionActive)
             {
                 string reason = "Retry completed unexpectedly: pending prepare list is empty";
@@ -1833,21 +1875,22 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 PrepareFailedAnnunciator.Clear(reason);
             }
 
-            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
-            {
-                var stWaitingForStart = filteredSubstTrackerList.Array.FirstOrDefault(st => !st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
-                var anyStartedAtSource = (stWaitingForStart != null) &&  filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
+            bool useWaitingForPrepare = ToolConfig.UseWaitingForPrepare;
 
-                if (stWaitingForStart != null && !anyStartedAtSource)
+            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling && useWaitingForPrepare)
+            {
+                var stReadyToPrepare = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToPrepare && (st.evalInfo.flags.haveAvailableMoveTarget || st.evalInfo.flags.haveAvailableSwapTarget));
+
+                if (stReadyToPrepare != null && substrateStateTally.stsAtWork == 0)
                 {
                     qpcTimeStamp = QpcTimeStamp.Now;
 
                     // If any step has a part that is not ready for the corresponding process then ask it to prepare. NOTE: this does not handle cases where multiple steps re-use the same process modules more than once or with different process step specs (that are not compatible)
-                    var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, stWaitingForStart);
+                    var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, stReadyToPrepare);
 
-                    var anyNotReady = stationStepTupleSet.Any(stepTuple => stepTuple.Item2.Any(locTuple => locTuple.Item4));
+                    var anyStationNotReady = stationStepTupleSet.Any(stepTuple => stepTuple.Item2.Any(locTuple => locTuple.Item4));
 
-                    if (anyNotReady && substrateStateTally.stsAtWork == 0)
+                    if (anyStationNotReady && substrateStateTally.stsAtWork == 0)
                     {
                         foreach (var stepTuple in stationStepTupleSet)
                         {
@@ -1856,7 +1899,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                             {
                                 if (!locTuple.Item3.SummaryState.IsSet(QuerySummaryState.CanPrepare))
                                 {
-                                    pendingPrepareTracker = stWaitingForStart;
+                                    pendingPrepareTracker = stReadyToPrepare;
 
                                     PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
 
@@ -1864,21 +1907,82 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                                     return deltaCount;
                                 }
 
-                                pendingPrepareList.Add(locTuple.Item2.PrepareForStep(stWaitingForStart.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
+                                pendingPrepareList.Add(locTuple.Item2.PrepareForStep(stReadyToPrepare.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
                             }
                         }
                     }
 
                     if (pendingPrepareList.Count > 0)
                     {
-                        pendingPrepareTracker = stWaitingForStart;
+                        pendingPrepareTracker = stReadyToPrepare;
                     }
-                    else if (!anyNotReady)
+                    else if (!anyStationNotReady)
                     {
-                        stWaitingForStart.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available, or is almost available)");
+                        stReadyToPrepare.SetSubstrateJobState(SubstrateJobState.Running, "Starting prepared substrate normally (next process location is available, or is almost available)");
                         deltaCount++;
                     }
                     // else keep waiting - this path is generally triggered because the required prepare for the current substrate is blocked by other substrates that are still out in the tool.
+                }
+            }
+
+            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && substrateStateTally.sjsWaitingForPrepare == 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
+            {
+                var stReadyToStart = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToStart && (st.evalInfo.flags.haveAvailableMoveTarget || st.evalInfo.flags.haveAvailableSwapTarget || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
+                var anyStartedAtSource = (stReadyToStart != null) && filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
+
+                if (stReadyToStart != null && !anyStartedAtSource)
+                {
+                    qpcTimeStamp = QpcTimeStamp.Now;
+
+                    // If any step has a part that is not ready for the corresponding process then ask it to prepare. NOTE: this does not handle cases where multiple steps re-use the same process modules more than once or with different process step specs (that are not compatible)
+                    var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, stReadyToStart);
+
+                    var anyStationNotReady = stationStepTupleSet.Any(stepTuple => stepTuple.Item2.Any(locTuple => locTuple.Item4));
+
+                    if (!useWaitingForPrepare)
+                    {
+                        if (anyStationNotReady && substrateStateTally.stsAtWork == 0)
+                        {
+                            foreach (var stepTuple in stationStepTupleSet)
+                            {
+                                var stepSpec = stepTuple.Item1;
+                                foreach (var locTuple in stepTuple.Item2.Where(locTuple => locTuple.Item4))
+                                {
+                                    if (!locTuple.Item3.SummaryState.IsSet(QuerySummaryState.CanPrepare))
+                                    {
+                                        pendingPrepareTracker = stReadyToStart;
+
+                                        PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
+
+                                        deltaCount++;
+                                        return deltaCount;
+                                    }
+
+                                    pendingPrepareList.Add(locTuple.Item2.PrepareForStep(stReadyToStart.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
+                                }
+                            }
+                        }
+
+                        if (pendingPrepareList.Count > 0)
+                        {
+                            pendingPrepareTracker = stReadyToStart;
+                        }
+                        else if (!anyStationNotReady)
+                        {
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available, or is almost available)");
+                            deltaCount++;
+                        }
+                        // else keep waiting - this path is generally triggered because the required prepare for the current substrate is blocked by other substrates that are still out in the tool.
+                    }
+                    else
+                    {
+                        if (!anyStationNotReady)
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available, or is almost available)");
+                        else
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.WaitingForPrepare, "Starting substrate which needs to be prepared (next process location is available, or is almost available)");
+
+                        deltaCount++;
+                    }
                 }
             }
 
@@ -2012,10 +2116,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return 1;
         }
 
-        private bool ServicePrepareFailedAnnunciator(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool, ref int deltaCount, ref QpcTimeStamp qpcTimeStamp)
+        private void ServicePrepareFailedAnnunciator(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool, ref int deltaCount, ref QpcTimeStamp qpcTimeStamp)
         {
-            bool canProceed = true;
-
             var anState = PrepareFailedAnnunciator.ANState;
 
             string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
@@ -2071,7 +2173,6 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                                             PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
 
                                             deltaCount++;
-                                            canProceed = false;
                                             break;
                                         }
 
@@ -2101,17 +2202,26 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 case "AbortJob":
                 case "StopJob":
                 case "PauseJob":
+                case "AbortJobs":
+                case "StopJobs":
+                case "PauseJobs":
                     {
                         string reason = "{0} action selected".CheckedFormat(selectedActionName);
 
                         SubstrateJobRequestState targetSJRS = SubstrateJobRequestState.Abort;
 
-                        if (selectedActionName == "StopJob")
-                            targetSJRS = SubstrateJobRequestState.Stop;
-                        else if (selectedActionName == "PauseJob")
-                            targetSJRS = SubstrateJobRequestState.Pause;
-                        else
-                            targetSJRS = SubstrateJobRequestState.Abort;
+                        bool allJobs;
+
+                        switch (selectedActionName)
+                        {
+                            case "AbortJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Abort; break;
+                            case "StopJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Stop; break;
+                            case "PauseJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Pause; break;
+                            default:
+                            case "AbortJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Abort; break;
+                            case "StopJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Stop; break;
+                            case "PauseJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Pause; break;
+                        }
 
                         PrepareFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
 
@@ -2142,7 +2252,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                                         continue;
 
                                     var stJobID = (st.JobTrackerLinkage != null) ? st.JobTrackerLinkage.ID : null;
-                                    if (stJobID.IsNeitherNullNorEmpty() && stJobID == applyToSubstratesFromJobID)
+                                    if (allJobs || (stJobID.IsNeitherNullNorEmpty() && stJobID == applyToSubstratesFromJobID))
                                         st.SubstrateJobRequestState = targetSJRS;
                                 }
                             }
@@ -2172,8 +2282,6 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         break;
                     }
             }
-
-            return canProceed;
         }
 
         private Tuple<ProcessStepSpecBase, Tuple<string, IPrepare<IProcessSpec, IProcessStepSpec>, PreparednessQueryResult<IProcessSpec, IProcessStepSpec>, bool>[]>[] GeneratePrepareRelatedStationStepTupleSet(QpcTimeStamp qpcTimeStamp, TestSubstrateAndProcessTracker stWaitingForStart)
@@ -2335,7 +2443,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
 
-            PrepareFailedAnnunciator.Post(new NamedValueSet() { { "Retry", autoActionDisableReason }, { "AbortJob", "" }, { "StopJob", "" }, { "PauseJob", "" } }, reason);
+            PrepareFailedAnnunciator.Post(new NamedValueSet()
+            {
+                { "Retry", autoActionDisableReason },
+                { "AbortJob", "" },
+                { "StopJob", "" },
+                { "PauseJob", "" },
+                { "AbortJobs", "" },
+                { "StopJobs", "" },
+                { "PauseJobs", "" },
+            }, reason);
         }
 
         private void UpdateRequestAndStatusOutFromTool(ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool)

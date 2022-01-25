@@ -867,7 +867,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                     {
                         var creationTimeUTC = new DateTime(ft.remoteSyncFileInfo.CreationTimeUTCTicks, DateTimeKind.Utc);
 
-                        System.IO.File.SetCreationTime(ft.fileFullPath, creationTimeUTC);
+                        System.IO.File.SetCreationTimeUtc(ft.fileFullPath, creationTimeUTC);
 
                         Log.Debug.Emit($"File {ft.fileID}:'{ft.fileNameAndRelativePath}' created and creation time has been set to '{creationTimeUTC.CvtToString(Dates.DateTimeFormat.RoundTrip)}'");
                     }
@@ -3331,7 +3331,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                     {
                         var creationTimeUTC = new DateTime(ft.sourceSyncFileInfo.CreationTimeUTCTicks, DateTimeKind.Utc);
 
-                        System.IO.File.SetCreationTime(ft.fullDestinationPath, creationTimeUTC);
+                        System.IO.File.SetCreationTimeUtc(ft.fullDestinationPath, creationTimeUTC);
 
                         Log.Debug.Emit($"File {ft.fileID}:'{ft.fileNameAndRelativePath}' created and creation time has been set to '{creationTimeUTC.CvtToString(Dates.DateTimeFormat.RoundTrip)}'");
                     }
