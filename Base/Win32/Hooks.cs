@@ -93,7 +93,7 @@ namespace MosaicLib.Win32.Hooks
 
         public Logging.Logger Logger { get; private set; }
 
-        private ClientProvidedDelegate clientProvidedDelegate;
+        private readonly ClientProvidedDelegate clientProvidedDelegate;
 
         public int ExitCode { get { return _exitCode; } set { _exitCode = value; } }
         private volatile int _exitCode = 0;

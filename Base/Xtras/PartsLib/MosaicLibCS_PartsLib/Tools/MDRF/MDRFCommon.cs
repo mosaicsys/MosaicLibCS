@@ -111,7 +111,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// </summary>
         public TimeSpan MinNominalFileIndexWriteInterval { get; set; }
 
-        /// <summary>Gives the nominal interval between time triggered group write all operations.  Defaults to 15.0 minutes.</summary>
+        /// <summary>
+        /// Gives the nominal interval between time triggered group write all operations.  Defaults to 15.0 minutes.
+        /// <para/>For MDRF2 if this value is set to zero it disables automatic periodic writeall.
+        /// </summary>
         public TimeSpan MinNominalWriteAllInterval { get; set; }
 
         /// <summary>Gives the offset used with I8 values in preparation for U8Auto coding.  Not used with MDRF2.  Defaults to 120</summary>
@@ -1578,7 +1581,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     /// <summary>
     /// This enumeration defines a set of flag bit values that are used in the file index to identify what types of data blocks are present (start) in any given row of the file index.
-    /// <para/>None (0x0000), ContainsHeaderOrMetaData (0x0001), ContainsHighPriorityOccurrence (0x0002), ContainsOccurrence(0x0004), ContainsDateTime (0x0008), ContainsObject (0x0100), ContainsStartOfFullGroup (0x0080), ContainsMessage (0x0100), ContainsError (0x0200), ContainsGroup (0x0400), ContainsGroupSet (0x0800), ContainsEnd (0x8000)
+    /// <para/>None (0x0000), ContainsHeaderOrMetaData (0x0001), ContainsHighPriorityOccurrence (0x0002), ContainsOccurrence(0x0004), ContainsDateTime (0x0008), ContainsStartOfFullGroup (0x0080), ContainsMessage (0x0100), ContainsError (0x0200), 
+    /// <para/>MDRF2 only: ContainsObject (0x0010), ContainsSignificantObject (0x0020), ContainsGroup (0x0400), ContainsGroupSet (0x0800), ContainsEnd (0x8000)
     /// </summary>
     [Flags]
     public enum FileIndexRowFlagBits : ushort
@@ -1599,7 +1603,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         ContainsSignificantObject = 0x0020,
         /// <summary>At least one full group (writeAll) starts in this row [0x0080]</summary>
         ContainsStartOfFullGroup = 0x0080,
-        /// <summary>At least one message record is in this "row" 0x0100]</summary>
+        /// <summary>At least one message record is in this "row" [0x0100]</summary>
         ContainsMessage = 0x0100,
         /// <summary>At least one error record is in this "row" [0x0200]</summary>
         ContainsError = 0x0200,

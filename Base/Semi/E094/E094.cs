@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------
 /*! @file E094.cs
- *  @brief This file provides common definitions that relate to the use of the E087 interface.
+ *  @brief This file provides common definitions that relate to the use of the E094 interface.
  *
  * Copyright (c) Mosaic Systems Inc.
  * Copyright (c) 2019 Mosaic Systems Inc.

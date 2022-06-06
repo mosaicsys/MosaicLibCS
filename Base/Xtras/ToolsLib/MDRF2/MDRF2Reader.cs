@@ -22,6 +22,7 @@
 using MessagePack;
 
 using Mosaic.ToolsLib.Compression;
+using Mosaic.ToolsLib.MDRF2.Common;
 using Mosaic.ToolsLib.MessagePackUtils;
 
 using MosaicLib;
@@ -136,28 +137,40 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public interface IMDRF2QueryRecord
     {
-        /// <summary>Gives the IMDRF2FileInfo for the file from which this record was generated, or null if there is no such file for this record.</summary>
+        /// <summary>Gives the <see cref="IMDRF2FileInfo"/> for the file from which this record was generated, or null if there is no such file for this record.</summary>
         IMDRF2FileInfo FileInfo { get; }
 
-        /// <summary>Gives the MDRF2DateTimeStampPair for the record, or default if there is no such time stamp for this record.</summary>
+        /// <summary>Gives the <see cref="Common.MDRF2DateTimeStampPair"/> for the record, or default if there is no such time stamp for this record.</summary>
         Common.MDRF2DateTimeStampPair DTPair { get; }
 
-        /// <summary>Gives the MDRF2QueryItemTypeSelect flag for this record's type</summary>
+        /// <summary>Gives the <see cref="MDRF2QueryItemTypeSelect"/> flag for this record's type</summary>
         MDRF2QueryItemTypeSelect ItemType { get; }
 
-        /// <summary>Gives the relevant UserRowFlagBits value for this record, as appropriate</summary>
+        /// <summary>Gives the relevant User Row Flag Bits value that was contained in the corresponding record.</summary>
         ulong UserRowFlagBits { get; }
+
+        /// <summary>Gives the Key Name that was contained in the corresponding record (currently only included and supported for specifi Object records).  Will be null if the record did not specify a valid Key ID.</summary>
+        string KeyName { get; }
+
+        /// <summary>Gives the Key ID that was contained in the corresponding record (currently only included and supported for specifi Object records).  Will be zero if the record did not specify a valid Key ID</summary>
+        int KeyID { get; }
  
-        /// <summary>Gives the query record data as an object.  Generally the Data is accessed using the TItemType specific version of this interface which carries the typed Data property.</summary>
+        /// <summary>
+        /// Gives the query record data as an object.  
+        /// Generally the Data is accessed using the <see cref="IMDRF2QueryRecord{TItemType}"/> version of this interface which gives access to the native typed Data property.
+        /// </summary>
+        /// <remarks>
+        /// WARNING: When the contained data is not a reference type, use of this property will cause the contained data to be boxed.
+        /// </remarks>
         object DataAsObject { get; }
     }
 
     /// <summary>
-    /// Defines the base contents of a type specific version of a query record.
+    /// Defines the base contents of a <typeparamref name="TItemType"/> specific version of a query record.
     /// </summary>
     public interface IMDRF2QueryRecord<TItemType> : IMDRF2QueryRecord
     {
-        /// <summary>Gives the {TItemType} specific Data contents for this record.</summary>
+        /// <summary>Gives the <see cref="TItemType"/> specific Data contents for this record.</summary>
         TItemType Data { get; }
     }
 
@@ -176,6 +189,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public ulong UserRowFlagBits { get; set; }
 
         /// <inheritdoc>
+        public string KeyName { get; set; }
+
+        /// <inheritdoc>
+        public int KeyID { get; set; }
+
+        /// <inheritdoc>
         public Common.MDRF2DateTimeStampPair DTPair { get; set; }
 
         /// <inheritdoc>
@@ -184,15 +203,40 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         object IMDRF2QueryRecord.DataAsObject { get { return Data; } }
 
         /// <summary>
-        /// Supports call chaining.  Used internally to update and return a given query record instance with different values for <paramref name="dtPair"/>, <paramref name="data"/> and/or <paramref name="userRowFlagBits"/>
+        /// Supports call chaining.  
+        /// Used internally to update and return this query record instance to contain the given values for 
+        /// <paramref name="dtPair"/>, <paramref name="data"/>, <paramref name="userRowFlagBits"/>, <paramref name="keyName"/>, and/or <paramref name="keyID"/>
         /// Used when the caller has requested record re-use for a give query.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public MDRF2QueryRecord<TItemType> Update(in Common.MDRF2DateTimeStampPair dtPair, TItemType data = default, ulong ? userRowFlagBits = null)
+        public MDRF2QueryRecord<TItemType> Update(in Common.MDRF2DateTimeStampPair dtPair, TItemType data = default, ulong ? userRowFlagBits = null, int ? keyID = null, string keyName = null)
         {
             DTPair = dtPair;
             Data = data;
             UserRowFlagBits = userRowFlagBits ?? UserRowFlagBits;
+            KeyID = keyID ?? KeyID;
+            KeyName = keyName ?? KeyName;
+
+            return this;
+        }
+
+
+        /// <summary>
+        /// Supports call chaining.  
+        /// Updates the non-<typeparamref name="TItemType"/> specific properties of this record from the given <paramref name="other"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public MDRF2QueryRecord<TItemType> UpdateFrom(IMDRF2QueryRecord other, bool updateItemType = true, bool updateDTPair = true)
+        {
+            if (updateItemType)
+                ItemType = other.ItemType;
+
+            if (updateDTPair)
+                DTPair = other.DTPair;
+
+            UserRowFlagBits = other.UserRowFlagBits;
+            KeyName = other.KeyName;
+            KeyID = other.KeyID;
 
             return this;
         }
@@ -202,11 +246,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         {
             string dataStr = Data.SafeToString(mapNullTo: "[Null]");
 
-            if (UserRowFlagBits != 0)
-                return $"MDRF2QueryRecord<{typeof(TItemType).GetTypeLeafName()}> {ItemType} urfb:{UserRowFlagBits:x4} {DTPair} data:{dataStr}";
+            if (UserRowFlagBits != 0 || KeyID != 0)
+                return $"MDRF2QueryRecord<{TypeLeafName}> {ItemType} urfb:{UserRowFlagBits:x4} key:{KeyName}:{KeyID} {DTPair} data:{dataStr}";
             else
-                return $"MDRF2QueryRecord<{typeof(TItemType).GetTypeLeafName()}> {ItemType} {DTPair} data:{dataStr}";
+                return $"MDRF2QueryRecord<{TypeLeafName}> {ItemType} {DTPair} data:{dataStr}";
         }
+
+        /// <summary>
+        /// Gives the Type Leaf Name for <see cref="TItemType"/>
+        /// </summary>
+        public static readonly string TypeLeafName = typeof(TItemType).GetTypeLeafName();
     }
 
     /// <summary>
@@ -221,6 +270,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             DTPair = other.DTPair;
             ItemType = other.ItemType;
             UserRowFlagBits = other.UserRowFlagBits;
+            KeyID = other.KeyID;
+            KeyName = other.KeyName;
             DataAsObject = other.DataAsObject;
         }
 
@@ -237,14 +288,20 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public ulong UserRowFlagBits { get; set; }
 
         /// <inheritdoc>
+        public string KeyName { get; set; }
+
+        /// <inheritdoc>
+        public int KeyID { get; set; }
+
+        /// <inheritdoc>
         public object DataAsObject { get; private set; }
 
         /// <summary>Logging and Debugging helper method</summary>
         public override string ToString()
         {
             string dataStr = DataAsObject.SafeToString(mapNullTo: "[Null]");
-            if (UserRowFlagBits != 0)
-                return $"MDRF2QueryRecordStruct {ItemType} urfb:{UserRowFlagBits:x4} {DTPair} data:{dataStr}";
+            if (UserRowFlagBits != 0 || KeyID != 0)
+                return $"MDRF2QueryRecordStruct {ItemType} urfb:{UserRowFlagBits:x4} key:{KeyName}:{KeyID} {DTPair} data:{dataStr}";
             else
                 return $"MDRF2QueryRecordStruct {ItemType} {DTPair} data:{dataStr}";
         }
@@ -457,7 +514,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             OccurrenceNameArray = other.OccurrenceNameArray;
             ObjectTypeNameSet = other.ObjectTypeNameSet;
             ObjectSpecificUserRowFlagBits = other.ObjectSpecificUserRowFlagBits;
+            KeyNameHashSet = other.KeyNameHashSet;
+            KeyNameFilterPredicate = other.KeyNameFilterPredicate;
             AllowRecordReuse = other.AllowRecordReuse;
+            MapNVSRecordsToVCRecords = other.MapNVSRecordsToVCRecords;
+            CustomTypeNameHandlers = other.CustomTypeNameHandlers;
             MDRF2FileReaderBehavior = other.MDRF2FileReaderBehavior;
             MDRF1FileReaderBehavior = other.MDRF1FileReaderBehavior;
             MDRF2DecodingIssueHandlingBehavior = other.MDRF2DecodingIssueHandlingBehavior;
@@ -490,13 +551,23 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// </summary>
         public Tuple<string[], MDRF2PointSetArrayItemType, TimeSpan> PointSetSpec { get; set; } = Tuple.Create<string[], MDRF2PointSetArrayItemType, TimeSpan>(null, MDRF2PointSetArrayItemType.None, TimeSpan.Zero);
 
-        /// <summary>Gives the set of occurrence names that the client would like records generated for.  If this is null then all occurrences will be included.  Set this to the empty array to disable occurrence reporting.</summary>
+        /// <summary>
+        /// Gives the set of occurrence names that the client would like records generated for.  
+        /// If this is null then all occurrences will be included.  
+        /// Set this to the empty array to disable occurrence reporting.
+        /// Defaults to an empty array.
+        /// </summary>
         public string[] OccurrenceNameArray { get; set; } = EmptyArrayFactory<string>.Instance;
 
         /// <summary>
-        /// Gives the set of object type names that the client would like records generated for.  If this is null then all records will (attempt to) be generated for all object types.  Set this to the empty set to disable reporting of objects.
-        /// Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yeild object records.
+        /// Gives the set of object type names that the client would like records generated for.  
+        /// If this is null then all records will (attempt to) be generated for all object types.  
+        /// Set this to the empty set to disable reporting of objects.
+        /// <para/>Defaults to an empty set.
         /// </summary>
+        /// <remarks>
+        /// Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yield object records.
+        /// </remarks>
         public ReadOnlyHashSet<string> ObjectTypeNameSet { get; set; } = ReadOnlyHashSet<string>.Empty;
 
         /// <summary>
@@ -504,6 +575,23 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// <para/>Note: use of this option may block decoding of object types that were not recorded with any matching flag bit value, or which were recorded with zero for the flag bit value.
         /// </summary>
         public ulong ObjectSpecificUserRowFlagBits { get; set; }
+
+        /// <summary>
+        /// When this set is non-null it defines the base set of Key Name values that will be accepted (currently only for objects).  
+        /// When the <see cref="KeyNameFilterPredicate"/> is non-null the key names that it returns true for will also be (implicitly) added to this set.
+        /// </summary>
+        /// <remarks>
+        /// This set acceptance critera are in performed in addition (set union sense) to any other objects that are selected through other means 
+        /// (<see cref="ObjectTypeNameSet"/> and <see cref="ObjectSpecificUserRowFlagBitMask"/>)
+        /// <para/>Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yield object records.
+        /// </remarks>
+        public ReadOnlyHashSet<string> KeyNameHashSet { get; set; }
+
+        /// <summary>
+        /// When this delegate is non-null it will be evaluated for each newly identified KeyName that is not already listed in the corresponding <see cref="KeyNameHashSet"/>.
+        /// Each such flagged key name will be added to the set of key names (and keyIDs) that are to be incluced in the query results when they appear.
+        /// </summary>
+        public Func<string, bool> KeyNameFilterPredicate { get; set; }
 
         /// <summary>
         /// When this value is false (the default) the query execution engine will generate new record instances for all records that are yeilded by the enumeration.  
@@ -516,6 +604,22 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// [defaults to false]
         /// </summary>
         public bool AllowRecordReuse { get; set; }
+
+        /// <summary>
+        /// When this value is true NVS objects will be read and wrapped in a ValueContainer and emitted using the corresponding record type.
+        /// When this value is false NVS objects will be emitted using a INamedValueSet record type.
+        /// </summary>
+        public bool MapNVSRecordsToVCRecords { get; set; }
+
+        /// <summary>
+        /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="MDRF2ObjectRecordGeneratorDelegate"/> methods that allow
+        /// the client to inject customized type deserialization and record behavior into the system.
+        /// When a given TypeName value matches one of the default values, the default deserializer will be replaced with the given one.
+        /// </summary>
+        /// <remarks>
+        /// Note: Type Name valus "Mesg", "Error", and "tavc" will be ignored here.  The handling of these typenames is hard coded in both the MDRF2 writers and readers.
+        /// </remarks>
+        public ReadOnlyIDictionary<string, IMDRF2TypeNameHandler> CustomTypeNameHandlers { get; set; }
 
         [Obsolete("Replace use of this property with use of the corresponding behavior in the MDRF2FileReaderBehavior given below (2021-04-06)")]
         public bool EndOfStreamExceptionIsEndOfFile { get { return MDRF2FileReaderBehavior.IsSet(MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile); } set { MDRF2FileReaderBehavior = MDRF2FileReaderBehavior.Set(MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile, value); } }
@@ -614,36 +718,91 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     }
 
     /// <summary>
-    /// This class contains summary information about an MDRF or MDRF2 file that is accumulated while processing a query for the corresponding IMDRF2FileInfo file.
+    /// This class contains summary information about an MDRF or MDRF2 file that is accumulated while processing a query for the corresponding <see cref="IMDRF2FileInfo"/> file.
+    /// <para/>This object can also be used for a summary rollup from the processing of multiple files.
     /// </summary>
     public class MDRF2QueryFileSummary : ICopyable<MDRF2QueryFileSummary>
     {
+        /// <summary>Gives the <see cref="IMDRF2FileInfo"/> instance for the file that being queried when this summary was generated.</summary>
         public IMDRF2FileInfo FileInfo { get; set; }
+
+        /// <summary>Gives the <see cref="Common.MDRF2DateTimeStampPair"/> from the first inline index record in the file.</summary>
         public Common.MDRF2DateTimeStampPair FirstFileDTPair { get; set; }
+        /// <summary>Gives the last <see cref="Common.MDRF2DateTimeStampPair"/> that was processed in the file.</summary>
         public Common.MDRF2DateTimeStampPair LastFileDTPair { get; set; }
+        /// <summary>Gives the <see cref="LastFileDTPair"/> - <see cref="FirstFileDTPair"/> as a <see cref="TimeSpan"/></summary>
         public TimeSpan ElapsedTime { get { return (LastFileDTPair.UTCTimeSince1601 - FirstFileDTPair.UTCTimeSince1601).FromSeconds(); } }
+
+        /// <summary>Null or Empty indicates that query processing is in progress or has completed successfully.  Non-empty gives the first description of an issue that was encounteered while processing this file.</summary>
         public string FaultCode { get; set; }
+
+        /// <summary>Gives the FileLength captured the related <see cref="FileInfo"/>, or the sum thereof for summary rollup items</summary>
         public ulong FileLength { get; set; }
+
+        /// <summary>Gives the sum of the number of bytes that have been decompressed and processed.</summary>
         public ulong BytesProcessed { get; set; }
+
+        /// <summary>
+        /// Gives the total number of MessagePack records that have been processed from the file including inline index records.  
+        /// This does not include the number of records that were skipped when a data block can be skipped by simply reviewing its lading inline index record.
+        /// </summary>
         public ulong RecordCount { get; set; }
+
+        /// <summary>Gives the total number of inline index records that have been processed.</summary>
         public ulong InlineIndexCount { get; set; }
+
+        /// <summary>Gives the total number of blocks that were skipped while reading the file after decoding and reviewing the blocks inline index record header.</summary>
         public ulong SkippedBlockCount { get; set; }
+
+        /// <summary>Gives the record count sum of the contents of the blocks that were skipped.</summary>
         public ulong SkippedRecordCount { get; set; }
+
+        /// <summary>Gives the byte count sun of the blocks that were skipped.</summary>
         public ulong SkippedByteCount { get; set; }
+
+        /// <summary>Gives the accumulated <see cref="FileIndexRowFlagBits"/> from the blocks that were skipped.</summary>
         public FileIndexRowFlagBits SkippedFileIndexRowFlagBits { get; set; }
+ 
+        /// <summary>Gives the accumulated user row flag bits value from the blocks that were skipped.</summary>
         public ulong SkippedUserRowFlagBits { get; set; }
+
+        /// <summary>Gives the number of file delta timestamp records that were processed.</summary>
         public ulong FDTUpdateCount { get; set; }
+
+        /// <summary>Gives the number of Group content records that were processed.</summary>
         public ulong ProcessedGroupCount { get; set; }
+
+        /// <summary>Gives the number of Occurrence content records that were processed.</summary>
         public ulong ProcessedOccurrenceCount { get; set; }
+
+        /// <summary>Gives the number of Object content records that were processed.</summary>
         public ulong ProcessedObjectCount { get; set; }
+
+        /// <summary>Gives the total number of Group records in the blocks that were processed or skippd.</summary>
         public ulong TotalBlockGroupSetCount { get; set; }
+
+        /// <summary>Gives the total number of Occurrence records in the blocks that were processed or skippd.</summary>
         public ulong TotalBlockOccurrenceCount { get; set; }
+
+        /// <summary>Gives the total number of Object records in the blocks that were processed or skippd.</summary>
         public ulong TotalBlockObjectCount { get; set; }
+
+        /// <summary>Gives the total count of Group records that were processed indexed by their GroupID value (less one).</summary>
         public ulong[] EncounteredCountByGroupIDArray { get; set; }
+
+        /// <summary>Gives the total count of Occurrence records that were processed indexed by their OccurrenceID value (less one).</summary>
         public ulong[] EncounteredCountByOccurrenceIDArray { get; set; }
+
+        /// <summary>
+        /// Gives the count of the number of End Records that were found and processed.  
+        /// This is typically 0 or 1 based on if the end record was found and processed for the corrsponding file.
+        /// </summary>
         public int EndRecordFoundCount { get; set; }
+
+        /// <summary>Returns true if at least one End Record was found.  Setter sets the <see cref="EndRecordFoundCount"/> to value.MapToInt()</summary>
         public bool EndRecordFound { get { return EndRecordFoundCount != 0; } set { EndRecordFoundCount = value.MapToInt(); } }
 
+        /// <summary>This method is called when processing a block for a given <paramref name="inlineIndexRecord"/></summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void NoteProcessingBlockFor(Common.InlineIndexRecord inlineIndexRecord)
         {
@@ -652,6 +811,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             TotalBlockObjectCount += inlineIndexRecord.BlockObjectCount;
         }
 
+        /// <summary>This method is called when skipping over a block for a given <paramref name="inlineIndexRecord"/></summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void NoteSkippingBlockFor(Common.InlineIndexRecord inlineIndexRecord)
         {
@@ -666,18 +826,27 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             TotalBlockObjectCount += inlineIndexRecord.BlockObjectCount;
         }
 
+        /// <summary>Explicit copy constructor.</summary>
         public MDRF2QueryFileSummary MakeCopyOfThis(bool deepCopy = true)
         {
             return (MDRF2QueryFileSummary)MemberwiseClone();
         }
 
+        /// <summary>This method combines/sums this <see cref="MDRF2QueryFileSummary"/> with the given <paramref name="other"/> one.</summary>
         public MDRF2QueryFileSummary Sum(MDRF2QueryFileSummary other)
         {
             FileInfo = FileInfo ?? other.FileInfo;
+
             if (FirstFileDTPair.IsEmpty)
                 FirstFileDTPair = other.FirstFileDTPair;
+            else if (!other.FirstFileDTPair.IsEmpty && FirstFileDTPair.UTCTimeSince1601 > other.FirstFileDTPair.UTCTimeSince1601)
+                FirstFileDTPair = other.FirstFileDTPair;
+
             if (LastFileDTPair.IsEmpty)
                 LastFileDTPair = other.LastFileDTPair;
+            else if (!other.LastFileDTPair.IsEmpty && LastFileDTPair.UTCTimeSince1601 < other.LastFileDTPair.UTCTimeSince1601)
+                LastFileDTPair = other.LastFileDTPair;
+
             FaultCode = FaultCode.MapNullOrEmptyTo(other.FaultCode);
             FileLength += other.FileLength;
             BytesProcessed += other.BytesProcessed;
@@ -740,6 +909,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
     #region Extension Methods
 
+    /// <summary>Extension Methods</summary>
     public static partial class ExtensionMethods
     {
         /// <summary>Method used when counting records by group and occurrence IDs</summary>
@@ -963,6 +1133,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         }
     }
 
+    /// <summary>
+    /// This is the implementation class for the <see cref="IMDRF2DirectoryTracker"/> interface.
+    /// </summary>
     public class MDRF2DirectoryTracker : SimpleActivePartBase, IMDRF2DirectoryTracker
     {
         /// <summary>Constructor</summary>
@@ -1067,11 +1240,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         /// <inheritdoc/>
         public INotificationObject<ReadOnlyIList<IMDRF2FileInfo>> MDRF2FileInfoSetPublisher { get => _MDRF2FileInfoSetPublisher; }
-        private InterlockedNotificationRefObject<ReadOnlyIList<IMDRF2FileInfo>> _MDRF2FileInfoSetPublisher = new InterlockedNotificationRefObject<ReadOnlyIList<IMDRF2FileInfo>>() { Object = ReadOnlyIList<IMDRF2FileInfo>.Empty };
+        private readonly InterlockedNotificationRefObject<ReadOnlyIList<IMDRF2FileInfo>> _MDRF2FileInfoSetPublisher = new InterlockedNotificationRefObject<ReadOnlyIList<IMDRF2FileInfo>>() { Object = ReadOnlyIList<IMDRF2FileInfo>.Empty };
 
         /// <inheritdoc/>
         public INotificationObject<ReadOnlyIList<MDRF2FileDigestResult>> MDRF2FileDigestResultSetPublisher { get => _MDRF2FileDigestResultSetPublisher; }
-        private InterlockedNotificationRefObject<ReadOnlyIList<MDRF2FileDigestResult>> _MDRF2FileDigestResultSetPublisher = new InterlockedNotificationRefObject<ReadOnlyIList<MDRF2FileDigestResult>>() { Object = ReadOnlyIList<MDRF2FileDigestResult>.Empty };
+        private readonly InterlockedNotificationRefObject<ReadOnlyIList<MDRF2FileDigestResult>> _MDRF2FileDigestResultSetPublisher = new InterlockedNotificationRefObject<ReadOnlyIList<MDRF2FileDigestResult>>() { Object = ReadOnlyIList<MDRF2FileDigestResult>.Empty };
 
         private System.IO.FileSystemWatcher fsw;
         private class AsyncTouchedFileNamesSet
@@ -1092,12 +1265,13 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 }
             }
         }
-        AsyncTouchedFileNamesSet asyncTouchedFileNamesSet = new AsyncTouchedFileNamesSet();
+
+        private readonly AsyncTouchedFileNamesSet asyncTouchedFileNamesSet = new AsyncTouchedFileNamesSet();
         private volatile int asyncErrorCount;
 
-        private HashSet<string> pendingFileNameSet = new HashSet<string>();
+        private readonly HashSet<string> pendingFileNameSet = new HashSet<string>();
 
-        private IDictionaryWithCachedArrays<string, FileTracker> fileTrackerDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
+        private readonly IDictionaryWithCachedArrays<string, FileTracker> fileTrackerDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
 
         private class FileTracker
         {
@@ -1125,11 +1299,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             ignoreFileNameAndRelativePathSet.Clear();
         }
 
-        private HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
-        private HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
+        private readonly HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
+        private readonly HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
 
         private bool fullUpdateNeeded, rescanDirectoryNeeded;
-        QpcTimer rescanIntervalTimer;
+        private QpcTimer rescanIntervalTimer;
 
         private int Service(bool forceFullUpdate = false, QpcTimeStamp qpcTimeStamp = default, bool updateMDRF2FileDigestResults = false)
         {
@@ -1413,13 +1587,15 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     public class MDRF2QueryFactory : IMDRF2QueryFactory
     {
         /// <summary>Constructor</summary>
-        public MDRF2QueryFactory(Logging.IBasicLogger queryLogger)
+        public MDRF2QueryFactory(Logging.IBasicLogger queryLogger = null)
         {
-            QueryLogger = queryLogger;
+            QueryLogger = queryLogger ?? fallbackLogger;
         }
 
         /// <summary>Gives the QueryLogger instance that is being used here (provided to the constructor)</summary>
         public Logging.IBasicLogger QueryLogger { get; private set; }
+
+        private static readonly Logging.IBasicLogger fallbackLogger = new Logging.NullBasicLogger();
 
         /// <inheritdoc/>
         public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, params IMDRF2FileInfo[] fileInfoParamsArray)
@@ -1673,6 +1849,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 rhFilter.ObjectSpecificUserRowFlagBitMask = QueryTaskSpec.ClientQuerySpec.ObjectSpecificUserRowFlagBits;
 
+                rhFilter.KeyNameHashSet = QueryTaskSpec.ClientQuerySpec.KeyNameHashSet;
+                rhFilter.KeyNameFilterPredicate = QueryTaskSpec.ClientQuerySpec.KeyNameFilterPredicate;
+
                 if ((rhFilter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Mesg) != 0)
                     inlineIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsMessage;
 
@@ -1683,6 +1862,10 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 rhFilter.InlineIndexUserRowFlagBitMask = anyInlineIndexUserRowFlagBitMaskMissing ? 0 : (inlineIndexUserRowFlagBitMask | rhFilter.ObjectSpecificUserRowFlagBitMask);
 
                 rhFilter.AllowRecordReuse = QueryTaskSpec.ClientQuerySpec.AllowRecordReuse;
+                rhFilter.MapNVSRecordsToVCRecords = QueryTaskSpec.ClientQuerySpec.MapNVSRecordsToVCRecords;
+                rhFilter.CustomTypeNameHandlers = QueryTaskSpec.ClientQuerySpec.CustomTypeNameHandlers;
+
+                rhFilter.Setup(FileInfo);
 
                 return this;
             }
@@ -1942,7 +2125,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
 
             private const int keepRecentEmittedPointSetRecordCount = 0;
-            [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "This variable is only used to support internal debugging only when keepRecentEmittedPointSetRecordCount is non-zero")]
             private List<IMDRF2QueryRecord> recentEmittedPointSetRecordList;
             [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "This variable is only used to support internal debugging only when keepRecentEmittedPointSetRecordCount is non-zero")]
             private IMDRF2QueryRecord lastEmittedPointSetRecord;
@@ -2060,6 +2242,22 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             /// <summary>Used by the client to specify which user row flag bit values they would like processed.  InlineIndex record blocks that do not contain records associated with the given mask will be skipped.  When this is set to 0 it selects that no related filtering will be performed using this value.</summary>
             public UInt64 InlineIndexUserRowFlagBitMask { get; set; } = 0;
 
+            /// <summary>
+            /// When this set is non-null it defines the base set of Key Name values that will be accepted (currently only for objects).  
+            /// When the <see cref="KeyNameFilterPredicate"/> is non-null the key names that it returns true for will also be (implicitly) added to this set.
+            /// </summary>
+            /// <remarks>
+            /// This set acceptance critera are in performed in addition (set union sense) to any other objects that are selected through other means 
+            /// (<see cref="ObjectTypeNameSet"/> and <see cref="ObjectSpecificUserRowFlagBitMask"/>)
+            /// </remarks>
+            public ReadOnlyHashSet<string> KeyNameHashSet { get; set; }
+
+            /// <summary>
+            /// When this delegate is non-null it will be evaluated for each newly identified KeyName that is not already listed in the corresponding <see cref="KeyNameHashSet"/>.
+            /// Each such flagged key name will be added to the set of key names (and keyIDs) that are to be incluced in the query results when they appear.
+            /// </summary>
+            public Func<string, bool> KeyNameFilterPredicate { get; set; }
+
             /// <summary>Defines the set of object types that should be extracted and for which query records should be yielded.  When null is used it indicates that all objects shall be extracted and yielded.</summary>
             public HashSet<string> ObjectTypeNameSet { get; set; }
 
@@ -2103,9 +2301,109 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             public bool AllowRecordReuse { get; set; }
 
             /// <summary>
+            /// When this value is true NVS objects will be read and wrapped in a ValueContainer and emitted using the corresponding record type.
+            /// When this value is false NVS objects will be emitted using a INamedValueSet record type.
+            /// </summary>
+            public bool MapNVSRecordsToVCRecords { get; set; }
+
+            /// <summary>
             /// When non-null, this delegate is used to obtain the current PointSetIntervalInSec from the QueryTaskSpec (or any other source) that will be used when starting to filter a new MDRF1 file or in any other context where no other means are available for this purpose.
             /// </summary>
             public Func<double> CurrentSelectedPointSetIntervalInSecDelegate { get; set; }
+
+            /// <summary>
+            /// This method is typically called once when the filter is constructed to pre-initialize the KeyIDHashSet
+            /// </summary>
+            public void Setup(IMDRF2FileInfo fileInfo)
+            {
+                if (KeyNameHashSet != null || KeyNameFilterPredicate != null)
+                    SelectedKeyIDHashSet = new HashSet<int>();
+
+                foreach (var nv in fileInfo.NonSpecMetaNVS[Common.Constants.KeyIDsInlineMapKey].VC.GetValueNVS(rethrow: false).MapNullToEmpty())
+                {
+                    ProcessKeySpec(nv.Name, nv.VC.GetValueI4(rethrow: false));
+                }
+
+                var specSet = new (string typeName, IMDRF2TypeNameHandler handler, string [] altNames) []
+                {
+                    ( Common.Constants.ObjKnownType_LogMessage, new TypeNameHandlers.ILogMessageTypeNameHandler(), new [] { typeString_LogMessage, typeString_ILogMessage }),
+                    ( Common.Constants.ObjKnownType_E039Object, new TypeNameHandlers.IE039ObjectTypeNameHandler(), new [] { typeString_E039Object, typeString_IE039Object }),
+                    ( Common.Constants.ObjKnownType_ValueContainer, new TypeNameHandlers.ValueContainerTypeNameHandler(), new [] { typeString_ValueContainer }),
+                    ( Common.Constants.ObjKnownType_NamedValueSet, MapNVSRecordsToVCRecords ? (IMDRF2TypeNameHandler) new TypeNameHandlers.INamedValueSetAsValueContainerTypeNameHandler() : new TypeNameHandlers.INamedValueSetTypeNameHandler(), null),
+                    ( Semi.CERP.E116.E116EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E116.E116EventRecord>(), null),
+                    ( Semi.CERP.E157.E157EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E157.E157EventRecord>(), null),
+                };
+
+                var acceptAllObjectTypes = (ObjectTypeNameSet == null);
+
+                foreach (var (typeName, handler, altNames) in specSet)
+                {
+                    var acceptThisObjectType = acceptAllObjectTypes 
+                        || ObjectTypeNameSet.Contains(typeName) 
+                        || altNames.MapNullToEmpty().Any(altName => ObjectTypeNameSet.Contains(altName));
+
+                    TypeNameToHandlerAndEnabledDictionary[typeName] = (handler, acceptThisObjectType);
+                }
+
+                // the simple presance of a custom type name handler enables that type name.
+                foreach (var kvp in CustomTypeNameHandlers.MapNullToEmpty())
+                {
+                    TypeNameToHandlerAndEnabledDictionary[kvp.Key] = (kvp.Value, true);
+                }
+
+                TypeNameToHandlerAndEnabledDictionary[Common.Constants.ObjKnownType_Mesg] = (new MesgAndErrorTypeNameHandler() { ItemType = MDRF2QueryItemTypeSelect.Mesg }, (ItemTypeSelect & MDRF2QueryItemTypeSelect.Mesg) != 0 );
+                TypeNameToHandlerAndEnabledDictionary[Common.Constants.ObjKnownType_Error] = (new MesgAndErrorTypeNameHandler() { ItemType = MDRF2QueryItemTypeSelect.Error }, (ItemTypeSelect & MDRF2QueryItemTypeSelect.Error) != 0);
+
+                // NOTE: the tavc handler is explicitly supported in the code as it seperates the desrialization from the record generation.
+
+                foreach (var nv in fileInfo.NonSpecMetaNVS[Common.Constants.TypeIDsInlineMapKey].VC.GetValueNVS(rethrow: false).MapNullToEmpty())
+                {
+                    ProcessTypeName(nv.Name, nv.VC.GetValueI4(rethrow: false));
+                }
+
+                // update the ObjectTypeNameSet if needed.
+
+                if (ObjectTypeNameSet != null)
+                {
+                    foreach (var kvp in TypeNameToHandlerAndEnabledDictionary.Where(kvp => kvp.Value.enabled && !ObjectTypeNameSet.Contains(kvp.Key)))
+                    {
+                        ObjectTypeNameSet.Add(kvp.Key);
+                    }
+                }
+            }
+
+            public void ProcessKeySpec(string keyName, int keyID)
+            {
+                KeyIDToNameDictionary[keyID] = keyName;
+
+                var keyNameHashSet = (KeyNameHashSet ?? ReadOnlyHashSet<string>.Empty) as ISet<string>;
+
+                bool includeKeyInSet = (keyID > 0) && (keyNameHashSet.Contains(keyName) || (KeyNameFilterPredicate?.Invoke(keyName) ?? false));
+
+                if (includeKeyInSet && SelectedKeyIDHashSet != null)
+                    SelectedKeyIDHashSet.Add(keyID);
+            }
+
+            public HashSet<int> SelectedKeyIDHashSet { get; private set; }
+            public Dictionary<int, string> KeyIDToNameDictionary { get; private set; } = new Dictionary<int, string>();
+
+            /// <summary>
+            /// Returns true if any of the keyIDs in the <paramref name="currentInlineIndexRecord"/>.BlockKeyIDHashSet are also in the 
+            /// filter's SelectedKyIDSet.
+            /// </summary>
+            public bool AnyKeysMatch(Common.InlineIndexRecord currentInlineIndexRecord)
+            {
+                if (SelectedKeyIDHashSet == null)
+                    return false;
+
+                foreach (var keyID in currentInlineIndexRecord.BlockKeyIDHashSet)
+                {
+                    if (SelectedKeyIDHashSet.Contains(keyID))
+                        return true;
+                }
+
+                return false;
+            }
 
             /// <summary>
             /// When true, end of stream exceptions are handled as if the normal end of file record was processed and the underlying stream exception is not passed to the query client during enumeration.  
@@ -2138,6 +2436,27 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 return true;
             }
+
+            /// <summary>
+            /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="MDRF2ObjectRecordGeneratorDelegate"/> methods that allow
+            /// the client to inject customized type deserialization and record behavior into the system.
+            /// When a given TypeName value matches one of the default values, the default deserializer will be replaced with the given one.
+            /// </summary>
+            public ReadOnlyIDictionary<string, IMDRF2TypeNameHandler> CustomTypeNameHandlers { get; set; }
+
+            public void ProcessTypeName(string typeName, int typeID)
+            {
+                TypeIDToNameDictionary[typeID] = typeName;
+
+                var (handler, enabled) = TypeNameToHandlerAndEnabledDictionary.SafeTryGetValue(typeName);
+
+                TypeIDToNameAndHandlerAndEnabledDictionary[typeID] = (typeName, handler, enabled);
+            }
+
+            internal Dictionary<int, string> TypeIDToNameDictionary { get; private set; } = new Dictionary<int, string>();
+
+            internal Dictionary<string, (IMDRF2TypeNameHandler handler, bool enabled)> TypeNameToHandlerAndEnabledDictionary { get; set; } = new Dictionary<string, (IMDRF2TypeNameHandler handler, bool enabled)>();
+            internal Dictionary<int, (string name, IMDRF2TypeNameHandler handler, bool enabled)> TypeIDToNameAndHandlerAndEnabledDictionary { get; set; } = new Dictionary<int, (string name, IMDRF2TypeNameHandler handler, bool enabled)>();
         }
 
         /// <summary>
@@ -2156,7 +2475,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF2 File Reader Behavior</summary>
         public static MDRF2FileReaderBehavior MDRF2FallbackDefaultReaderBehavior { get; set; } = (MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile | MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile);
 
-        /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF1 Decoding Issue Handling Behavior</summary>
+        /// <summary>This value is used when a reader is constructed with the default/null parameter value for its MDRF2 Decoding Issue Handling Behavior</summary>
         public static MDRF2DecodingIssueHandlingBehavior MDRF2FallbackDefaultDecodingIssueHandlingBehavior { get; set; } = MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord;
 
         /// <summary>
@@ -2246,10 +2565,10 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         Logging.IBasicLogger Logger { get; set; }
 
-        private MDRF2FileInfo fileInfo;
+        private readonly MDRF2FileInfo fileInfo;
         public IMDRF2FileInfo FileInfo { get; set; }
-        private NamedValueSet InlineMapUnionNVS = new NamedValueSet();
-        private NamedValueSet NonSpecMetaNVS = new NamedValueSet();
+        private readonly NamedValueSet InlineMapUnionNVS = new NamedValueSet();
+        private readonly NamedValueSet NonSpecMetaNVS = new NamedValueSet();
 
         private static readonly MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
 
@@ -2271,13 +2590,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
         }
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
         private readonly MDRF2FileReaderBehavior mdrf2FileReaderBehavior;
         private readonly MDRF2DecodingIssueHandlingBehavior mdrf2DecodingIssueHandlingBehavior;
         private readonly MessagePackFileRecordReaderSettings mpFileRecordReaderSettings;
         private MessagePackFileRecordReader mpFileRecordReader;
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
         private readonly MDRF.Reader.MDRFFileReaderBehavior mdrf1FileReaderBehavior;
         private MDRF.Reader.MDRFFileReader mdrf1Reader;
 
@@ -2503,8 +2820,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 }
             }
 
+            if (_FaultCode == null)
+                FaultCode = state.EndRecordFound ? string.Empty : "End record was not found";
+
             {
                 var counters = mpFileRecordReader.Counters;
+
                 fileSummary.FaultCode = FaultCode;
                 fileSummary.BytesProcessed = counters.TotalBytesProcessed;
                 fileSummary.LastFileDTPair = CurrentQRDTPair;
@@ -2519,9 +2840,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.FileEnd) != 0)
                     yield return new MDRF2QueryRecord<MDRF2QueryFileSummary>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.FileEnd, DTPair = CurrentQRDTPair, Data = fileSummary };
             }
-
-            if (_FaultCode == null)
-                FaultCode = state.EndRecordFound ? string.Empty : "End record was not found";
         }
 
         private void InnerGenerateFilteredRecords_Increment_MDRF2(Filter filter, ref InterationState state, MDRF2QueryFileSummary fileSummary)
@@ -2564,12 +2882,18 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                             bool blockMayHaveOccurrencesToProcess = ((blockFileIndexRowFlagsBits & (FileIndexRowFlagBits.ContainsOccurrence | FileIndexRowFlagBits.ContainsHighPriorityOccurrence)) != 0) && (filter.OccurrenceDictionary == null || filter.OccurrenceDictionary.Count > 0);
                             bool blockMayHaveObjectsToProcess = ((blockFileIndexRowFlagsBits & (FileIndexRowFlagBits.ContainsObject | FileIndexRowFlagBits.ContainsSignificantObject)) != 0) && (filter.ObjectTypeNameSet == null || filter.ObjectTypeNameSet.Count > 0);
                             bool blockMayHaveMesgsOrErrorsToProcess = ((filteredBlockFileIndexRowFlagBits & (FileIndexRowFlagBits.ContainsMessage | FileIndexRowFlagBits.ContainsError)) != 0);
+                            bool blockHasKeysToProcess = filter.AnyKeysMatch(CurrentInlineIndexRecord);
 
                             bool blockHasHeaderOrMetaDataOrEnd = ((blockFileIndexRowFlagsBits & (FileIndexRowFlagBits.ContainsHeaderOrMetaData | FileIndexRowFlagBits.ContainsEnd)) != 0);
 
-                            bool processBlock = (inTimeRange && (fileIndexBitsMatch | userRowFlagBitsMatch) && (blockMayHaveGroupsToProcess || blockMayHaveOccurrencesToProcess || blockMayHaveObjectsToProcess || blockMayHaveMesgsOrErrorsToProcess))
-                                                || blockHasHeaderOrMetaDataOrEnd
-                                                ;
+                            bool processBlock = blockHasHeaderOrMetaDataOrEnd;
+
+                            if (!processBlock && inTimeRange)
+                            {
+                                processBlock |= (fileIndexBitsMatch | userRowFlagBitsMatch) 
+                                                 && (blockMayHaveGroupsToProcess || blockMayHaveOccurrencesToProcess || blockMayHaveObjectsToProcess || blockMayHaveMesgsOrErrorsToProcess);
+                                processBlock |= blockHasKeysToProcess;
+                            }
 
                             if (processBlock)
                             {
@@ -2606,31 +2930,71 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         }
                         return;
 
-                    case MPHeaderByteCode.FixMap1:      // ["MDRF2.End":nil]
+                    case MPHeaderByteCode.FixMap1:      // ["MDRF2.End":nil] or ["KeyIDs":[MAP:n [A keyName] [I keyID]]]
                         {
                             mpReader.ReadMapHeader();   // this will return 1
                             var keyword = mpReader.ReadString();
-                            mpReader.ReadNil();
 
-                            mpFileRecordReader.AdvancePastCurrentRecord();
-
-                            if (keyword == Common.Constants.FileEndKeyword)
+                            switch (keyword)
                             {
-                                if (!mpFileRecordReader.EndReached)
-                                    mpFileRecordReader.AttemptToPopulateNextRecord();
+                                case Common.Constants.FileEndKeyword:
+                                    mpReader.ReadNil();
+                                    mpFileRecordReader.AdvancePastCurrentRecord();
 
-                                state.EndRecordFound = mpFileRecordReader.EndReached;
+                                    if (!mpFileRecordReader.EndReached)
+                                        mpFileRecordReader.AttemptToPopulateNextRecord();
 
-                                fileInfo.NonSpecMetaNVS = NonSpecMetaNVS.SetKeyword(keyword).ConvertToReadOnly();
-                                FileInfo = fileInfo.MakeCopyOfThis();
-                            }
+                                    state.EndRecordFound = mpFileRecordReader.EndReached;
 
-                            if (state.EndRecordFound)
-                            {
-                                if (state.InBlock)
-                                    state.AddRecordIfNotNull(filter.NoteOtherRecordDelegate?.Invoke(filter, MDRF2QueryItemTypeSelect.BlockEnd, in _CurrentQRDTPair, CurrentInlineIndexRecord));
+                                    fileInfo.NonSpecMetaNVS = NonSpecMetaNVS.SetKeyword(keyword).ConvertToReadOnly();
+                                    FileInfo = fileInfo.MakeCopyOfThis();
 
-                                return;
+                                    if (state.EndRecordFound)
+                                    {
+                                        if (state.InBlock)
+                                            state.AddRecordIfNotNull(filter.NoteOtherRecordDelegate?.Invoke(filter, MDRF2QueryItemTypeSelect.BlockEnd, in _CurrentQRDTPair, CurrentInlineIndexRecord));
+
+                                        return;
+                                    }
+
+                                    break;
+
+                                case Common.Constants.KeyIDsInlineMapKey:
+                                    {
+                                        int mapCount = mpReader.ReadMapHeader();
+
+                                        for (int index = 0; index < mapCount; index++)
+                                        {
+                                            var keyName = mpReader.ReadString();
+                                            var keyID = mpReader.ReadInt32();
+
+                                            filter.ProcessKeySpec(keyName, keyID);
+                                        }
+
+                                        mpFileRecordReader.AdvancePastCurrentRecord();
+                                    }
+
+                                    return;
+
+                                case Common.Constants.TypeIDsInlineMapKey:
+                                    {
+                                        int mapCount = mpReader.ReadMapHeader();
+
+                                        for (int index = 0; index < mapCount; index++)
+                                        {
+                                            var typeName = mpReader.ReadString();
+                                            var typeID = mpReader.ReadInt32();
+
+                                            filter.ProcessTypeName(typeName, typeID);
+                                        }
+
+                                        mpFileRecordReader.AdvancePastCurrentRecord();
+                                    }
+
+                                    return;
+
+                                default:
+                                    break;
                             }
 
                             throw new Common.MDRF2ReaderException(FaultCode = $"Unexpected inline {mpHeaderByteCode} content in block [{CurrentInlineIndexRecord}]");
@@ -2703,159 +3067,122 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         }
                         break;
 
-                    case MPHeaderByteCode.FixArray3:    // Object or Mesg or Error : new [L3 recordUserRowFlagBits objKnownTypeName objKnownTypeData], old [L3 objKnownTypeName objKnownTypeData nil]
+                    case MPHeaderByteCode.FixArray3:    
+                        // Object or Mesg or Error : new [L3 recordUserRowFlagBits|[L2 recordUserRowFlagBits recordKeyID] objKnownTypeName objKnownTypeData], old [L3 objKnownTypeName objKnownTypeData nil]
                         {
                             if (filter.IsInTimeRange(CurrentQRDTPair))
                             {
                                 mpReader.ReadArrayHeader();
 
                                 ulong recordUserRowFlagBits = 0;
+                                int recordKeyID = 0;
+                                string recordKeyName = null;
+                                bool keyIDSelectsThisObject = false;
+                                bool keyIDSelectionIsInUse = !filter.SelectedKeyIDHashSet.IsNullOrEmpty();
+
+                                var mpCode = (MPHeaderByteCode)mpReader.NextCode;
 
                                 if (mpReader.NextMessagePackType == MessagePackType.Integer)
+                                {
                                     recordUserRowFlagBits = mpReader.ReadUInt64();
+                                }
+                                else if (mpCode == MPHeaderByteCode.FixArray2)
+                                {
+                                    mpReader.ReadArrayHeader();
+                                    recordUserRowFlagBits = mpReader.ReadUInt64();
+                                    recordKeyID = mpReader.ReadInt32();
+                                    recordKeyName = filter.KeyIDToNameDictionary.SafeTryGetValue(recordKeyID);
 
-                                bool enableEmitObject = ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Object) != 0);
+                                    keyIDSelectsThisObject = filter.SelectedKeyIDHashSet?.Contains(recordKeyID) ?? false;
+                                }
 
-                                bool enableEmitThisObject = enableEmitObject && (((recordUserRowFlagBits & filter.ObjectSpecificUserRowFlagBitMask) != 0) || (filter.ObjectSpecificUserRowFlagBitMask == 0));
+                                string typeName;
+                                int typeID = 0;
+                                IMDRF2TypeNameHandler typeHandler = null;
+                                bool typeIsEnabled;
+
+                                if (mpReader.NextMessagePackType == MessagePackType.Integer)
+                                {
+                                    typeID = mpReader.ReadInt32();
+                                    (typeName, typeHandler, typeIsEnabled) = filter.TypeIDToNameAndHandlerAndEnabledDictionary.SafeTryGetValue(typeID);
+                                }
+                                else // this is the first token that is read when using the old format of L3 handler.
+                                {
+                                    typeName = mpReader.ReadString();
+                                    (typeHandler, typeIsEnabled) = filter.TypeNameToHandlerAndEnabledDictionary.SafeTryGetValue(typeName);
+                                }
+
+                                bool urfbSelectsThisObject = (((recordUserRowFlagBits & filter.ObjectSpecificUserRowFlagBitMask) != 0) 
+                                                            || (!keyIDSelectionIsInUse && filter.ObjectSpecificUserRowFlagBitMask == 0));
 
                                 var objTypeHashSet = filter.ObjectTypeNameSet;
                                 var acceptAllObjectTypes = (objTypeHashSet == null);
 
-                                string objKnownTypeName = mpReader.ReadString();
+                                // some of the logic that is used to determine if/when to decode and emit this object is done on a per typeName basis.
+                                bool objectEmitIsEnabled = (filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Object) != 0;
 
-                                switch (objKnownTypeName)
+                                bool commonObjectEmitGate = objectEmitIsEnabled
+                                                            && (keyIDSelectsThisObject || urfbSelectsThisObject);
+
+                                IMDRF2QueryRecord objRecord = null;
+
+                                if (objectEmitIsEnabled)
                                 {
-                                    case Common.Constants.ObjKnownType_Mesg:    // this is a pseudo object type - it has its own ItemTypeSelect value but is serialized as an object
-                                        if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Mesg) != 0)
+                                    try
+                                    {
+                                        if (typeHandler != null)
                                         {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            var mesgT = Common.MesgAndErrorBodyFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Mesg, Data = mesgT.Item1, UserRowFlagBits = recordUserRowFlagBits });
-                                        }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                        }
-                                        break;
-
-                                    case Common.Constants.ObjKnownType_Error:    // this is a pseudo object type - it has its own ItemTypeSelect value but is serialized as an object
-                                        if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Error) != 0)
-                                        {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            var mesgT = Common.MesgAndErrorBodyFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Error, Data = mesgT.Item1, UserRowFlagBits = recordUserRowFlagBits });
-                                        }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                        }
-                                        break;
-
-                                    case Common.Constants.ObjKnownType_LogMessage:
-                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_ILogMessage) || objTypeHashSet.Contains(typeString_LogMessage)))
-                                        {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            if (!filter.AllowRecordReuse || logMessageObjectQueryRecord == null)
-                                                logMessageObjectQueryRecord = new MDRF2QueryRecord<Logging.ILogMessage>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
-
-                                            state.AddRecord(logMessageObjectQueryRecord.Update(CurrentQRDTPair, LogMessageFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
-                                        }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                        }
-
-                                        break;
-
-                                    case Common.Constants.ObjKnownType_E039Object:
-                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_IE039Object) || objTypeHashSet.Contains(typeString_E039Object)))
-                                        {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            if (!filter.AllowRecordReuse || e039ObjectQueryRecord == null)
-                                                e039ObjectQueryRecord = new MDRF2QueryRecord<MosaicLib.Semi.E039.IE039Object>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
-
-                                            state.AddRecord(e039ObjectQueryRecord.Update(CurrentQRDTPair, E039ObjectFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
-                                        }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                        }
-
-                                        break;
-
-                                    case Common.Constants.ObjKnownType_ValueContainer:
-                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains("ValueContainer") || objTypeHashSet.Contains(typeString_ValueContainer)))
-                                        {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            if (!filter.AllowRecordReuse || vcObjectQueryRecord == null)
-                                                vcObjectQueryRecord = new MDRF2QueryRecord<ValueContainer>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
-
-                                            state.AddRecord(vcObjectQueryRecord.Update(CurrentQRDTPair, VCFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
-                                        }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                        }
-
-                                        break;
-
-                                    case Common.Constants.ObjKnownType_TypeAndValueCarrier:
-                                        if (enableEmitThisObject)
-                                        {
-                                            fileSummary.ProcessedObjectCount += 1;
-
-                                            var tavc = TypeAndValueCarrierFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            if (tavc != null && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(tavc.TypeStr)))
+                                            if (keyIDSelectsThisObject || (urfbSelectsThisObject && typeIsEnabled))
                                             {
-                                                try
+                                                refObjectQueryRecord.Update(CurrentQRDTPair, null, recordUserRowFlagBits, recordKeyID, recordKeyName);
+
+                                                objRecord = typeHandler.DeserializeAndGenerateTypeSpecificRecord(ref mpReader, mpOptions, refObjectQueryRecord, filter.AllowRecordReuse);
+                                            }
+                                        }
+                                        else if (keyIDSelectsThisObject || urfbSelectsThisObject)
+                                        {
+                                            if (mpReader.TryReadNil())
+                                            {
+                                                objRecord = new MDRF2QueryRecord<object>() { Data = null, FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object, UserRowFlagBits = recordUserRowFlagBits, KeyID = recordKeyID, KeyName = recordKeyName, };
+                                            }
+                                            else if (typeName == Common.Constants.ObjKnownType_TypeAndValueCarrier)
+                                            {
+                                                var tavc = TypeAndValueCarrierFormatter.Instance.Deserialize(ref mpReader, mpOptions);
+
+                                                if (tavc != null && (acceptAllObjectTypes || objTypeHashSet.Contains(typeName) || objTypeHashSet.Contains(tavc.TypeStr)))
                                                 {
+                                                    if (!filter.AllowRecordReuse || tavcObjectQueryRecord == null)
+                                                        tavcObjectQueryRecord = new MDRF2QueryRecord<object>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
+
                                                     var typeSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(tavc);
                                                     var obj = typeSerializer.Deserialize(tavc);
 
-                                                    if (!filter.AllowRecordReuse || objectQueryRecord == null)
-                                                        objectQueryRecord = new MDRF2QueryRecord<object>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
-
-                                                    state.AddRecord(objectQueryRecord.Update(CurrentQRDTPair, obj, recordUserRowFlagBits));
-                                                }
-                                                catch (System.Exception ex)
-                                                {
-                                                    GenerateLogAndHandleDecodingIssue(filter, ref state, $"Unable to deserialize object [{tavc}]: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
-
-                                                    if (!state.EndRecordFound)
-                                                    {
-                                                        fileSummary.SkippedRecordCount += 1;
-                                                        fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                                    }
+                                                    objRecord = tavcObjectQueryRecord.Update(CurrentQRDTPair, obj, recordUserRowFlagBits, recordKeyID, recordKeyName);
                                                 }
                                             }
+                                            else if (typeName == null)
+                                            {
+                                                // unrecognized object type which was selected.  Do not count this record this as processed
+                                                state.AddRecordIfNotNull(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected object known type name '{typeName}' in block [{CurrentInlineIndexRecord}]", recordUserRowFlagBits, recordKeyID, recordKeyName));
+                                            }
                                         }
-                                        else
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                        }
+                                    }
+                                    catch (System.Exception ex)
+                                    {
+                                        state.AddRecordIfNotNull(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Unable to deserialize object [{typeName}]: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}", recordUserRowFlagBits, recordKeyID, recordKeyName));
+                                    }
+                                }
 
-                                        break;
+                                if (objRecord != null)
+                                {
+                                    state.AddRecord(objRecord);
 
-                                    default:
-                                        // unrecognized object type
-                                        state.AddRecord(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected object known type name '{objKnownTypeName}' in block [{CurrentInlineIndexRecord}]"));
-
-                                        if (!state.EndRecordFound)
-                                        {
-                                            fileSummary.SkippedRecordCount += 1;
-                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
-                                        }
-
-                                        break;
+                                    fileSummary.ProcessedObjectCount += 1;
+                                }
+                                else if (!state.EndRecordFound)
+                                {
+                                    fileSummary.SkippedRecordCount += 1;
+                                    fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
                                 }
                             }
 
@@ -2866,7 +3193,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                     default:
                         {
-                            state.AddRecord(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected top level MessagePack record type '{mpHeaderByteCode}' ({mpReader.NextMessagePackType}) in block [{CurrentInlineIndexRecord}]"));
+                            state.AddRecordIfNotNull(GenerateLogAndHandleDecodingIssue(filter, ref state, $"Encountered unexpected top level MessagePack record type '{mpHeaderByteCode}' ({mpReader.NextMessagePackType}) in block [{CurrentInlineIndexRecord}]"));
 
                             if (!state.EndRecordFound)
                             {
@@ -2906,13 +3233,25 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
         }
 
+        readonly MDRF2QueryRecord<object> refObjectQueryRecord = new MDRF2QueryRecord<object>() { ItemType = MDRF2QueryItemTypeSelect.Object };
+        MDRF2QueryRecord<object> tavcObjectQueryRecord;
+
         /// <summary>
         /// This method is used to generate an query record for this decoding issue, log the corresponding message, and handle the issue based on the configured mdrf2DecodingIssueHandlingBehavior.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IMDRF2QueryRecord GenerateLogAndHandleDecodingIssue(Filter filter, ref InterationState state, string mesg)
+        private IMDRF2QueryRecord GenerateLogAndHandleDecodingIssue(Filter filter, ref InterationState state, string mesg, ulong userRowFlagBits = default, int keyID = default, string keyName = default)
         {
-            var record = new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = CurrentQRDTPair, ItemType = MDRF2QueryItemTypeSelect.DecodingIssue, Data = mesg };
+            var record = new MDRF2QueryRecord<string>() 
+            { 
+                FileInfo = FileInfo, 
+                DTPair = CurrentQRDTPair, 
+                ItemType = MDRF2QueryItemTypeSelect.DecodingIssue, 
+                Data = mesg, 
+                UserRowFlagBits = userRowFlagBits,
+                KeyID = keyID,
+                KeyName = keyName,
+            };
 
             Logger.Debug.Emit($"Encountered file decoding issue: {mesg} [{mdrf2DecodingIssueHandlingBehavior}]");
 
@@ -2937,15 +3276,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         private MDRF2QueryRecord<Common.InlineIndexRecord> inlineIndexQueryRecord, inlineIndexWillSkipQueryRecord;
         private MDRF2QueryRecord<Common.MDRF2DateTimeStampPair> fileDeltaTimeUpdateQueryRecord;
         private MDRF2QueryRecord<MDRF2OccurrenceQueryRecordData> occurrenceQueryRecord;
-        private MDRF2QueryRecord<Logging.ILogMessage> logMessageObjectQueryRecord;
-        private MDRF2QueryRecord<MosaicLib.Semi.E039.IE039Object> e039ObjectQueryRecord;
-        private MDRF2QueryRecord<ValueContainer> vcObjectQueryRecord;
-        private MDRF2QueryRecord<object> objectQueryRecord;
 
+        /// <summary>"LogMessage"</summary>
         private static readonly string typeString_LogMessage = typeof(MosaicLib.Logging.LogMessage).Name;
+        /// <summary>"ILogMessage"</summary>
         private static readonly string typeString_ILogMessage = typeof(MosaicLib.Logging.ILogMessage).Name;
+        /// <summary>"E039Object"</summary>
         private static readonly string typeString_E039Object = typeof(MosaicLib.Semi.E039.E039Object).Name;
+        /// <summary>"IE039Object"</summary>
         private static readonly string typeString_IE039Object = typeof(MosaicLib.Semi.E039.IE039Object).Name;
+        /// <summary>"ValueContainer"</summary>
         private static readonly string typeString_ValueContainer = typeof(MosaicLib.Modular.Common.ValueContainer).Name;
 
         public Common.InlineIndexRecord CurrentInlineIndexRecord { get; set; }
@@ -3013,6 +3353,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     case Common.Constants.HostNameKeyName:
                     case Common.Constants.CurrentProcessKeyName:
                     case Common.Constants.EnvironmentKeyName:
+                    case Common.Constants.KeyIDsInlineMapKey:
+                    case Common.Constants.TypeIDsInlineMapKey:
                         break;
 
                     default:
@@ -3214,12 +3556,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging")]
         private FileIndexRowBase mdrf1_LastFileIndexRow = null;
 
-        const int retainRecentPCEDataItemCount = 0;
-        List<MDRF.Reader.ProcessContentEventData> recentPCEDataList = new List<MDRF.Reader.ProcessContentEventData>();
+        private static readonly int retainRecentPCEDataItemCount = 0;
+        private readonly List<MDRF.Reader.ProcessContentEventData> recentPCEDataList = new List<MDRF.Reader.ProcessContentEventData>();
 
         private void InnerHandlePCDData_MDRF1(MDRF.Reader.ProcessContentEventData pceData)
         {
-#pragma warning disable CS0162
             if (retainRecentPCEDataItemCount > 0)
             {
                 if (recentPCEDataList.Count >= retainRecentPCEDataItemCount)
@@ -3227,7 +3568,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 recentPCEDataList.Add(pceData);
             }
-#pragma warning restore CS0162
 
             Filter filter = mdrf1_filter;
             MDRF2QueryFileSummary fileSummary = mdrf1_fileSummary;
@@ -3396,6 +3736,39 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         public Common.MDRF2DateTimeStampPair CurrentQRDTPair { get { return _CurrentQRDTPair; } private set { _CurrentQRDTPair = value; } }
         private Common.MDRF2DateTimeStampPair _CurrentQRDTPair;
+
+        #endregion
+
+        #region local (non-overridable) type name handlers
+
+        /// <summary>
+        /// <see cref="IMDRF2TypeNameHandler"/> used to deserialize and generate string records for the standard Mesg and Error type names.
+        /// </summary>
+        internal class MesgAndErrorTypeNameHandler : IMDRF2TypeNameHandler
+        {
+            public MDRF2QueryItemTypeSelect ItemType { get; set; } = MDRF2QueryItemTypeSelect.None;
+
+            /// <inheritdoc/>
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                // serialization of message tuples is done explicitly in the writer.
+
+                throw new System.NotImplementedException();
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                var (mesg, dtPair) = Common.MesgAndErrorBodyFormatter.Instance.Deserialize(ref mpReader, mpOptions);
+
+                return new MDRF2QueryRecord<string>()
+                {
+                    ItemType = ItemType,
+                    DTPair = dtPair,
+                    Data = mesg,
+                }.UpdateFrom(refQueryRecord, updateItemType: false, updateDTPair: false);
+            }
+        }
 
         #endregion
     }

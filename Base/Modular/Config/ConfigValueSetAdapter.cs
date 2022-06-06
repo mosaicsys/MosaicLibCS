@@ -21,7 +21,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
 using MosaicLib.Modular.Common;
@@ -126,6 +125,7 @@ namespace MosaicLib.Modular.Config
             public override INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
             {
                 var localNVS = new NamedValueSet()
+                    .ConditionalSetKeyword(ReadOnlyOnceKeyword, ReadOnlyOnce)
                     .SetValueIfNotNull(TypeKeyword, Type)
                     .SetValueIfNotNull(DefaultKeyword, Default)
                     .SetValueIfNotNull(MinKeyword, Min)
@@ -163,6 +163,12 @@ namespace MosaicLib.Modular.Config
 
             /// <summary>Keyword used for Custom meta data named value</summary>
             public static string CustomKeyword = "Custom";
+
+            /// <summary>
+            /// Keyword added when a config key access item is using ReadOnlyOnce semantics.
+            /// <para/>Note: the use of this keyword implies that at least on key accessor for this key is useing ReadOnlyOnce behavior.  It does indicate that all such accessors are.
+            /// </summary>
+            public static string ReadOnlyOnceKeyword = "ReadOnlyOnce";
         }
     }
 
@@ -403,7 +409,7 @@ namespace MosaicLib.Modular.Config
         {
             get 
             {
-                return (isUpdateNeeded || _ickaArray.Any(icka => icka.IsUpdateNeeded)); 
+                return (isUpdateNeeded || _ickaArray.IsUpdateNeeded()); 
             }
             internal set 
             { 

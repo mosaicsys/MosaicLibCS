@@ -22,7 +22,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
 
@@ -35,7 +34,6 @@ using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
-using MosaicLib.Modular.Common.CustomSerialization;
 
 // Please note: see comments in for MosaicLib.Modular.Interconnect.Remoting in Remoting.cs
 
@@ -137,6 +135,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             nvs.SetValue("ToolTypeStr", ToolTypeStr);
             nvs.ConditionalSetValue("ToolLogGate", ToolLogGate != Logging.LogGate.All, ToolLogGate);
+            nvs.ConditionalSetValue("MaximumRetainedMemoryStreamCapacity", MaximumRetainedMemoryStreamCapacity != null, MaximumRetainedMemoryStreamCapacity);
 
             return nvs;
         }
@@ -144,6 +143,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public abstract string ToolTypeStr { get; }
 
         public Logging.LogGate ToolLogGate { get; set; }
+
+        public int? MaximumRetainedMemoryStreamCapacity { get; set; }
     }
 
     /// <summary>
@@ -157,6 +158,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public virtual TDerivedType ApplyValues(INamedValueSet nvs) 
         {
             ToolLogGate = nvs["ToolLogGate"].VC.GetValue<Logging.LogGate>(rethrow: false, defaultValue: Logging.LogGate.All);
+            MaximumRetainedMemoryStreamCapacity = nvs["MaximumRetainedMemoryStreamCapacity"].VC.GetValue<int?>(rethrow: false);
 
             return (this as TDerivedType);
         }
@@ -395,7 +397,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Client construction
         /// </summary>
         public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool)
-            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: new LocalConfig())
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: new LocalConfig(), streamSetupMessage: null)
         {
             ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
         }
@@ -404,7 +406,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS)
-            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new LocalConfig().ApplyValues(streamSetupMessageNVS))
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new LocalConfig().ApplyValues(streamSetupMessageNVS), streamSetupMessage: streamSetupMessage)
         {
             ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
         }
@@ -519,7 +521,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Serialization (pushItemDCA and PushItem class)
 
-        IDataContractAdapter<PushItem> pushItemDCA = new DataContractJsonAdapter<PushItem>();
+        private readonly IDataContractAdapter<PushItem> pushItemDCA = new DataContractJsonAdapter<PushItem>();
 
         [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
         public class PushItem
@@ -569,7 +571,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, ActionRelayMessageStreamToolConfig config)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config, streamSetupMessage: null)
         {
             IPartsInterconnection = config.LocalIPartsInterconnection ?? Parts.Parts.Instance;
 
@@ -580,7 +582,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Parts.IPartsInterconnection iPartsInterconnection)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new ActionRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS))
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new ActionRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS), streamSetupMessage: streamSetupMessage)
         {
             IPartsInterconnection = iPartsInterconnection ?? Parts.Parts.Instance;
 
@@ -618,9 +620,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             public bool isComplete;
         }
 
-        ulong providerFacetActionIDGen = 0;
-        IDictionaryWithCachedArrays<ulong, ProviderActionTracker> providerFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ProviderActionTracker>();
-        IDictionaryWithCachedArrays<ulong, ClientActionTracker> clientFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ClientActionTracker>();
+        private ulong providerFacetActionIDGen = 0;
+        private readonly IDictionaryWithCachedArrays<ulong, ProviderActionTracker> providerFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ProviderActionTracker>();
+        private readonly IDictionaryWithCachedArrays<ulong, ClientActionTracker> clientFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ClientActionTracker>();
 
         #endregion
 
@@ -692,9 +694,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Receiver: HandleInboundMessage, HandleInboundRequest, HandleInboundCancelRequest, HandleInboundUpdate, HandleInboundFailure
 
-        const int copyBufferLength = 4096;
-        byte[] copyBuffer = new byte[copyBufferLength];
-        PushItem loopPushItem = new PushItem();
+        private const int copyBufferLength = 4096;
+        private readonly byte[] copyBuffer = new byte[copyBufferLength];
+        private readonly PushItem loopPushItem = new PushItem();
 
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
@@ -709,7 +711,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                     PushItem pushItem = loopPushItem;
 
-                    foreach (var idx in Enumerable.Range(0, pushCount))
+                    for (var idx = 0; idx < pushCount; idx++)
                     {
                         pushItem.ReadPartsFrom(mesgIByteReader);
 
@@ -791,6 +793,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                             HandleInboundFailure(pushItem.actionID, clientFailureCode);
                         }
                     }
+
+                    // release any large transitory objects so that they are not retained after use here.
+                    loopPushItem.Shrink();
                 }
             }
             catch (System.Exception ex)
@@ -799,7 +804,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             }
 
             // don't hold on to really large item buffers
-            ClearMemoryStreamIfNeeded(shortenIfNeeded: true);
+            ClearMemoryStreamIfNeeded(shrinkIfNeeded: true);
         }
 
         private string HandleInboundRequest(ulong actionID, RemoteServiceActionRequest request)
@@ -949,7 +954,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Transmitter: ServiceAndGenerateNextMessageToSend, Service
 
-        List<PushItem> pendingPushItemList = new List<PushItem>();
+        private readonly List<PushItem> pendingPushItemList = new List<PushItem>();
 
         public Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp)
         {
@@ -1019,6 +1024,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                             if (ms != null)
                                 ms.WriteTo(mesgOStream);
+
+                            // once the pushItem has been serialized into the current outbound message, use Shrink
+                            // to release any large transitory objects so that they are not retained after use here.
+                            pushItem.Shrink();
                         }
                     }
                 }
@@ -1029,6 +1038,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 }
 
                 pendingPushItemList.RemoveAll(item => !item.pending);
+
+                // don't hold on to really large item buffers
+                ClearMemoryStreamIfNeeded(shrinkIfNeeded: true);
             }
 
             return mesg;
@@ -1093,9 +1105,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Serialization: DCAs, PushItem, PushItemType, RemoteServiceActionRequest
 
-        IDataContractAdapter<RemoteServiceActionRequest> requestDCA = new DataContractJsonAdapter<RemoteServiceActionRequest>();
-        IDataContractAdapter<ActionStateCopy> actionStateDCA = new DataContractJsonAdapter<ActionStateCopy>();
-        IDataContractAdapter<string> stringDCA = new DataContractJsonAdapter<string>();
+        private readonly IDataContractAdapter<RemoteServiceActionRequest> requestDCA = new DataContractJsonAdapter<RemoteServiceActionRequest>();
+        private readonly IDataContractAdapter<ActionStateCopy> actionStateDCA = new DataContractJsonAdapter<ActionStateCopy>();
+        private readonly IDataContractAdapter<string> stringDCA = new DataContractJsonAdapter<string>();
 
         public enum PushItemType : byte
         {
@@ -1114,6 +1126,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             public ulong actionID;
             public int itemLength;
 
+            public void Shrink()
+            {
+                pending = false;
+                request = null;
+                actionState = null;
+                failureCode = null;
+            }
+
             public void WritePartsInto(System.IO.BinaryWriter bw)
             {
                 bw.Write(unchecked((byte)itemType));
@@ -1128,12 +1148,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 itemLength = br.ReadInt32();
 
                 if (andClearRest)
-                {
-                    pending = false;
-                    request = null;
-                    actionState = null;
-                    failureCode = null;
-                }
+                    Shrink();
             }
 
             #endregion
@@ -1183,7 +1198,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, SetRelayMessageStreamToolConfigBase config)
-            : base("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
+            : base("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config, streamSetupMessage: null)
         {
             sets = Config.LocalISetsInstance ?? Sets.Sets.Instance;
 
@@ -1196,7 +1211,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Sets.ISetsInterconnection iSetsInstance)
-            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new SetRelayMessageStreamToolConfigBase().ApplyValues(streamSetupMessageNVS))
+            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new SetRelayMessageStreamToolConfigBase().ApplyValues(streamSetupMessageNVS), streamSetupMessage: streamSetupMessage)
         {
             sets = iSetsInstance ?? Sets.Sets.Instance;
 
@@ -1207,11 +1222,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             CheckForSets(qpcNow, forceRunNow: true);
         }
 
-        Sets.ITrackingSet trackingSet;
+        private Sets.ITrackingSet trackingSet;
 
-        Sets.ISetsInterconnection sets;
-        Sets.ITrackableSet referenceSet;
-        QpcTimeStamp lastCheckForSetsTimeStamp;
+        private readonly Sets.ISetsInterconnection sets;
+        private Sets.ITrackableSet referenceSet;
+        private QpcTimeStamp lastCheckForSetsTimeStamp;
 
         #endregion
 
@@ -1278,8 +1293,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             {
                 logger.Debug.Emit("Ignoring unexpected inbound message: {0}", mesg);
             }
-
-            mesg.ReturnBuffersToPool(qpcTimeStamp);
         }
 
         #endregion
@@ -1386,7 +1399,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, IVIRelayMessageStreamToolConfig config)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config, streamSetupMessage: null)
         {
             updateIntervalTimer.TriggerInterval = Config.MinimumUpdateInterval;
 
@@ -1411,7 +1424,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, IIVIRegistration iIVIRegistration, IValuesInterconnection defaultIVI)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new IVIRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS))
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new IVIRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS), streamSetupMessage: streamSetupMessage)
         {
             updateIntervalTimer.TriggerInterval = Config.MinimumUpdateInterval;
 
@@ -1441,10 +1454,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public readonly bool isInitiator, isAcceptor, waitBeforeRegistration;
 
         private readonly IValuesInterconnection ivi;
-        private string localNamePrefix;
-        private INamedValueSet localMetaDataFilterNVS;
-        private string[] mdKeywordFilterArray;
-        private Utils.Collections.Deduplicator<INamedValueSet> mdDeduplicator = new Deduplicator<INamedValueSet>();
+        private readonly string localNamePrefix;
+        private readonly INamedValueSet localMetaDataFilterNVS;
+        private readonly string[] mdKeywordFilterArray;
+        private readonly Utils.Collections.Deduplicator<INamedValueSet> mdDeduplicator = new Deduplicator<INamedValueSet>();
 
         #endregion
 
@@ -1500,18 +1513,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             }
         }
 
-        int localIVILastProcessedValueNamesArrayLength = 0;
-        bool enableInitiatingRegistration = false;
-        QpcTimer checkForNewValueNamesIntervalTimer = new QpcTimer() { TriggerIntervalInSec = 0.2, AutoReset = true };
+        private int localIVILastProcessedValueNamesArrayLength = 0;
+        private bool enableInitiatingRegistration = false;
+        private QpcTimer checkForNewValueNamesIntervalTimer = new QpcTimer() { TriggerIntervalInSec = 0.2, AutoReset = true };
 
-        Dictionary<string, IVATracker> stringToIVATrackerDictionary = new Dictionary<string, IVATracker>();
-        IListWithCachedArray<IVATracker> locallyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
-        IListWithCachedArray<IVATracker> remotelyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
+        private readonly Dictionary<string, IVATracker> stringToIVATrackerDictionary = new Dictionary<string, IVATracker>();
+        private readonly IListWithCachedArray<IVATracker> locallyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
+        private readonly IListWithCachedArray<IVATracker> remotelyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
 
-        IValueAccessor[] locallyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
-        IValueAccessor[] remotelyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
-        IVATracker[] locallyAssignedUpdateIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
-        IVATracker[] remotelyAssignedUpdateIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
+        private IValueAccessor[] locallyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
+        private IValueAccessor[] remotelyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
+        private IVATracker[] locallyAssignedUpdateIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
+        private IVATracker[] remotelyAssignedUpdateIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
 
         private void UpdateTrackerArrays(bool forceRebuildArrays = false)
         {
@@ -1557,9 +1570,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Receiver: HandleInboundMessage, HandleInboundRequest, HandleInboundCancelRequest, HandleInboundUpdate, HandleInboundFailure
 
-        const int copyBufferLength = 4096;
-        byte[] copyBuffer = new byte[copyBufferLength];
-        PushItem loopPushItem = new PushItem();
+        private const int copyBufferLength = 4096;
+        private readonly byte[] copyBuffer = new byte[copyBufferLength];
+        private readonly PushItem loopPushItem = new PushItem();
 
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
@@ -1575,7 +1588,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                     PushItem pushItem = loopPushItem;
 
-                    foreach (var idx in Enumerable.Range(0, pushCount))
+                    for (var idx = 0; idx < pushCount; idx++)
                     {
                         pushItem.ReadPartsFrom(mesgIByteReader);
 
@@ -1733,6 +1746,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                 break;
                         }
                     }
+
+                    // release any large transitory objects so that they are not retained after use here.
+                    loopPushItem.Shrink();
                 }
             }
             catch (System.Exception ex)
@@ -1741,7 +1757,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             }
 
             // don't hold on to really large item buffers
-            ClearMemoryStreamIfNeeded(shortenIfNeeded: true);
+            ClearMemoryStreamIfNeeded(shrinkIfNeeded: true);
 
             if (updateArraysNeeded)
                 UpdateTrackerArrays();
@@ -1751,9 +1767,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Transmitter: ServiceAndGenerateNextMessageToSend, Service
 
-        List<PushItem> pendingPushItemList = new List<PushItem>();
+        private readonly List<PushItem> pendingPushItemList = new List<PushItem>();
 
-        QpcTimer updateIntervalTimer = new QpcTimer() { SelectedBehavior = QpcTimer.Behavior.NewAutoReset };
+        private QpcTimer updateIntervalTimer = new QpcTimer() { SelectedBehavior = QpcTimer.Behavior.NewAutoReset };
 
         public Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp)
         {
@@ -1781,10 +1797,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                         mesgOByteWriter.Write(pushCount);
 
-                        int pendingPushItemListCount = pendingPushItemList.Count;
-
-                        foreach (var pushItem in pendingPushItemList.Take(pushCount))
+                        for (int idx = 0; idx < pushCount; idx++)
                         {
+                            var pushItem = pendingPushItemList[idx];
+
                             pushItem.pending = false;       // clear the pending at the start.  If we throw to the outer catch then we will only remove the items that have been completed already and the one that was being processed when we threw.
 
                             System.IO.MemoryStream ms = null;
@@ -1823,6 +1839,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                             }
 
                             logger.Trace.Emit("Serialized PushItem: {0}", pushItem);
+
+                            // After the push item has been serialized into the outbound message, use Shrink to
+                            // release any large transitory objects so that they are not retained after use here.
+                            pushItem.Shrink();
                         }
                     }
                 }
@@ -1832,11 +1852,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     mesg = null; // discard any partial message we were building
                 }
 
-                pendingPushItemList.RemoveAll(item => !item.pending);
+                pendingPushItemList.RemoveAll(removePendingPushItemListPredicate);
+
+                // don't hold on to really large item buffers
+                ClearMemoryStreamIfNeeded(shrinkIfNeeded: true);
             }
 
             return mesg;
         }
+
+        private static readonly Predicate<PushItem> removePendingPushItemListPredicate = (item) => !item.pending;
 
         public override int Service(QpcTimeStamp qpcTimeStamp)
         {
@@ -2077,7 +2102,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region Serialization: DCAs, PushItem, PushItemType, PushItemBody
 
-        IDataContractAdapter<PushItemData> dataDCA = new DataContractJsonAdapter<PushItemData>();
+        private readonly IDataContractAdapter<PushItemData> dataDCA = new DataContractJsonAdapter<PushItemData>();
 
         /// <summary>
         /// The type of item that is being pushed.
@@ -2124,6 +2149,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             public bool ItemFlagsHasInlineVC { get { return ((itemFlags & PushItemFlags.HasInlineVC) != 0); } }
             public bool ItemFlagsIncludesSerializedPayload { get { return ((itemFlags & ~PushItemFlags.HasInlineVC) != PushItemFlags.None); } }
+
+            /// <summary>
+            /// This method is used to ask the PushItem to release any held data it contains that is not needed betewen uses.
+            /// </summary>
+            public void Shrink()
+            {
+                inlineVC = ValueContainer.Empty;
+
+                data.Clear();
+            }
 
             public void WritePartsInto(System.IO.BinaryWriter bw)
             {
@@ -2220,10 +2255,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                 if (andClearRest)
                 {
-                    data.suffixName = null;
-                    data.vce = null;
-                    data.mdNVS = null;
-                    data.failureCode = null;
+                    data.Clear();
                 }
             }
 
@@ -2261,6 +2293,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             public string failureCode;
 
             public bool IsEmpty { get { return (suffixName == null && vce == null && mdNVS == null && failureCode == null); } }
+
+            /// <summary>
+            /// Clears the contents of this object
+            /// </summary>
+            public void Clear()
+            {
+                suffixName = null;
+                vce = null;
+                mdNVS = null;
+                failureCode = null;
+            }
+
+            /// <summary>
+            /// Clears the contained vce.
+            /// </summary>
+            public void ClearContainedValue()
+            {
+                vce = null;
+            }
 
             public override string ToString()
             {
@@ -2304,14 +2355,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 else
                     return ValueContainer.Empty;
             }
-
-            /// <summary>
-            /// Clears the contained vce.
-            /// </summary>
-            public void ClearContainedValue()
-            {
-                vce = null;
-            }
         }
 
         #endregion
@@ -2321,11 +2364,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region MessageStreamToolBase
 
-    public abstract class MessageStreamToolBase<TConfigType> 
+    public abstract class MessageStreamToolBase<TConfigType>
         : DisposableBase, IServiceable
         where TConfigType : MessageStreamToolConfigBase<TConfigType>, new()
     {
-        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool isClientSideIn, TConfigType config)
+        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool isClientSideIn, TConfigType config, Messages.Message streamSetupMessage = null)
         {
             Config = config.MakeCopyOfThis();
 
@@ -2342,6 +2385,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             sideName = isClientSide ? "Client" : "Server";
 
             AddExplicitDisposeAction(Release);
+
+            InitialMemoryStreamCapacity = DefaultMemoryStreamCapacity;
+            MaximumRetainedMemoryStreamCapacity = Config.MaximumRetainedMemoryStreamCapacity ?? DefaultMaximumRetainedMemoryStreamCapacity;
+
+            if (isServerSide && streamSetupMessage == null)
+                logger.Debug.Emit("Server side given null for streamSettupMessage");
         }
 
         /// <summary>Gives the config instance that was given to this tool (client side) or was generated from the setup message NVS for this tool (server side)</summary>
@@ -2407,9 +2456,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return mesg;
         }
 
-        public virtual int Service(QpcTimeStamp tsNow) 
-        { 
-            return 0; 
+        public virtual int Service(QpcTimeStamp tsNow)
+        {
+            return 0;
         }
 
         public abstract void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason);
@@ -2425,15 +2474,30 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public System.IO.MemoryStream memoryStream = null;
 
-        public const int defaultMemoryStreamCapacity = 128;
-        public const int maximumRetainedMemoryStreamCapacity = 16384;
+        /// <summary>
+        /// This gives the default value that will be used for the <see cref="InitialMemoryStreamCapacity"/>.
+        /// <para/>Defaults to 16384.
+        /// </summary>
+        public static int DefaultMemoryStreamCapacity { get { return defaultMemoryStreamCapacity; } set { defaultMemoryStreamCapacity = value; } }
+        private static int defaultMemoryStreamCapacity = 16384;
+
+        /// <summary>
+        /// This gives the default value that will be used for the <see cref="MaximumRetainedMemoryStreamCapacity"/> if its value is not
+        /// defined in the tool's Config NVS using the MaximumRetainedMemoryStreamCapacity key.
+        /// <para/>Defaults to 4194304 (4*1024*1024).
+        /// </summary>
+        public static int DefaultMaximumRetainedMemoryStreamCapacity { get { return defaultMaximumRetainedMemoryStreamCapacity; } set { defaultMaximumRetainedMemoryStreamCapacity = value; } }
+        private static int defaultMaximumRetainedMemoryStreamCapacity = 4 * 1024 * 1024;
+
+        private int InitialMemoryStreamCapacity { get; set; }
+        private int MaximumRetainedMemoryStreamCapacity { get; set; }
 
         public readonly System.Text.Encoding binaryEncoder = new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true);
 
         protected System.IO.MemoryStream GetEmptyMemoryStreamIfNeeded(bool clearContents = true)
         {
             if (memoryStream == null)
-                memoryStream = new System.IO.MemoryStream(defaultMemoryStreamCapacity);
+                memoryStream = new System.IO.MemoryStream(InitialMemoryStreamCapacity);
 
             if (clearContents && memoryStream.Length > 0)
                 memoryStream.SetLength(0);
@@ -2441,20 +2505,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return memoryStream;
         }
 
-        protected void ClearMemoryStreamIfNeeded(bool shortenIfNeeded = false)
+        protected void ClearMemoryStreamIfNeeded(bool shrinkIfNeeded = false)
         {
             if (memoryStream != null)
             {
                 if (memoryStream.Length > 0)
                     memoryStream.SetLength(0);
 
-                if (shortenIfNeeded && memoryStream.Capacity > maximumRetainedMemoryStreamCapacity)
-                    memoryStream.Capacity = defaultMemoryStreamCapacity;
+                if (shrinkIfNeeded && memoryStream.Capacity > MaximumRetainedMemoryStreamCapacity && MaximumRetainedMemoryStreamCapacity != 0)
+                    memoryStream.Capacity = MaximumRetainedMemoryStreamCapacity;
             }
         }
 
         #endregion
-
     }
 
     #endregion

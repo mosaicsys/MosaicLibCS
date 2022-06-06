@@ -75,15 +75,26 @@ namespace MosaicLib.WPF.Tools.Sets
 
         #region static factory method : GetSetTracker(SetID)
 
-        public static SetTracker GetSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
+        public static SetTracker GetSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool ? allowDelayedTrackingStart = null)
         {
             return GetSetTracker(new SetID(setName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: defaultMaximumItemsPerIteration, allowDelayedTrackingStart: allowDelayedTrackingStart);
         }
 
-        public static SetTracker GetSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
+        public static SetTracker GetSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool ? allowDelayedTrackingStart = null)
         {
-            SetTracker setTracker = null;
+            isi = isi ?? Modular.Interconnect.Sets.Sets.Instance;
+
+            var perISIItem = perISIItemDictionary.SafeTryGetValue(isi);
+            if (perISIItem == null)
+            {
+                perISIItemDictionary[isi] = perISIItem = new PerISIItems() { ISI = isi };
+            }
+
+            SetTracker setTracker;
             string setName = setID.Name.Sanitize();
+
+            var setNameToTrackerDictionary = perISIItem.setNameToTrackerDictionary;
+            var setUUIDToTrackerDictionary = perISIItem.setUUIDToTrackerDictionary;
 
             if (!setID.UUID.IsNullOrEmpty())
                 setTracker = setUUIDToTrackerDictionary.SafeTryGetValue(setID.UUID);
@@ -104,12 +115,25 @@ namespace MosaicLib.WPF.Tools.Sets
             return setTracker;
         }
 
-        private static Dictionary<string, SetTracker> setNameToTrackerDictionary = new Dictionary<string, SetTracker>();
-        private static Dictionary<string, SetTracker> setUUIDToTrackerDictionary = new Dictionary<string, SetTracker>();
+        private class PerISIItems
+        {
+            public ISetsInterconnection ISI { get; set; }
+            public readonly Dictionary<string, SetTracker> setNameToTrackerDictionary = new Dictionary<string, SetTracker>();
+            public readonly Dictionary<string, SetTracker> setUUIDToTrackerDictionary = new Dictionary<string, SetTracker>();
+        }
+
+        private static readonly Dictionary<ISetsInterconnection, PerISIItems> perISIItemDictionary = new Dictionary<ISetsInterconnection, PerISIItems>();
+
+        public static void ClearSetTrackerDictionaries()
+        {
+            perISIItemDictionary.Clear();
+        }
 
         #endregion
 
-        public SetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
+        public static bool DefaultAllowDelayedTrackingStart = true;
+
+        public SetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool? allowDelayedTrackingStart = null)
         {
             SetID = setID;
             ISI = isi ?? Modular.Interconnect.Sets.Sets.Instance;
@@ -127,7 +151,7 @@ namespace MosaicLib.WPF.Tools.Sets
             if (_maximumItemsPerIteration != DefaultMaximumItemsPerIteration)
                 MaximumItemsPerIteration = _maximumItemsPerIteration;
 
-            if (allowDelayedTrackingStart)
+            if (allowDelayedTrackingStart ?? DefaultAllowDelayedTrackingStart)
                 System.Threading.SynchronizationContext.Current.Post((o) => AttemptToStartTracking(), this);
             else
                 AttemptToStartTracking();
@@ -138,12 +162,12 @@ namespace MosaicLib.WPF.Tools.Sets
 
         private IDisposable sharedDispatcherTimerToken;
 
-        private static DependencyPropertyKey SetIDPropertyKey = DependencyProperty.RegisterReadOnly("SetID", typeof(SetID), typeof(SetTracker), new PropertyMetadata(null));
-        private static DependencyPropertyKey ReferenceSetPropertyKey = DependencyProperty.RegisterReadOnly("ReferenceSet", typeof(ITrackableSet), typeof(SetTracker), new PropertyMetadata(null));
-        private static DependencyPropertyKey TrackingSetPropertyKey = DependencyProperty.RegisterReadOnly("TrackingSet", typeof(ITrackingSet), typeof(SetTracker), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey SetIDPropertyKey = DependencyProperty.RegisterReadOnly("SetID", typeof(SetID), typeof(SetTracker), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey ReferenceSetPropertyKey = DependencyProperty.RegisterReadOnly("ReferenceSet", typeof(ITrackableSet), typeof(SetTracker), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey TrackingSetPropertyKey = DependencyProperty.RegisterReadOnly("TrackingSet", typeof(ITrackingSet), typeof(SetTracker), new PropertyMetadata(null));
 
-        private static DependencyProperty UpdateRateProperty = DependencyProperty.Register("UpdateRate", typeof(double), typeof(SetTracker), new PropertyMetadata(DefaultUpdateRate, HandleUpdateRatePropertyChanged));
-        private static DependencyProperty MaximumItemsPerIterationProperty = DependencyProperty.Register("MaximumItemsPerIteration", typeof(int), typeof(SetTracker), new PropertyMetadata(DefaultMaximumItemsPerIteration, HandleUpdateMaximumItemsPerIterationPropertyChanged));
+        private static readonly DependencyProperty UpdateRateProperty = DependencyProperty.Register("UpdateRate", typeof(double), typeof(SetTracker), new PropertyMetadata(DefaultUpdateRate, HandleUpdateRatePropertyChanged));
+        private static readonly DependencyProperty MaximumItemsPerIterationProperty = DependencyProperty.Register("MaximumItemsPerIteration", typeof(int), typeof(SetTracker), new PropertyMetadata(DefaultMaximumItemsPerIteration, HandleUpdateMaximumItemsPerIterationPropertyChanged));
 
         public SetID SetID { get { return _setID; } private set { SetValue(SetIDPropertyKey, (_setID = value)); } }
         public ITrackableSet ReferenceSet { get { return _referenceSet; } private set { SetValue(ReferenceSetPropertyKey, (_referenceSet = value)); } }
@@ -162,14 +186,16 @@ namespace MosaicLib.WPF.Tools.Sets
         }
 
         public IBasicNotificationList NotifyOnSetUpdateList { get { return _notifyOnSetUpdateList; } }
-        private BasicNotificationList _notifyOnSetUpdateList = new BasicNotificationList();
+        private readonly BasicNotificationList _notifyOnSetUpdateList = new BasicNotificationList();
 
         public IEventHandlerNotificationList<ISetDelta> SetDeltasEventNotificationList { get { return _setDeltasEventNotificationList;} }
-        private EventHandlerNotificationList<ISetDelta> _setDeltasEventNotificationList = new EventHandlerNotificationList<ISetDelta>();
+        private readonly EventHandlerNotificationList<ISetDelta> _setDeltasEventNotificationList = new EventHandlerNotificationList<ISetDelta>();
 
-        public SetTracker AddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate = null, bool delayPriming = false)
+        public static bool DefaultDelayPriming = false;
+
+        public SetTracker AddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate = null, bool ? delayPriming = null)
         {
-            if (!delayPriming || setPrimingDelegate == null)
+            if (!(delayPriming ?? DefaultDelayPriming) || setPrimingDelegate == null)
             {
                 AttemptToStartTracking();
 
@@ -203,7 +229,7 @@ namespace MosaicLib.WPF.Tools.Sets
             return UpdateSet(useNullNotify: false).MapToInt();
         }
 
-        private List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>> pendingAddSetDeltasEventHandlersWithPrimingList = new List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>>();
+        private readonly List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>> pendingAddSetDeltasEventHandlersWithPrimingList = new List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>>();
 
         private void HandlePendingAddDeltasEventHandlersWithPriming()
         {
@@ -293,7 +319,7 @@ namespace MosaicLib.WPF.Tools.Sets
         private SetID _setID;
         private ITrackableSet _referenceSet;
         private ITrackingSet _trackingSet;
-        private double _updateRate = DefaultUpdateRate;
+        private readonly double _updateRate;
         private int _maximumItemsPerIteration = DefaultMaximumItemsPerIteration;
 
         private static void HandleUpdateRatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -352,16 +378,16 @@ namespace MosaicLib.WPF.Tools.Sets
             this.keySelector = keySelector;
             this.keyValue = keyValue;
 
-            rootSetTracker = SetTracker.GetSetTracker(setID);
+            rootSetTracker = SetTracker.GetSetTracker(this.setID);
 
             rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: delayPriming);
         }
 
-        private SetID setID;
-        private Func<TItemType, TKeyType> keySelector;
-        private TKeyType keyValue;
+        private readonly SetID setID;
+        private readonly Func<TItemType, TKeyType> keySelector;
+        private readonly TKeyType keyValue;
 
-        private SetTracker rootSetTracker;
+        private readonly SetTracker rootSetTracker;
 
         /// <summary>
         /// Note: this method is coded to iterate forward through the elements in each given set delta.  This is based on the assumption that
@@ -397,7 +423,7 @@ namespace MosaicLib.WPF.Tools.Sets
             }
         }
 
-        private static DependencyPropertyKey ItemPropertyKey = DependencyProperty.RegisterReadOnly("Item", typeof(TItemType), typeof(SetNewestItemPicker<TItemType, TKeyType>), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey ItemPropertyKey = DependencyProperty.RegisterReadOnly("Item", typeof(TItemType), typeof(SetNewestItemPicker<TItemType, TKeyType>), new PropertyMetadata(null));
 
         public TItemType Item { get { return _item; } set { SetValue(ItemPropertyKey, _item = value); } }
         private TItemType _item;
@@ -439,7 +465,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             this.groupKeyValuesArray.DoForEach((keyValue, idx) => keyToIndexDictionary.Add(keyValue, idx));
 
-            rootSetTracker = SetTracker.GetSetTracker(setID);
+            rootSetTracker = SetTracker.GetSetTracker(this.setID);
 
             referenceGroupArray = new TItemType[maxGroupIndex = groupKeyValuesArray.Length];
 
@@ -448,15 +474,15 @@ namespace MosaicLib.WPF.Tools.Sets
             rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: delayPriming);
         }
 
-        private SetID setID;
-        private Func<TItemType, TKeyType> keySelector;
-        private TKeyType [] groupKeyValuesArray;
-        private Dictionary<TKeyType, int> keyToIndexDictionary = new Dictionary<TKeyType, int>();
+        private readonly SetID setID;
+        private readonly Func<TItemType, TKeyType> keySelector;
+        private readonly TKeyType[] groupKeyValuesArray;
+        private readonly Dictionary<TKeyType, int> keyToIndexDictionary = new Dictionary<TKeyType, int>();
 
-        private TItemType[] referenceGroupArray;
-        private int maxGroupIndex;
+        private readonly TItemType[] referenceGroupArray;
+        private readonly int maxGroupIndex;
 
-        private SetTracker rootSetTracker;
+        private readonly SetTracker rootSetTracker;
 
         private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
         {
@@ -489,7 +515,7 @@ namespace MosaicLib.WPF.Tools.Sets
             }
         }
 
-        private static DependencyPropertyKey GroupArrayPropertyKey = DependencyProperty.RegisterReadOnly("GroupArray", typeof(TItemType[]), typeof(SetNewestItemGroupPicker<TItemType, TKeyType>), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey GroupArrayPropertyKey = DependencyProperty.RegisterReadOnly("GroupArray", typeof(TItemType[]), typeof(SetNewestItemGroupPicker<TItemType, TKeyType>), new PropertyMetadata(null));
 
         public TItemType [] GroupArray { get { return _groupArray; } set { SetValue(GroupArrayPropertyKey, _groupArray = value); } }
         private TItemType [] _groupArray;
@@ -517,15 +543,15 @@ namespace MosaicLib.WPF.Tools.Sets
             this.maximumCapacity = maximumCapacity;
             this.filterDelegate = filterDelegate;
 
-            if (setID != null)
+            if (this.setID != null)
             {
-                HandleNewSetID(setID);
+                HandleNewSetID(this.setID);
                 SetName = setID.Name;
             }
         }
 
-        private bool allowItemsToBeRemoved;
-        private int maximumCapacity;
+        private readonly bool allowItemsToBeRemoved;
+        private readonly int maximumCapacity;
         private SetID setID;
 
         private void HandleNewSetID(SetID setID)
@@ -586,10 +612,10 @@ namespace MosaicLib.WPF.Tools.Sets
         private ApplyDeltasConfig<TItemType> applyDeltasConfig;
         private AdjustableTrackingSet<TItemType> adjustableSet;
 
-        private Func<TItemType, bool> filterDelegate = null;
+        private readonly Func<TItemType, bool> filterDelegate = null;
 
-        private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<TItemType>), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null));
-        public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null, HandleSetNamePropertyChanged));
+        private static readonly DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<TItemType>), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null));
+        public static readonly DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null, HandleSetNamePropertyChanged));
 
         public ITrackingSet<TItemType> Set { get { return adjustableSet; } set { SetValue(SetPropertyKey, value); } }
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
@@ -612,8 +638,8 @@ namespace MosaicLib.WPF.Tools.Sets
         public event BasicNotificationDelegate SetRebuilt { add { setRebuiltNotificationList.OnNotify += value; } remove { setRebuiltNotificationList.OnNotify -= value; } }
         public event BasicNotificationDelegate NewItemsAdded { add { newItemsAddedNotificationList.OnNotify += value; } remove { newItemsAddedNotificationList.OnNotify -= value; } }
 
-        private BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
-        private BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
+        private readonly BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
+        private readonly BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
     }
 
     #endregion
@@ -812,7 +838,7 @@ namespace MosaicLib.WPF.Tools.Sets
             }
         }
 
-        private List<ISetDelta> collectedSetDeltaListWhilePaused = new List<ISetDelta>();
+        private readonly List<ISetDelta> collectedSetDeltaListWhilePaused = new List<ISetDelta>();
         private int totalCollectedAddItems = 0;
         private bool regenerateSetsAfterUnpaused = false;
 
@@ -823,8 +849,8 @@ namespace MosaicLib.WPF.Tools.Sets
             regenerateSetsAfterUnpaused = false;
         }
 
-        private bool allowItemsToBeRemoved;
-        private int maximumCapacity;
+        private readonly bool allowItemsToBeRemoved;
+        private readonly int maximumCapacity;
         private SetID setID;
 
         private SetTracker rootSetTracker;
@@ -839,21 +865,21 @@ namespace MosaicLib.WPF.Tools.Sets
         private string filterString = null;
         private Func<MosaicLib.Logging.ILogMessage, bool> addItemFilter = null;
 
-        private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<MosaicLib.Logging.ILogMessage>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null));
-        private static DependencyPropertyKey TotalCountPropertyKey = DependencyProperty.RegisterReadOnly("TotalCount", typeof(int), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(0));
-        public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleSetNamePropertyChanged));
-        public static DependencyProperty PauseProperty = DependencyProperty.Register("Pause", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(false, HandlePausePropertyChanged));
-        public static DependencyProperty FilterDelegateProperty = DependencyProperty.Register("FilterDelegate", typeof(Func<MosaicLib.Logging.ILogMessage, bool>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleFilterDelegatePropertyChanged));
-        public static DependencyProperty EnabledSourcesProperty = DependencyProperty.Register("EnabledSources", typeof(object), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleEnabledSourcesPropertyChanged));
-        public static DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata("", HandleFilterStringPropertyChanged));
-        public static DependencyProperty LogGateProperty = DependencyProperty.Register("LogGate", typeof(MosaicLib.Logging.LogGate), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate, HandleLogGatePropertyChanged));
-        public static DependencyProperty EnableFatalProperty = DependencyProperty.Register("EnableFatal", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Fatal), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Fatal, e)));
-        public static DependencyProperty EnableErrorProperty = DependencyProperty.Register("EnableError", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Error), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Error, e)));
-        public static DependencyProperty EnableWarningProperty = DependencyProperty.Register("EnableWarning", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Warning), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Warning, e)));
-        public static DependencyProperty EnableSignifProperty = DependencyProperty.Register("EnableSignif", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Signif), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Signif, e)));
-        public static DependencyProperty EnableInfoProperty = DependencyProperty.Register("EnableInfo", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Info), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Info, e)));
-        public static DependencyProperty EnableDebugProperty = DependencyProperty.Register("EnableDebug", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Debug), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Debug, e)));
-        public static DependencyProperty EnableTraceProperty = DependencyProperty.Register("EnableTrace", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Trace), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Trace, e)));
+        private static readonly DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<MosaicLib.Logging.ILogMessage>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null));
+        private static readonly DependencyPropertyKey TotalCountPropertyKey = DependencyProperty.RegisterReadOnly("TotalCount", typeof(int), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(0));
+        public static readonly DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleSetNamePropertyChanged));
+        public static readonly DependencyProperty PauseProperty = DependencyProperty.Register("Pause", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(false, HandlePausePropertyChanged));
+        public static readonly DependencyProperty FilterDelegateProperty = DependencyProperty.Register("FilterDelegate", typeof(Func<MosaicLib.Logging.ILogMessage, bool>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleFilterDelegatePropertyChanged));
+        public static readonly DependencyProperty EnabledSourcesProperty = DependencyProperty.Register("EnabledSources", typeof(object), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleEnabledSourcesPropertyChanged));
+        public static readonly DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata("", HandleFilterStringPropertyChanged));
+        public static readonly DependencyProperty LogGateProperty = DependencyProperty.Register("LogGate", typeof(MosaicLib.Logging.LogGate), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate, HandleLogGatePropertyChanged));
+        public static readonly DependencyProperty EnableFatalProperty = DependencyProperty.Register("EnableFatal", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Fatal), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Fatal, e)));
+        public static readonly DependencyProperty EnableErrorProperty = DependencyProperty.Register("EnableError", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Error), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Error, e)));
+        public static readonly DependencyProperty EnableWarningProperty = DependencyProperty.Register("EnableWarning", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Warning), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Warning, e)));
+        public static readonly DependencyProperty EnableSignifProperty = DependencyProperty.Register("EnableSignif", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Signif), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Signif, e)));
+        public static readonly DependencyProperty EnableInfoProperty = DependencyProperty.Register("EnableInfo", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Info), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Info, e)));
+        public static readonly DependencyProperty EnableDebugProperty = DependencyProperty.Register("EnableDebug", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Debug), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Debug, e)));
+        public static readonly DependencyProperty EnableTraceProperty = DependencyProperty.Register("EnableTrace", typeof(bool), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(DefaultLogGate.IsTypeEnabled(MosaicLib.Logging.MesgType.Trace), (d, e) => HandleMessageTypeLogGatePropertyChanged(d, MosaicLib.Logging.MesgType.Trace, e)));
 
         public ITrackingSet<MosaicLib.Logging.ILogMessage> Set { get { return adjustableSet; } set { SetValue(SetPropertyKey, value); } }
         public int TotalCount { get { return TotalCount; } set { SetValue(TotalCountPropertyKey, value); } }
@@ -1010,8 +1036,8 @@ namespace MosaicLib.WPF.Tools.Sets
         public event BasicNotificationDelegate SetRebuilt { add { setRebuiltNotificationList.OnNotify += value; } remove { setRebuiltNotificationList.OnNotify -= value; } }
         public event BasicNotificationDelegate NewItemsAdded { add { newItemsAddedNotificationList.OnNotify += value; } remove { newItemsAddedNotificationList.OnNotify -= value; } }
 
-        private BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
-        private BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
+        private readonly BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
+        private readonly BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
     }
 
     #endregion
@@ -1058,8 +1084,20 @@ namespace MosaicLib.WPF.Tools.Sets
 
             public static E039TableSetTracker GetE039TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
             {
-                E039TableSetTracker setTracker = null;
+                isi = isi ?? MosaicLib.Modular.Interconnect.Sets.Sets.Instance;
+
+                E039TableSetTracker setTracker;
                 string setName = setID.Name.Sanitize();
+
+                var perISIItems = perISIItemDictionary.SafeTryGetValue(isi);
+
+                if (perISIItems == null)
+                {
+                    perISIItemDictionary[isi] = perISIItems = new PerISIItems() { ISI = isi };
+                }
+
+                var setNameToTrackerDictionary = perISIItems.setNameToTrackerDictionary;
+                var setUUIDToTrackerDictionary = perISIItems.setUUIDToTrackerDictionary;
 
                 if (!setID.UUID.IsNullOrEmpty())
                     setTracker = setUUIDToTrackerDictionary.SafeTryGetValue(setID.UUID);
@@ -1080,8 +1118,19 @@ namespace MosaicLib.WPF.Tools.Sets
                 return setTracker;
             }
 
-            private static Dictionary<string, E039TableSetTracker> setNameToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
-            private static Dictionary<string, E039TableSetTracker> setUUIDToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
+            private class PerISIItems
+            {
+                public ISetsInterconnection ISI { get; set; }
+                public readonly Dictionary<string, E039TableSetTracker> setNameToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
+                public readonly Dictionary<string, E039TableSetTracker> setUUIDToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
+            }
+
+            private static readonly Dictionary<ISetsInterconnection, PerISIItems> perISIItemDictionary = new Dictionary<ISetsInterconnection, PerISIItems>();
+
+            public static void ClearSetTrackerDictionaries()
+            {
+                perISIItemDictionary.Clear();
+            }
 
             #endregion
 
@@ -1090,6 +1139,8 @@ namespace MosaicLib.WPF.Tools.Sets
             public E039TableSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
                 : this(new SetID(setName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate)
             { }
+
+            public static bool DefaultInitialDelayPriming = true;
 
             public E039TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
             {
@@ -1104,7 +1155,7 @@ namespace MosaicLib.WPF.Tools.Sets
                     setTracker = SetTracker,
                 };
 
-                SetTracker.AddSetDeltasEventHandler((sender, setDelta) => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), setDelta => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), delayPriming: true);
+                SetTracker.AddSetDeltasEventHandler((sender, setDelta) => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), setDelta => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), delayPriming: DefaultInitialDelayPriming);
             }
 
             #endregion
@@ -1202,9 +1253,9 @@ namespace MosaicLib.WPF.Tools.Sets
 
             #region HandleOnNotifySetDeltasEvent and related fields
 
-            private Dictionary<string, E039TableTypeDictionary> typeNameToTableTypeDictionary = new Dictionary<string, E039TableTypeDictionary>();
+            private readonly Dictionary<string, E039TableTypeDictionary> typeNameToTableTypeDictionary = new Dictionary<string, E039TableTypeDictionary>();
 
-            private List<InnerObjectTracker> touchedInnerObjectTrackerList = new List<InnerObjectTracker>();
+            private readonly List<InnerObjectTracker> touchedInnerObjectTrackerList = new List<InnerObjectTracker>();
 
             private void HandleOnNotifySetDeltasEvent(SetTrackerTracker setTrackerTracker, ISetDelta setDelta)
             {
@@ -1219,70 +1270,64 @@ namespace MosaicLib.WPF.Tools.Sets
                         RemoveItemBySeqNumIfPresent(setTrackerTracker, itemSeqNum);
                 }
 
-                if (setDelta.RemoveRangeItems != null)
+                foreach (var removeRangeItem in setDelta.RemoveRangeItems.MapNullToEmpty())
                 {
-                    foreach (var removeRangeItem in setDelta.RemoveRangeItems)
-                    {
-                        long rangeStartSeqNum = removeRangeItem.RangeStartSeqNum;
+                    long rangeStartSeqNum = removeRangeItem.RangeStartSeqNum;
 
-                        foreach (var offset in Enumerable.Range(0, removeRangeItem.Count))
-                            RemoveItemBySeqNumIfPresent(setTrackerTracker, rangeStartSeqNum + offset);
-                    }
+                    foreach (var offset in Enumerable.Range(0, removeRangeItem.Count))
+                        RemoveItemBySeqNumIfPresent(setTrackerTracker, rangeStartSeqNum + offset);
                 }
 
-                if (setDelta.AddRangeItems != null)
+                foreach (var addRangeItem in setDelta.AddRangeItems.MapNullToEmpty())
                 {
-                    foreach (var addRangeItem in setDelta.AddRangeItems)
+                    long seqNum = addRangeItem.RangeStartSeqNum;
+
+                    foreach (var addObject in addRangeItem.RangeObjects)
                     {
-                        long seqNum = addRangeItem.RangeStartSeqNum;
+                        IE039Object addE039Object = addObject as IE039Object;
+                        E039ObjectID addE039ObjectID = (addE039Object != null) ? addE039Object.ID : null;
 
-                        foreach (var addObject in addRangeItem.RangeObjects)
+                        if (addE039ObjectID != null && addE039ObjectID.Type != null && addE039ObjectID.Name != null)    // it is "ok" if they are both empty
                         {
-                            IE039Object addE039Object = addObject as IE039Object;
-                            E039ObjectID addE039ObjectID = (addE039Object != null) ? addE039Object.ID : null;
+                            var pair = new ItemSeqNumAndE039ObjectPair() { ItemSeqNum = seqNum, Object = addE039Object };
 
-                            if (addE039ObjectID != null && addE039ObjectID.Type != null && addE039ObjectID.Name != null)    // it is "ok" if they are both empty
+                            E039TableTypeDictionary tableTypeDictionary = setTrackerTracker.typeDictionary.SafeTryGetValue(addE039ObjectID.Type);
+                            if (tableTypeDictionary == null)
                             {
-                                var pair = new ItemSeqNumAndE039ObjectPair() { ItemSeqNum = seqNum, Object = addE039Object };
+                                tableTypeDictionary = GetTableTypeDictionary(addE039ObjectID.Type);
 
-                                E039TableTypeDictionary tableTypeDictionary = setTrackerTracker.typeDictionary.SafeTryGetValue(addE039ObjectID.Type);
-                                if (tableTypeDictionary == null)
-                                {
-                                    tableTypeDictionary = GetTableTypeDictionary(addE039ObjectID.Type);
-
-                                    setTrackerTracker.typeDictionary[addE039ObjectID.Type] = tableTypeDictionary;
-                                }
-
-                                InnerObjectTracker innerObjTracker = GetInnerObjectTracker(addE039ObjectID, tableTypeDictionary);
-
-                                // if needed update the innerObjectTracker's objectID and publish it to the attached object trackers since we now know the UUID (if any) for this object
-                                if (!addE039ObjectID.Equals(innerObjTracker.objectID))
-                                {
-                                    innerObjTracker.objectID = addE039ObjectID;
-                                    foreach (var objTrackers in innerObjTracker.attachedObjectTrackerList)
-                                        objTrackers.ObjectID = addE039ObjectID;
-                                }
-
-                                if (innerObjTracker.pair.Object != null)
-                                    innerObjTracker.prevPair = innerObjTracker.pair;
-
-                                IE039Object prevObj = innerObjTracker.prevPair.Object;
-
-                                innerObjTracker.pair = pair;
-
-                                NoteTouched(innerObjTracker);
-
-                                IList<E039Link> linksToOtherObjectsList = addE039Object.LinksToOtherObjectsList;
-                                IList<E039Link> linksFromOtherObjectsList = addE039Object.LinksFromOtherObjectsList;
-
-                                innerObjTracker.objLinksToListTouched = (prevObj == null || !linksToOtherObjectsList.IsEqualTo(prevObj.LinksToOtherObjectsList));
-                                innerObjTracker.objLinksFromListTouched = (prevObj == null || !linksFromOtherObjectsList.IsEqualTo(prevObj.LinksFromOtherObjectsList));
-
-                                setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Add(innerObjTracker.pair.ItemSeqNum, innerObjTracker);
+                                setTrackerTracker.typeDictionary[addE039ObjectID.Type] = tableTypeDictionary;
                             }
 
-                            seqNum++;
+                            InnerObjectTracker innerObjTracker = GetInnerObjectTracker(addE039ObjectID, tableTypeDictionary);
+
+                            // if needed update the innerObjectTracker's objectID and publish it to the attached object trackers since we now know the UUID (if any) for this object
+                            if (!addE039ObjectID.Equals(innerObjTracker.objectID))
+                            {
+                                innerObjTracker.objectID = addE039ObjectID;
+                                foreach (var objTrackers in innerObjTracker.attachedObjectTrackerList)
+                                    objTrackers.ObjectID = addE039ObjectID;
+                            }
+
+                            if (innerObjTracker.pair.Object != null)
+                                innerObjTracker.prevPair = innerObjTracker.pair;
+
+                            IE039Object prevObj = innerObjTracker.prevPair.Object;
+
+                            innerObjTracker.pair = pair;
+
+                            NoteTouched(innerObjTracker);
+
+                            IList<E039Link> linksToOtherObjectsList = addE039Object.LinksToOtherObjectsList;
+                            IList<E039Link> linksFromOtherObjectsList = addE039Object.LinksFromOtherObjectsList;
+
+                            innerObjTracker.objLinksToListTouched = (prevObj == null || !linksToOtherObjectsList.IsEqualTo(prevObj.LinksToOtherObjectsList));
+                            innerObjTracker.objLinksFromListTouched = (prevObj == null || !linksFromOtherObjectsList.IsEqualTo(prevObj.LinksFromOtherObjectsList));
+
+                            setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Add(innerObjTracker.pair.ItemSeqNum, innerObjTracker);
                         }
+
+                        seqNum++;
                     }
                 }
 
@@ -1291,7 +1336,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             private void RemoveItemBySeqNumIfPresent(SetTrackerTracker setTrackerTracker, long itemSeqNum)
             {
-                InnerObjectTracker innerObjTracker = setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.SafeTryGetValue(itemSeqNum);
+                InnerObjectTracker innerObjTracker;
 
                 if (setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.TryGetValue(itemSeqNum, out innerObjTracker))
                 {
@@ -1721,7 +1766,7 @@ namespace MosaicLib.WPF.Tools.Sets
                 _objectEventNotificationList.Source = this;
             }
 
-            private E039TableSetTracker tableSetTracker;
+            private readonly E039TableSetTracker tableSetTracker;
             internal E039TableSetTracker.InnerObjectTracker innerObjectTracker;
             internal bool isSharedInstance;
 
@@ -1753,7 +1798,7 @@ namespace MosaicLib.WPF.Tools.Sets
             public IE039LinksFromObjectsTrackerFactory E039LinksFromObjectsTrackerFactory { get; private set; }
 
             public IEventHandlerNotificationList<IE039Object> ObjectEventNotificationList { get { return _objectEventNotificationList; } }
-            private EventHandlerNotificationList<IE039Object> _objectEventNotificationList = new EventHandlerNotificationList<IE039Object>();
+            private readonly EventHandlerNotificationList<IE039Object> _objectEventNotificationList = new EventHandlerNotificationList<IE039Object>();
 
             internal Dictionary<string, E039LinkToObjectTracker> linkToObjectTrackerByLinkKeyDictionary = new Dictionary<string, E039LinkToObjectTracker>();
             internal Dictionary<string, E039LinksFromObjectsTracker> linksFromObjectsTrackerByLinkKeyDictionary = new Dictionary<string, E039LinksFromObjectsTracker>();
@@ -1844,7 +1889,7 @@ namespace MosaicLib.WPF.Tools.Sets
             private IE039Object _object = null;
 
             public IEventHandlerNotificationList<IE039Object> ObjectEventNotificationList { get { return _objectEventNotificationList; } }
-            private EventHandlerNotificationList<IE039Object> _objectEventNotificationList = new EventHandlerNotificationList<IE039Object>();
+            private readonly EventHandlerNotificationList<IE039Object> _objectEventNotificationList = new EventHandlerNotificationList<IE039Object>();
         }
 
         /// <summary>
@@ -1928,7 +1973,7 @@ namespace MosaicLib.WPF.Tools.Sets
             public IE039Object _firstObject;
 
             public IEventHandlerNotificationList<IE039Object[]> ObjectsEventNotificationList { get { return _objectsEventNotificationList; } }
-            private EventHandlerNotificationList<IE039Object[]> _objectsEventNotificationList = new EventHandlerNotificationList<IE039Object[]>();
+            private readonly EventHandlerNotificationList<IE039Object[]> _objectsEventNotificationList = new EventHandlerNotificationList<IE039Object[]>();
         }
 
         /// <summary>
@@ -1974,6 +2019,12 @@ namespace MosaicLib.WPF.Tools.Sets
             /// <summary>Gives the default update rate for set trackers (5.0 Hz)</summary>
             public const double DefaultUpdateRate = 5.0;
 
+            /// <summary>
+            /// This value is used as the default default value for newly created E090TableSetTracker DefaultUsePostForCombinedInfoUpdates properties.
+            /// <para/>Defaults to true.
+            /// </summary>
+            public static bool DefaultDefaultUsePostForCombinedInfoUpdates = true;
+
             #endregion
 
             public E090TableSetTracker(string e090SetName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
@@ -1982,7 +2033,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             public E090TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
             {
-                DefaultUsePostForCombinedInfoUpdates = true;
+                DefaultUsePostForCombinedInfoUpdates = DefaultDefaultUsePostForCombinedInfoUpdates;
 
                 E039TableSetTracker = Tools.Sets.E039.E039TableSetTracker.GetE039TableSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate);
                 SetTracker = E039TableSetTracker.SetTracker;
@@ -1993,15 +2044,15 @@ namespace MosaicLib.WPF.Tools.Sets
             /// This property determines the default value for newly created E090CombinedSubstLocAndSubstInfoTracker's UsePostForCombinedInfoUpdates properties.
             /// UsePostForCombinedInfoUpdates is determines if the tracker immediately generates and sets its CombinedInfo DP on any newly observed object, or if it
             /// posts the internal update so as to generally be able to coallece changes to more than one observed object source into a single CombinedInfo update.
-            /// <para/>Defaults to true.
+            /// <para/>This value is initialized from the static <see cref="DefaultDefaultUsePostForCombinedInfoUpdates"/> value when an <see cref="E090TableSetTracker"/> is constructed.
             /// </summary>
             public bool DefaultUsePostForCombinedInfoUpdates { get; set; }
 
-            protected Tools.Sets.E039.E039TableSetTracker E039TableSetTracker { get; private set; }
-            protected SetTracker SetTracker { get; private set; }
+            public Tools.Sets.E039.E039TableSetTracker E039TableSetTracker { get; private set; }
+            public SetTracker SetTracker { get; private set; }
             protected E039.IE039TablePerTypeDictionary SubstLocDict { get; private set; }
 
-            private Dictionary<string, E090CombinedSubstLocAndSubstInfoTracker> substLocNameToCombinedInfoTrackerDictionary = new Dictionary<string, E090CombinedSubstLocAndSubstInfoTracker>();
+            private readonly Dictionary<string, E090CombinedSubstLocAndSubstInfoTracker> substLocNameToCombinedInfoTrackerDictionary = new Dictionary<string, E090CombinedSubstLocAndSubstInfoTracker>();
 
             /// <summary>
             /// This string indexed getter returns a new E090CombinedSubstLocAndSubstInfoTracker instance for the given <paramref name="substLocName"/>.
@@ -2050,7 +2101,7 @@ namespace MosaicLib.WPF.Tools.Sets
             }
 
             public IEventHandlerNotificationList<string[]> SubstLocNamesAddedNotificationList { get { return _substLocNamesAddedNotificationList; } }
-            private EventHandlerNotificationList<string[]> _substLocNamesAddedNotificationList = new EventHandlerNotificationList<string[]>();
+            private readonly EventHandlerNotificationList<string[]> _substLocNamesAddedNotificationList = new EventHandlerNotificationList<string[]>();
 
             private void HandleSetDeltas(ISetDelta setDelta)
             {
@@ -2091,8 +2142,8 @@ namespace MosaicLib.WPF.Tools.Sets
                 pendingAddedSubstLocList.Clear();
             }
 
-            private HashSet<string> knownSubstLocNamesSet = new HashSet<string>();
-            private List<string> pendingAddedSubstLocList = new List<string>();
+            private readonly HashSet<string> knownSubstLocNamesSet = new HashSet<string>();
+            private readonly List<string> pendingAddedSubstLocList = new List<string>();
             private bool handlePendingAddedSubstLocItemsPosted = false;
         }
 
@@ -2234,9 +2285,9 @@ namespace MosaicLib.WPF.Tools.Sets
             /// </summary>
             public bool UsePostForCombinedInfoUpdates { get; set; }
 
-            private E039.E039ObjectTracker substLocObjTracker;
-            private E039.E039LinkToObjectTracker substLocContainsObjTracker;
-            private E039.E039LinksFromObjectsTracker srcLocLinkedObjTracker, destLocLinkedObjTracker;
+            private readonly E039.E039ObjectTracker substLocObjTracker;
+            private readonly E039.E039LinkToObjectTracker substLocContainsObjTracker;
+            private readonly E039.E039LinksFromObjectsTracker srcLocLinkedObjTracker, destLocLinkedObjTracker;
 
             public static readonly DependencyPropertyKey CombinedInfoPropertyKey = DependencyProperty.RegisterReadOnly("CombinedInfo", typeof(E090CombinedSubstLocAndSubstInfo), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(null));
 

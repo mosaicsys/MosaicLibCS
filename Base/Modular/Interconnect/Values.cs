@@ -23,11 +23,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.Serialization;
-using System.Text.RegularExpressions;
 
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -130,14 +128,14 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor that can be used to observe and/or set the value of the named table entry.
         /// <para/>If the given name is null or empty then this method returns a stub IValueAccessor that is not attached to anything.
         /// </summary>
-        IValueAccessor GetValueAccessor(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate);
+        IValueAccessor GetValueAccessor(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, bool asReadOnly = false);
 
         /// <summary>
         /// Typed (using generics) IValueAccessor{TValueType} Factory method.
         /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor{TValueType} that can be used to observe and/or set the value of the named table entry.
         /// <para/>If the given name is null or empty then this method returns a stub IValueAccessor{TValueType} that is not attached to anything.
         /// </summary>
-        IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate);
+        IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, bool asReadOnly = false);
 
         /// <summary>Returns an array of the names of all of the values in this interconnection table instance.</summary>
         string[] ValueNamesArray { get; }
@@ -161,8 +159,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="tableItemFilter">gives the caller provided predicate used to determine which table entries (by name and metadata) shall be included in the resulting set</param>
         /// <param name="startAtIndex">Indicates the number of table entries to skip before applying the given filter</param>
         /// <param name="maxNumItems">Gives the maximum number of items to pass to the filter during this call, or 0 to indicate that there is no limit</param>
+        /// <param name="asReadOnly">When given as true this requests that the created <see cref="IValueAccessor"/> instances be set to be read only.</param>
         /// </summary>
-        IValueAccessor[] GetFilteredValueAccessors(Func<string, INamedValueSet, bool> tableItemFilter, int startAtIndex = 0, int maxNumItems = 0);
+        IValueAccessor[] GetFilteredValueAccessors(Func<string, INamedValueSet, bool> tableItemFilter, int startAtIndex = 0, int maxNumItems = 0, bool asReadOnly = false);
 
         /// <summary>
         /// Provides a property that returns the current total number of named values in this values interconnect table space.
@@ -339,6 +338,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>True if the corresponding table entry has been explicitly set to a value and this object has been Updated from it.  This is a synonym for ((ValueSeqNum != 0) || IsSetPending)</summary>
         bool HasValueBeenSet { get; }
+
+        /// <summary>This property is true if this value accessor instance has been set to be read-only.</summary>
+        bool IsReadOnly { get; set; }
     }
 
     /// <summary>
@@ -470,7 +472,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             set { singletonInstanceHelper.Instance = value; }
         }
 
-        private static SingletonHelperBase<IValuesInterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("ValuesInterconnectSingleton"));
+        private static readonly SingletonHelperBase<IValuesInterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("ValuesInterconnectSingleton"));
 
         #endregion
 
@@ -519,7 +521,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             set { singletonInstanceHelper.Instance = value; }
         }
 
-        private static SingletonHelperBase<IIVIRegistration> singletonInstanceHelper = new SingletonHelperBase<IIVIRegistration>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new IVIRegistration("MainIVIRegistration"));
+        private readonly static SingletonHelperBase<IIVIRegistration> singletonInstanceHelper = new SingletonHelperBase<IIVIRegistration>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new IVIRegistration("MainIVIRegistration"));
 
         #endregion
 
@@ -637,7 +639,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         protected Logging.Logger Logger { get; private set; }
 
         private readonly object mutex = new object();
-        private Dictionary<string, IValuesInterconnection> iviNameDictionary = new Dictionary<string, IValuesInterconnection>();
+        private readonly Dictionary<string, IValuesInterconnection> iviNameDictionary = new Dictionary<string, IValuesInterconnection>();
 
         #endregion
     }
@@ -682,9 +684,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
-                return tableEntryDictionary.Values.ToArray().GetEnumerator();
+                return tableEntryDictionary.Values.SafeToArray().GetEnumerator();
             }
         }
 
@@ -702,8 +704,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IEnumerable<Modular.Common.IMapNameFromTo> MapNameFromToSet 
         {
-            get { using (var scopedLock = new ScopedLock(mutex)) { return nameMappingSet.ToArray(); } }
-            set { using (var scopedLock = new ScopedLock(mutex)) { InnerSetMappingArray(value); } }
+            get { using (var scopedLock = new ScopedLockStruct(mutex)) { return nameMappingSet.ToArray(); } }
+            set { using (var scopedLock = new ScopedLockStruct(mutex)) { InnerSetMappingArray(value); } }
         }
 
         /// <summary>
@@ -711,7 +713,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IValuesInterconnection AddRange(IEnumerable<Modular.Common.IMapNameFromTo> addMapNameFromToSet)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerAddRange(addMapNameFromToSet);
             }
@@ -723,14 +725,17 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// IValueAccessor Factory method.  
         /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor that can be used to observe and/or set the value of the named table entry.
         /// </summary>
-        public IValueAccessor GetValueAccessor(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        public IValueAccessor GetValueAccessor(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, bool asReadOnly = false)
         {
             if (String.IsNullOrEmpty(name))
-                return new ValueAccessorImpl(null, null);
+                return new ValueAccessorImpl(null, null, asReadOnly: asReadOnly);
+
+            if (asReadOnly && metaDataIn.IsNeitherNullNorEmpty() && mergeBehavior != NamedValueMergeBehavior.None)
+                new System.NotSupportedException("GetValueAccessor does not support combined use of the asReadOnly selection and merging non-empty meta data into the corresponding table entry.".CheckedFormat());
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor accessor = new ValueAccessorImpl(this, tableEntry, update: true);
+            IValueAccessor accessor = new ValueAccessorImpl(this, tableEntry, update: true, asReadOnly: asReadOnly);
 
             return accessor;
         }
@@ -739,14 +744,20 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Typed (using generics) IValueAccessor{TValueType} Factory method.
         /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor{TValueType} that can be used to observe and/or set the value of the named table entry.
         /// </summary>
-        public IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        public IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, bool asReadOnly = false)
         {
             if (String.IsNullOrEmpty(name))
-                return new ValueAccessorImpl<TValueType>(null, null, update: true);
+                return new ValueAccessorImpl<TValueType>(null, null, update: true, asReadOnly: asReadOnly);
+
+            if (asReadOnly && metaDataIn.IsNeitherNullNorEmpty() && mergeBehavior != NamedValueMergeBehavior.None)
+                new System.NotSupportedException("GetValueAccessor does not support combined use of the asReadOnly selection and merging non-empty meta data into the corresponding table entry.".CheckedFormat());
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor<TValueType> accessor = new ValueAccessorImpl<TValueType>(this, tableEntry, update: true);
+            IValueAccessor<TValueType> accessor = new ValueAccessorImpl<TValueType>(this, tableEntry, update: true, asReadOnly: asReadOnly);
+
+            if (asReadOnly)
+                accessor.IsReadOnly = true;
 
             return accessor;
         }
@@ -766,7 +777,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public string [] GetValueNamesRange(int startAtIndex = 0, int maxNumItems = 0)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 int numItems = Math.Max(0, tableItemNamesList.Count - startAtIndex);
                 if (numItems > maxNumItems && maxNumItems > 0)
@@ -789,7 +800,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             tableItemFilter = tableItemFilter ?? fallbackTableItemFilter;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 return TableArray.Skip(startAtIndex).Take(maxNumItems.MapDefaultTo(int.MaxValue)).Where(tableEntry => tableItemFilter(tableEntry.Name, tableEntry.MetaData)).Select(tableEntry => tableEntry.Name).ToArray();
             }
@@ -800,14 +811,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="tableItemFilter">gives the caller provided predicate used to determine which table entries (by name and metadata) shall be included in the resulting set</param>
         /// <param name="startAtIndex">Indicates the number of table entries to skip before applying the given filter</param>
         /// <param name="maxNumItems">Gives the maximum number of items to pass to the filter during this call, or 0 to indicate that there is no limit</param>
+        /// <param name="asReadOnly">When selected this method will set each of the resulting <see cref="IValueAccessor"/> instances to be read only.</param>
         /// </summary>
-        public IValueAccessor[] GetFilteredValueAccessors(Func<string, INamedValueSet, bool> tableItemFilter, int startAtIndex = 0, int maxNumItems = 0)
+        public IValueAccessor[] GetFilteredValueAccessors(Func<string, INamedValueSet, bool> tableItemFilter, int startAtIndex = 0, int maxNumItems = 0, bool asReadOnly = false)
         {
             tableItemFilter = tableItemFilter ?? fallbackTableItemFilter;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
-                return TableArray.Skip(startAtIndex).Take(maxNumItems.MapDefaultTo(int.MaxValue)).Where(tableEntry => tableItemFilter(tableEntry.Name, tableEntry.MetaData)).Select(tableEntry => new ValueAccessorImpl(this, tableEntry, update: true)).ToArray();
+                return TableArray.Skip(startAtIndex).Take(maxNumItems.MapDefaultTo(int.MaxValue)).Where(tableEntry => tableItemFilter(tableEntry.Name, tableEntry.MetaData)).Select(tableEntry => new ValueAccessorImpl(this, tableEntry, update: true, asReadOnly: asReadOnly)).ToArray();
             }
         }
 
@@ -829,9 +841,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             if (accessor != null)
             {
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
-                    ((accessor as ValueAccessorImpl) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                    var valueAccessorImpl = accessor as ValueAccessorImpl;
+                    if (valueAccessorImpl != null && valueAccessorImpl.IVI == this)
+                    {
+                        valueAccessorImpl.ThrowIfIsReadOnly("ValuesInterconnection.Set");
+                        valueAccessorImpl.InnerGuardedSetTableEntryFromValue();
+                    }
+
                     SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
                     globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -846,12 +864,17 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         internal void SetMetaData(IValueAccessor accessor, INamedValueSet metaDataIn, NamedValueMergeBehavior mergeBehavior)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 bool mergeBehaviorIsReplace = ((mergeBehavior & NamedValueMergeBehavior.Replace) != 0);
                 INamedValueSet metaDataNVS_replaceAsRO = mergeBehaviorIsReplace ? metaDataIn.ConvertToReadOnly(mapNullToEmpty: true).BuildDictionary() : null;
 
-                ((accessor as ValueAccessorImpl) ?? emptyValueAccessor).InnerGuardedSetMetaData(metaDataIn, mergeBehavior, metaDataNVS_replaceAsRO);
+                var valueAccessorImpl = accessor as ValueAccessorImpl;
+                if (valueAccessorImpl != null && valueAccessorImpl.IVI == this)
+                {
+                    valueAccessorImpl.ThrowIfIsReadOnly("ValuesInterconnection.SetMetaData");
+                    valueAccessorImpl.InnerGuardedSetMetaData(metaDataIn, mergeBehavior, metaDataNVS_replaceAsRO);
+                }
 
                 SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
@@ -869,9 +892,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             if (accessor != null)
             {
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
-                    ((accessor as ValueAccessorImpl) ?? emptyValueAccessor).InnerGuardedResetTableEntry();
+                    var valueAccessorImpl = accessor as ValueAccessorImpl;
+                    if (valueAccessorImpl != null && valueAccessorImpl.IVI == this)
+                    {
+                        valueAccessorImpl.ThrowIfIsReadOnly("ValuesInterconnection.Reset");
+                        valueAccessorImpl.InnerGuardedResetTableEntry();
+                    }
+
                     SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
                     globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -934,24 +963,42 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             bool areAnySetsPending = false;
 
-            if (ifValueSeqNumIsZero)
-                areAnySetsPending = accessorArray.Any(iva => iva != null && iva.CurrentSeqNum == 0);
-            else if (optimize)
-                areAnySetsPending = accessorArray.Any(iva => iva != null && (iva.IsSetPending || (orIsValueUpdateNeeded && iva.IsValueUpdateNeeded)));
+            if (optimize || ifValueSeqNumIsZero)
+            {
+                foreach (var iva in accessorArray)
+                {
+                    if (iva == null || iva.IsReadOnly)
+                        continue;
+
+                    if (optimize && (iva.IsSetPending || (orIsValueUpdateNeeded && iva.IsValueUpdateNeeded)))
+                    {
+                        areAnySetsPending = true;
+                        break;
+                    }
+
+                    if (ifValueSeqNumIsZero && iva.CurrentSeqNum == 0)
+                    {
+                        areAnySetsPending = true;
+                        break;
+                    }
+                }
+            }
             else
+            {
                 areAnySetsPending = numEntriesToSet > 0;
+            }
 
             if (!areAnySetsPending)
                 return;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 for (int idx = 0; idx < numEntriesToSet; idx++)
                 {
                     IValueAccessor iva = accessorArray[idx];
                     ValueAccessorImpl valueAccessor = ((iva as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                    if (iva == null || (ifValueSeqNumIsZero && iva.CurrentSeqNum != 0) || valueAccessor.IVI != this)
+                    if (iva == null || iva.IsReadOnly || (ifValueSeqNumIsZero && iva.CurrentSeqNum != 0) || valueAccessor.IVI != this)
                     {
                         // skip this IVA
                     }
@@ -984,7 +1031,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             int numEntriesUpdated = 0;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 bool mergeBehaviorIsReplace = ((mergeBehavior & NamedValueMergeBehavior.Replace) != 0);
                 INamedValueSet metaDataNVS_replaceAsRO = mergeBehaviorIsReplace ? metaDataIn.ConvertToReadOnly(mapNullToEmpty: true).BuildDictionary() : null;
@@ -993,7 +1040,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                    if (accessor != null && valueAccessor.IVI == this)
+                    if (accessor != null && !accessor.IsReadOnly && valueAccessor.IVI == this)
                     {
                         valueAccessor.InnerGuardedSetMetaData(metaDataIn, mergeBehavior, metaDataNVS_replaceAsRO);
 
@@ -1021,7 +1068,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     if (valueAccessor.IVI == this)
                         valueAccessor.InnerGuardedUpdateValueFromTableEntry();
@@ -1044,7 +1091,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (numEntriesToUpdate < 0 || numEntriesToUpdate > accessorArrayLength)
                 numEntriesToUpdate = accessorArrayLength;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 for (int idx = 0; idx < numEntriesToUpdate; idx++)
                 {
@@ -1093,8 +1140,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             ValueTableEntry tableEntry = null;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
+                ConstructMDDeduplicatorIfNeeded();
+
                 name = InnerMapSanitizedName(name.Sanitize());
 
                 if (!tableEntryDictionary.TryGetValue(name, out tableEntry) || tableEntry == null)
@@ -1110,7 +1159,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 if (tableEntry != null && !metaDataIn.IsNullOrEmpty())
                 {
-                    tableEntry.SetMetaData(metaDataIn, mergeBehavior, (metaDataIn.IsReadOnly ? metaDataIn : null));
+                    tableEntry.SetMetaData(metaDataIn, mergeBehavior, (metaDataIn.IsReadOnly ? metaDataIn : null), MDDeduplicator);
                 }
 
                 globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -1132,7 +1181,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             Dictionary<string, string> nmp = nameMappingDictionary;
 
-            string mappedName = null;
+            string mappedName;
 
             if (nmp.TryGetValue(name, out mappedName) && mappedName != null)
                 return mappedName;
@@ -1161,7 +1210,52 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
 
-        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = EmptyArrayFactory<Modular.Common.IMapNameFromTo>.Instance;
+        private readonly Modular.Common.IMapNameFromTo[] emptyMapFromToArray = EmptyArrayFactory<Modular.Common.IMapNameFromTo>.Instance;
+
+        #endregion
+
+        #region MDDeduplicator, ConstructMDDeduplicatorIfNeeded
+
+        private void ConstructMDDeduplicatorIfNeeded()
+        {
+            if (MDDeduplicator == null)
+            {
+                var maxHistoryCount = MDDeduplicatorMaxHistoryCount
+                                    ?? DefaultMDDeduplicatorMaxHistoryCount
+                                    ?? Config.Config.Instance.GetConfigKeyAccessOnce("Config.Modular.Interconnect.Values.MDDeduplicator.DefaultMaxHistoryCount", silenceLogging: true).GetValue(0);
+
+                MDDeduplicator = new Deduplicator<INamedValueSet>(maxHistoryCount: maxHistoryCount);
+                mdDeduplicatorMaxHistoryCount = maxHistoryCount;
+            }
+        }
+
+        internal Deduplicator<INamedValueSet> MDDeduplicator { get; private set; }
+
+        /// <summary>
+        /// This property is used during the construction of the MDDeduplicator that is used for meta data deduplication.
+        /// 
+        /// This property is initialized at construction from the static <see cref="DefaultMDDeduplicatorMaxHistoryCount"/>.
+        /// If the client wants to use a different value then the client should explicitly set this property before otherwise using the instance so that its value
+        /// can be updated before the MDDeduplicator instance is created (on construction of first accessor).
+        /// <para/>NOTE: once the MDDeduplicator instance has been created, this later changes to this property will no longer have any effect.
+        /// </summary>
+        public int ? MDDeduplicatorMaxHistoryCount 
+        {
+            get { return mdDeduplicatorMaxHistoryCount; }
+            set
+            {
+                if (MDDeduplicator != null && mdDeduplicatorMaxHistoryCount != value)
+                    new System.InvalidOperationException("MDDeduplicatorMaxHistoryCount cannot be changed after this instance has been otherwise used (MDDeduplicator already exists).").Throw();
+
+                mdDeduplicatorMaxHistoryCount = value;
+            }
+        }
+        private int? mdDeduplicatorMaxHistoryCount;
+
+        /// <summary>
+        /// This static property defines the default value for each new <see cref="ValuesInterconnection"/> instances <see cref="MDDeduplicatorMaxHistoryCount"/> property.
+        /// </summary>
+        public static int ? DefaultMDDeduplicatorMaxHistoryCount { get; set; }
 
         #endregion
 
@@ -1179,16 +1273,16 @@ namespace MosaicLib.Modular.Interconnect.Values
         private readonly object mutex;
 
         /// <summary>Basic list of the names of all of the items in the table</summary>
-        private List<string> tableItemNamesList = new List<string>();
+        private readonly List<string> tableItemNamesList = new List<string>();
 
         /// <summary>Volatile count of the number of items that have been added to the tableItemNamesList.  This is updated after the itesm have been added to the list.</summary>
         private volatile int volatileTableItemNamesListCount = 0;
 
         /// <summary>This is the dictionary that is used to convert value names into the corresponding ValueTableEntry that is used for that name.</summary>
-        private Dictionary<string, ValueTableEntry> tableEntryDictionary = new Dictionary<string, ValueTableEntry>();
+        private readonly Dictionary<string, ValueTableEntry> tableEntryDictionary = new Dictionary<string, ValueTableEntry>();
 
         /// <summary>This is the "table".  It consists of a list of the created ValueTableEntry items and can be indexed by their IDs as needed.</summary>
-        private List<ValueTableEntry> table = new List<ValueTableEntry>();
+        private readonly List<ValueTableEntry> table = new List<ValueTableEntry>();
 
         /// <summary>cached array version of table list object</summary>
         private ValueTableEntry[] tableArray = null;
@@ -1203,7 +1297,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         private static readonly ValueAccessorImpl emptyValueAccessor = new ValueAccessorImpl(null, null);
 
         /// <summary>Backing store for NotificationList</summary>
-        private BasicNotificationList notificationList = new BasicNotificationList();
+        private readonly BasicNotificationList notificationList = new BasicNotificationList();
 
         /// <summary>Backing store for GlobalSeqNum</summary>
         private volatile UInt32 globalSeqNum = 0;
@@ -1261,7 +1355,6 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Backing store for VC propety</summary>
             private ValueContainer vc;
 
-            public NamedValueSet workingMetaData = null;
             public INamedValueSet publishedMetaData = NamedValueSet.Empty;
 
             /// <summary>used by one or more attached accessors to Set the value of the table entry.  Also increments the SeqNum, skipping zero which is reserved as the initial unwritten state.</summary>
@@ -1276,14 +1369,18 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
 
             /// <summary>used by one or more attached accessors to allow them to complete IVI triggered meta data changes.</summary>
-            public void SetMetaData(INamedValueSet metaDataIn, NamedValueMergeBehavior mergeBehavior, INamedValueSet metaDataNVS_replaceAsRO)
+            public void SetMetaData(INamedValueSet metaDataIn, NamedValueMergeBehavior mergeBehavior, INamedValueSet metaDataNVS_replaceAsRO, Deduplicator<INamedValueSet> mdDeduplicator)
             {
-                workingMetaData = workingMetaData.MergeWith(metaDataIn, mergeBehavior: mergeBehavior);
-
                 if (((mergeBehavior & NamedValueMergeBehavior.Replace) != 0) && metaDataNVS_replaceAsRO != null)
-                    publishedMetaData = metaDataNVS_replaceAsRO;
-                else
-                    publishedMetaData = workingMetaData.ConvertToReadOnly(mapNullToEmpty: true);
+                {
+                    publishedMetaData = mdDeduplicator.Process(metaDataNVS_replaceAsRO);
+                }
+                else if (metaDataIn.IsNeitherNullNorEmpty())
+                {
+                    var mergedMetaData = publishedMetaData.MergeWith(metaDataIn, mergeBehavior: mergeBehavior);
+
+                    publishedMetaData = mdDeduplicator.Process(mergedMetaData.ConvertToReadOnly(mapNullToEmpty: true));
+                }
 
                 metaDataSeqNum = InnerGuardedIncrementSkipZero(metaDataSeqNum);
             }
@@ -1295,7 +1392,6 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 vc.SetToEmpty();
 
-                workingMetaData = null;
                 publishedMetaData = NamedValueSet.Empty;
 
                 valueSeqNum = 0;
@@ -1324,11 +1420,14 @@ namespace MosaicLib.Modular.Interconnect.Values
         internal class ValueAccessorImpl : IValueAccessor
         {
             /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            public ValueAccessorImpl(ValuesInterconnection ivi, ValueTableEntry tableEntry, bool update = false)
+            public ValueAccessorImpl(ValuesInterconnection ivi, ValueTableEntry tableEntry, bool update = false, bool asReadOnly = false)
             {
                 IVI = ivi;
                 TableEntry = tableEntry;
                 metaData = (tableEntry != null) ? tableEntry.MetaData : NamedValueSet.Empty;
+
+                if (asReadOnly)
+                    IsReadOnly = true;
 
                 if (update)
                     InnerGuardedUpdateValueFromTableEntry();
@@ -1362,6 +1461,8 @@ namespace MosaicLib.Modular.Interconnect.Values
                 get { return vc; } 
                 set 
                 {
+                    ThrowIfIsReadOnly("VC setter");
+
                     if (!IsSetPending)
                         IsSetPending = !vc.IsEqualTo(value);
                     vc = value; 
@@ -1371,7 +1472,16 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>
             /// get/set property is an alternative name for the VC property
             /// </summary>
-            public ValueContainer ValueContainer { get { return VC; } set { VC = value; } }
+            public ValueContainer ValueContainer 
+            { 
+                get { return VC; } 
+                set 
+                {
+                    ThrowIfIsReadOnly("ValueContainer setter");
+
+                    VC = value; 
+                } 
+            }
 
             protected ValueContainer vc = default(ValueContainer);
 
@@ -1384,7 +1494,12 @@ namespace MosaicLib.Modular.Interconnect.Values
             public object ValueAsObject 
             { 
                 get { return vc.ValueAsObject; } 
-                set { VC = new ValueContainer(value); } 
+                set 
+                {
+                    ThrowIfIsReadOnly("ValueAsObject setter");
+
+                    VC = new ValueContainer(value); 
+                } 
             }
 
             /// <summary>This property is set whenever the ValueContainer is changed and is cleared whenver the update has been delievered to the ValueInterconnection instance or when Update is called.</summary>
@@ -1393,6 +1508,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Sets the corresponding interconnection table space entry's value from the current ValueAsObject value.  This method supports call chaining.</summary>
             public IValueAccessor Set()
             {
+                ThrowIfIsReadOnly("Set");
+
                 if (IVI != null)
                     IVI.Set(this);
 
@@ -1402,6 +1519,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
             public IValueAccessor Reset()
             {
+                ThrowIfIsReadOnly("Reset");
+
                 vc.SetToEmpty();
                 metaData = NamedValueSet.Empty;
 
@@ -1414,6 +1533,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Sets ValueContainer to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
             public IValueAccessor Set(ValueContainer valueContainerIn)
             {
+                ThrowIfIsReadOnly("Set(vc)");
+
                 vc = valueContainerIn;
 
                 return Set();
@@ -1422,6 +1543,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Sets ValueAsObject to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
             public IValueAccessor Set(object valueAsObject)
             {
+                ThrowIfIsReadOnly("Set(object)");
+
                 ValueAsObject = valueAsObject;
 
                 return Set();
@@ -1430,6 +1553,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Checks if the current <paramref name="valueContainer"/> is different than the given one, or optionally if IsValueUpdateNeeded is true.  If they are not Equal, or optionally when IsValueUpdateNeeded is true, it then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
             public IValueAccessor SetIfDifferent(ValueContainer valueContainer, bool orWhenValueUpdateNeeded = false)
             {
+                ThrowIfIsReadOnly("SetIfDifferent(vc)");
+
                 VC = valueContainer;
 
                 if (IsSetPending || (orWhenValueUpdateNeeded && IsValueUpdateNeeded))
@@ -1440,6 +1565,8 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             IValueAccessor IValueAccessor.SetIfDifferent(object valueAsObject, bool orWhenValueUpdateNeeded)
             {
+                ThrowIfIsReadOnly("SetIfDifferent(object)");
+
                 return SetIfDifferent(default(ValueContainer).SetFromObject(valueAsObject), orWhenValueUpdateNeeded: orWhenValueUpdateNeeded);
             }
 
@@ -1476,6 +1603,32 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             /// <summary>True if the corresponding table entry has been explicitly set to a value and this object has been Updated from it.  This is a synonym for ((ValueSeqNum != 0) || IsSetPending)</summary>
             public bool HasValueBeenSet { get { return ((ValueSeqNum != 0) || IsSetPending); } }
+
+            /// <inheritdoc/>
+            public bool IsReadOnly
+            {
+                get { return isReadOnly; }
+                set
+                {
+                    if (value)
+                        isReadOnly = true;
+                    else
+                        ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
+                }
+            }
+
+            /// <summary>
+            /// This method checks if the instance IsReadOnly and then throws a NotSupportedException if it is.
+            /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+            /// </summary>
+            /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+            public void ThrowIfIsReadOnly(string reasonPrefix)
+            {
+                if (IsReadOnly)
+                    new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true").Throw();
+            }
+
+            private bool isReadOnly;
 
             /// <summary>
             /// This method is used to support typed (generics) accessors by informing them when the backing store for the ValueAsObject property may have changed so that any typed Value, or similar,
@@ -1555,7 +1708,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             internal void InnerGuardedSetMetaData(INamedValueSet metaDataIn, NamedValueMergeBehavior mergeBehavior, INamedValueSet metaDataNVS_replaceAsRO)
             {
                 if (TableEntry != null)
-                    TableEntry.SetMetaData(metaDataIn, mergeBehavior, metaDataNVS_replaceAsRO);
+                    TableEntry.SetMetaData(metaDataIn, mergeBehavior, metaDataNVS_replaceAsRO, IVI.MDDeduplicator);
 
                 metaData = TableEntry.MetaData;
 
@@ -1592,17 +1745,22 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Implementation class for the IValueAccessor{TValueType} interface to provide type converted access to an Interconnection table space value.  Extends the ValueAccessor class.</summary>
         private class ValueAccessorImpl<TValueType> : ValueAccessorImpl, IValueAccessor<TValueType>
         {
-            /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry, bool update = false)
-                : base(interconnectInstance, tableEntry, update: update)
+            /// <summary>
+            /// Internal constructor.  
+            /// Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.
+            /// </summary>
+            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry, bool update = false, bool asReadOnly = false)
+                : base(interconnectInstance, tableEntry, update: update, asReadOnly: asReadOnly)
+            { }
+
+            static ValueAccessorImpl()
             {
-                typeOfTValueType = typeof(TValueType);
                 ValueContainer.DecodeType(typeOfTValueType, out decodedValueType, out decodedTypeIsNullable);
             }
 
-            Type typeOfTValueType;
-            ContainerStorageType decodedValueType;
-            bool decodedTypeIsNullable;
+            private static readonly Type typeOfTValueType = typeof(TValueType);
+            private static readonly ContainerStorageType decodedValueType;
+            private static readonly bool decodedTypeIsNullable;
 
             /// <summary>
             /// Getter gives the last updated or set value using the desired TValueType.  
@@ -1683,7 +1841,6 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 return this;
             }
-
 
             /// <summary>
             /// This property defines the value of rethrow that is used with the Value property.  This property defaults to false.
@@ -1806,6 +1963,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Gives the caller access to the number of items (IVAs) that this adapter is using.
         /// </summary>
         int NumItems { get; }
+
+        /// <summary>
+        /// This property is true if this value set adapter instance has been set to be read-only.  
+        /// A read only value set adapter does not support use of its Set method or of its TransferValuesToIVAs method.
+        /// <para/>Note: the use of this property is independant of the ItemAccess and/or MustSupportSet property values
+        /// and as such a public value set class may still required valid public setters/set access for all annotated items even through
+        /// it is being used with a IsReadOnly adapter.
+        /// </summary>
+        bool IsReadOnly { get; set; }
     }
 
     /// <summary>
@@ -1916,13 +2082,13 @@ namespace MosaicLib.Modular.Interconnect.Values
             return this;
         }
 
-        List<IModularValueSetAdapter> imvsaList = new List<IModularValueSetAdapter>();
-        List<IValueAccessor> extraIVAList = new List<IValueAccessor>();
+        private readonly List<IModularValueSetAdapter> imvsaList = new List<IModularValueSetAdapter>();
+        private readonly List<IValueAccessor> extraIVAList = new List<IValueAccessor>();
 
-        IModularValueSetAdapter[] imvsaArray = EmptyArrayFactory<IModularValueSetAdapter>.Instance;
-        bool rebuildNeeded = false;
-        IValueAccessor [] ivaArray = null;
-        int ivaArrayLength = 0;
+        private IModularValueSetAdapter[] imvsaArray = EmptyArrayFactory<IModularValueSetAdapter>.Instance;
+        private bool rebuildNeeded = false;
+        private IValueAccessor[] ivaArray = null;
+        private int ivaArrayLength = 0;
 
         private void RebuildArraysIfNeeded()
         {
@@ -2106,7 +2272,33 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public int NumItems
         {
-            get { RebuildArraysIfNeeded(); return imvsaArray.Sum(ivsa => ivsa.NumItems); }
+            get 
+            { 
+                RebuildArraysIfNeeded();
+
+                var numItems = 0;
+
+                foreach (var imvsa in imvsaArray)
+                    numItems += imvsa.NumItems;
+
+                return numItems;
+            }
+        }
+
+        /// <inheritdoc/>
+        public bool IsReadOnly
+        {
+            get 
+            {
+                RebuildArraysIfNeeded();
+                return imvsaArray.Any(imvsa => imvsa.IsReadOnly);
+            }
+            set
+            {
+                RebuildArraysIfNeeded();
+                foreach (var imvsa in imvsaArray)
+                    imvsa.IsReadOnly = value;
+            }
         }
 
         /// <summary>
@@ -2360,6 +2552,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public override void TransferValuesToIVAs()
         {
+            ThrowIfIsReadOnly("TransferValuesToIVAs");
+
             foreach (var iasi in itemAccessSetupInfoArray)
             {
                 if (iasi != null && iasi.MemberToIVAAction != null)
@@ -2406,7 +2600,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 IValueAccessor valueAccessor = IVI.GetValueAccessor(fullValueName, itemAttribute.GetMergedMetaData(DefaultMetaData, DefaultMetaDataMergeBehavior), DefaultMetaDataMergeBehavior);
 
                 ContainerStorageType useStorageType;
-                bool isNullable = false;
+                bool isNullable;
                 ValueContainer.DecodeType(itemInfo.ItemType, out useStorageType, out isNullable);
                 if (!itemAttribute.StorageType.IsNone())
                     useStorageType = itemAttribute.StorageType;
@@ -2447,7 +2641,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region itemAccessSetupInfoArray
 
         /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
-        ItemAccessSetupInfo<TValueSet, TAttribute>[] itemAccessSetupInfoArray = null;
+        private readonly ItemAccessSetupInfo<TValueSet, TAttribute>[] itemAccessSetupInfoArray;
 
         #endregion
     }
@@ -2595,6 +2789,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             InnerSetup(baseNames);
 
+            if (IsReadOnly)
+                SetAllIVAsToBeReadOnly();
+
             return this;
         }
 
@@ -2605,6 +2802,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IValueSetAdapter Set()
         {
+            ThrowIfIsReadOnly("Set");
+
             if (!IsValueSetValid)
             {
                 IssueEmitter.Emit("ValueSet property must be Valid (non-null) before Set can be called");
@@ -2622,12 +2821,29 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
         /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
-        public bool OptimizeSets { get { return SetMode.IsSet(SetMode.Optimize); } set { SetMode = SetMode.Set(SetMode.Optimize, value); } }
+        public bool OptimizeSets 
+        { 
+            get { return SetMode.IsSet(SetMode.Optimize); } 
+            set 
+            {
+                ThrowIfIsReadOnly("OptimizeSets setter");
+                SetMode = SetMode.Set(SetMode.Optimize, value); 
+            } 
+        }
 
         /// <summary>
         /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
+        /// <para/>Defaults to <see cref="SetMode.Optimize"/>.
         /// </summary>
-        public SetMode SetMode { get { return _setMode; } set { _setMode = value; } }
+        public SetMode SetMode 
+        { 
+            get { return _setMode; } 
+            set 
+            {
+                ThrowIfIsReadOnly("SetMode setter");
+                _setMode = value; 
+            } 
+        }
         protected SetMode _setMode = SetMode.Optimize;
 
         /// <summary>
@@ -2669,6 +2885,46 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Gives the caller access to the number of items (IVAs) that this adapter is using.
         /// </summary>
         public int NumItems { get; private set; }
+
+        /// <inheritdoc/>
+        public bool IsReadOnly
+        {
+            get { return isReadOnly; }
+            set
+            {
+                if (value)
+                {
+                    isReadOnly = true;
+                    SetAllIVAsToBeReadOnly();
+                }
+                else
+                {
+                    ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
+                }
+            }
+        }
+
+        /// <summary>
+        /// This method sets all of the ivas in the current <see cref="IVAArray"/> (if any) to be read only.
+        /// </summary>
+        protected void SetAllIVAsToBeReadOnly()
+        {
+            foreach (var iva in IVAArray.MapNullToEmpty())
+                iva.IsReadOnly = true;
+        }
+
+        /// <summary>
+        /// This method checks if the instance IsReadOnly and then throws a NotSupportedException if it is.
+        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public void ThrowIfIsReadOnly(string reasonPrefix)
+        {
+            if (IsReadOnly)
+                new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true").Throw();
+        }
+
+        private bool isReadOnly;
 
         #endregion
 
@@ -2807,8 +3063,6 @@ namespace MosaicLib.Modular.Interconnect.Values
                 }
             }
 
-            private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
-
             /// <summary>
             /// Flag used to determine if Update operations are optimized for this item
             /// <para/>defaults to false
@@ -2884,7 +3138,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             return this;
         }
 
-        List<IDelegateIVAItem> addedItemList = new List<IDelegateIVAItem>();
+        private readonly List<IDelegateIVAItem> addedItemList = new List<IDelegateIVAItem>();
 
         #endregion
 
@@ -2960,6 +3214,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             IVAArray = addedItemList.Select(item => item.IVA).Where(iva => iva != null).ToArray();
 
+            if (IsReadOnly)
+                SetAllIVAsToBeReadOnly();
+
             return this;
         }
 
@@ -2980,6 +3237,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public DelegateValueSetAdapter Set()
         {
+            ThrowIfIsReadOnly("Set");
+
             TransferValuesToIVAs();
 
             IVI.Set(setSpecificIvaArray, setMode: _setMode, numEntriesToSet: setSpecificIvaArrayLength);
@@ -2993,12 +3252,30 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
         /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
-        public bool OptimizeSets { get { return SetMode.IsSet(SetMode.Optimize); } set { SetMode = SetMode.Set(SetMode.Optimize, value); } }
+        public bool OptimizeSets 
+        { 
+            get { return SetMode.IsSet(SetMode.Optimize); } 
+            set 
+            {
+                ThrowIfIsReadOnly("OptimizeSets setter");
+
+                SetMode = SetMode.Set(SetMode.Optimize, value); 
+            } 
+        }
 
         /// <summary>
         /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
         /// </summary>
-        public SetMode SetMode { get { return _setMode; } set { _setMode = value; } }
+        public SetMode SetMode 
+        { 
+            get { return _setMode; } 
+            set 
+            {
+                ThrowIfIsReadOnly("SetMode setter");
+
+                _setMode = value; 
+            } 
+        }
         protected SetMode _setMode = SetMode.Optimize;
 
         /// <summary>
@@ -3040,6 +3317,46 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public int NumItems { get; protected set; }
 
+        /// <inheritdoc/>
+        public bool IsReadOnly
+        {
+            get { return isReadOnly; }
+            set
+            {
+                if (value)
+                {
+                    isReadOnly = true;
+                    SetAllIVAsToBeReadOnly();
+                }
+                else
+                {
+                    ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
+                }
+            }
+        }
+
+        /// <summary>
+        /// This method sets all of the ivas in the current <see cref="IVAArray"/> (if any) to be read only.
+        /// </summary>
+        protected void SetAllIVAsToBeReadOnly()
+        {
+            foreach (var iva in IVAArray.MapNullToEmpty())
+                iva.IsReadOnly = true;
+        }
+
+        /// <summary>
+        /// This method checks if the instance IsReadOnly and then throws a NotSupportedException if it is.
+        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public void ThrowIfIsReadOnly(string reasonPrefix)
+        {
+            if (IsReadOnly)
+                new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true").Throw();
+        }
+
+        private bool isReadOnly;
+
         #endregion
 
         #region IModularValueSetAdapter implementation
@@ -3061,6 +3378,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public void TransferValuesToIVAs()
         {
+            ThrowIfIsReadOnly("TransferValuesToIVAs");
+
             foreach (var delegateItem in setSpecificDelegateIVAItemArray)
                 delegateItem.TransferFromDelegateToIVAValueContainer();
         }
@@ -3090,11 +3409,15 @@ namespace MosaicLib.Modular.Interconnect.Values
             public DelegateIVAItem(DelegateItemSpec<TValueType> createFrom) 
                 : base(createFrom)
             {
+            }
+
+            static DelegateIVAItem()
+            {
                 ValueContainer.DecodeType(typeof(TValueType), out decodedCST, out decodedIsNullable);
             }
 
-            private ContainerStorageType decodedCST;
-            private bool decodedIsNullable;
+            private static readonly ContainerStorageType decodedCST;
+            private static readonly bool decodedIsNullable;
 
             public bool HasValueGetterDelegate { get { return (SetterDelegate != null); } }
             public bool HasValueSetterDelegate { get { return (GetterDelegate != null); } }

@@ -301,9 +301,10 @@ namespace Mosaic.ToolsLib.File.FileSync
                 if (!IsConnected)
                     PerformMainLoopService();
 
-                string ec = string.Empty;
                 if (syncFlags.IsSet(SyncFlags.Full))
                 {
+                    string ec;
+
                     if (pendingTransactionList.Count == 0)
                         StartPendingTrasactionListSet();
 
@@ -316,6 +317,9 @@ namespace Mosaic.ToolsLib.File.FileSync
                         ProcessCompletedTransaction(t);
 
                     PerformMainLoopService();
+
+                    if (ec.IsNullOrEmpty())
+                        return ec;
                 }
 
                 FileTracker waitForFileTracker = fileTrackerListSortedByFileID.LastOrDefault().Value;
@@ -388,7 +392,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                 }
             }
 
-            IListWithCachedArray<SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
+            private readonly IListWithCachedArray <SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
             private bool AreAnySyncOperationsInProgress { get { return (pendingSyncTrackerList.Count > 0) || haveNewSyncRequest; } }
             private bool haveNewSyncRequest = false;
 
@@ -522,12 +526,12 @@ namespace Mosaic.ToolsLib.File.FileSync
                 public bool recheckIfExists;
             }
 
-            IDictionaryWithCachedArrays<long, FileTracker> fileTrackerByFileIDDictionary = new IDictionaryWithCachedArrays<long, FileTracker>();
-            long maxKnownFileID = -1;
-            SortedList<long, FileTracker> fileTrackerListSortedByFileID = new SortedList<long, FileTracker>();
-            IListWithCachedArray<FileTracker> pendingSendFileTrackerList = new IListWithCachedArray<FileTracker>();
-            HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
-            List<FileTracker> pendingEvaluateFileTrackerList = new List<FileTracker>();
+            private readonly IDictionaryWithCachedArrays<long, FileTracker> fileTrackerByFileIDDictionary = new IDictionaryWithCachedArrays<long, FileTracker>();
+            private long maxKnownFileID = -1;
+            private readonly SortedList<long, FileTracker> fileTrackerListSortedByFileID = new SortedList<long, FileTracker>();
+            private readonly IListWithCachedArray<FileTracker> pendingSendFileTrackerList = new IListWithCachedArray<FileTracker>();
+            private readonly HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
+            private readonly List<FileTracker> pendingEvaluateFileTrackerList = new List<FileTracker>();
 
             private void AddToPendingEvaluateListIfNeeded(FileTracker ft)
             {
@@ -557,10 +561,10 @@ namespace Mosaic.ToolsLib.File.FileSync
                 lastReceivedNewestSyncFileInfoSeqNum = Math.Max(lastReceivedNewestSyncFileInfoSeqNum, t?.serverResponse?.NewestSyncFileInfoSeqNum ?? -1);
             }
 
-            List<Transaction> transactionBuilderList = new List<Transaction>();
-            List<Transaction> pendingTransactionList = new List<Transaction>();
-            QpcTimeStamp pendingTransactionListStartTime;
-            int pendingTransactionListByteCount, pendingTransactionListTransactionCount;
+            private readonly List<Transaction> transactionBuilderList = new List<Transaction>();
+            private readonly List<Transaction> pendingTransactionList = new List<Transaction>();
+            private QpcTimeStamp pendingTransactionListStartTime;
+            private int pendingTransactionListByteCount, pendingTransactionListTransactionCount;
             private void StartPendingTrasactionListSet()
             {
                 pendingTransactionListStartTime = QpcTimeStamp.Now;
@@ -568,12 +572,12 @@ namespace Mosaic.ToolsLib.File.FileSync
                 pendingTransactionListTransactionCount = 0;
             }
 
-            QpcTimer backgroundScanSyncIntervalTimer = new QpcTimer() { AutoReset = true };
-            QpcTimer rescanDisabledTrackersTimer = new QpcTimer() { TriggerInterval = (5.0).FromSeconds(), AutoReset = true }.Start();
-            int disabledTrackerCount;
+            private QpcTimer backgroundScanSyncIntervalTimer = new QpcTimer() { AutoReset = true };
+            private QpcTimer rescanDisabledTrackersTimer = new QpcTimer() { TriggerInterval = (5.0).FromSeconds(), AutoReset = true }.Start();
+            private int disabledTrackerCount;
 
-            QpcTimer incrementalRecheckIfTrackedFileStillExistsTimer = new QpcTimer() { AutoReset = true };
-            int rescanNextFileTrackerIndex = 0;
+            private QpcTimer incrementalRecheckIfTrackedFileStillExistsTimer = new QpcTimer() { AutoReset = true };
+            private int rescanNextFileTrackerIndex = 0;
 
             private struct OpenFileTracker
             {
@@ -1562,8 +1566,8 @@ namespace Mosaic.ToolsLib.File.FileSync
                 return MessagePackSerializer.Deserialize<ServerResponse>(ref mpReader);
             }
 
-            BufferWriter.ByteArrayBufferWriter byteArrayBufferWriter = new BufferWriter.ByteArrayBufferWriter(4096);
-            BufferWriter.ByteArrayBufferWriter innerByteArrayBufferWriter = new BufferWriter.ByteArrayBufferWriter(128);
+            private readonly BufferWriter.ByteArrayBufferWriter byteArrayBufferWriter = new BufferWriter.ByteArrayBufferWriter(4096);
+            private readonly BufferWriter.ByteArrayBufferWriter innerByteArrayBufferWriter = new BufferWriter.ByteArrayBufferWriter(128);
 
             private Task WriteClientRequestsAsync(NetworkStream tcpStream, Transaction[] transactionSet)
             {
@@ -1659,9 +1663,9 @@ namespace Mosaic.ToolsLib.File.FileSync
             private readonly string RootDirFullPath;
             private ActionLogging InternalActionLoggingReference { get; set; }
 
-            private IValueAccessor ivaMBytesPerSec, ivaTransactionsPerSec;
-            private MosaicLib.Utils.Tools.EventRateTool mBytesPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
-            private MosaicLib.Utils.Tools.EventRateTool transactionsPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
+            private readonly IValueAccessor ivaMBytesPerSec, ivaTransactionsPerSec;
+            private readonly MosaicLib.Utils.Tools.EventRateTool mBytesPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
+            private readonly MosaicLib.Utils.Tools.EventRateTool transactionsPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
 
             private void Release()
             {
@@ -1775,16 +1779,16 @@ namespace Mosaic.ToolsLib.File.FileSync
                     }
                 }
             }
-            AsyncTouchedFileNamesSet asyncTouchedFileNamesSet = new AsyncTouchedFileNamesSet();
+            private readonly AsyncTouchedFileNamesSet asyncTouchedFileNamesSet = new AsyncTouchedFileNamesSet();
             private volatile int asyncErrorCount;
 
-            private HashSet<string> pendingFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> pendingFileNameAndRelativePathSet = new HashSet<string>();
 
             private long fileIDGen; // use pre-increment as generate method.  FileID zero is reserved (aka is not used)
             private long syncFileInfoSeqNumGen;     // use pre-increment as generate method.  SyncFileInfoSeqNum zero is reserved (aka is not used)
-            private IDictionaryWithCachedArrays<string, FileTracker> fileTrackerByNameDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
-            HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
-            IListWithCachedArray<FileTracker> pendingEvaluateFileTrackerList = new IListWithCachedArray<FileTracker>();
+            private readonly IDictionaryWithCachedArrays<string, FileTracker> fileTrackerByNameDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
+            private readonly HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
+            private readonly IListWithCachedArray<FileTracker> pendingEvaluateFileTrackerList = new IListWithCachedArray<FileTracker>();
 
             private void AddToPendingEvaluateListIfNeeded(FileTracker ft)
             {
@@ -1806,9 +1810,9 @@ namespace Mosaic.ToolsLib.File.FileSync
 
             #region shared data - syncFileInfo related data that is maintained by parts primary thread and which is concurrently accessed on TcpClient Task threads.
 
-            private object syncFileInfoMutex = new object();
-            private SyncFileInfoSortedArray syncFileInfoSortedArray = new SyncFileInfoSortedArray();
-            private IDictionaryWithCachedArrays<long, SyncFileInfoPair> syncFileInfoPairDictionary = new IDictionaryWithCachedArrays<long, SyncFileInfoPair>();
+            private readonly object syncFileInfoMutex = new object();
+            private readonly SyncFileInfoSortedArray syncFileInfoSortedArray = new SyncFileInfoSortedArray();
+            private readonly IDictionaryWithCachedArrays<long, SyncFileInfoPair> syncFileInfoPairDictionary = new IDictionaryWithCachedArrays<long, SyncFileInfoPair>();
 
             private struct SyncFileInfoPair
             {
@@ -1825,8 +1829,8 @@ namespace Mosaic.ToolsLib.File.FileSync
                 lastAssignedSyncFileInfoSeqNumSeqNumU4 = unchecked((uint)seqNum);
             }
 
-            AtomicInt32 byteTransferCounter, transactionCounter;
-            int lastByteTransferCounter, lastTransactionCounter;
+            private AtomicInt32 byteTransferCounter, transactionCounter;
+            private int lastByteTransferCounter, lastTransactionCounter;
 
             #endregion
 
@@ -1856,12 +1860,12 @@ namespace Mosaic.ToolsLib.File.FileSync
                 ignoreFileNameAndRelativePathSet.Clear();
             }
 
-            private HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
-            private HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
 
             private bool fullUpdateNeeded = true;
             private bool rescanDirectoryNeeded = true;
-            QpcTimer rescanIntervalTimer;
+            private QpcTimer rescanIntervalTimer;
 
             private int ServiceFileTracking(QpcTimeStamp qpcTimeStamp = default, bool forceFullUpdate = false)
             {
@@ -2044,7 +2048,7 @@ namespace Mosaic.ToolsLib.File.FileSync
 
             private System.Net.Sockets.TcpListener tcpListener;
             private Task<System.Net.Sockets.TcpClient> tcpAcceptTask;
-            private DisposableList<Task> tcpClientTaskList = new DisposableList<Task>();
+            private readonly DisposableList<Task> tcpClientTaskList = new DisposableList<Task>();
 
             private string StartNetworkingIfNeeded()
             {
@@ -2747,7 +2751,6 @@ namespace Mosaic.ToolsLib.File.FileSync
             {
                 haveNewSyncRequest = true;
 
-                string ec = string.Empty;
                 if (syncFlags.IsSet(SyncFlags.Full))
                 {
                     ServiceFileTracking(QpcTimeStamp.Now, forceFullUpdate: true);
@@ -2823,7 +2826,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                 }
             }
 
-            IListWithCachedArray<SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
+            private readonly IListWithCachedArray<SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
             private bool AreAnySyncOperationsInProgress { get { return (pendingSyncTrackerList.Count > 0) || haveNewSyncRequest; } }
             private bool haveNewSyncRequest = false;
 
@@ -2926,19 +2929,19 @@ namespace Mosaic.ToolsLib.File.FileSync
                     }
                 }
             }
-            AsyncTouchedFileNamesSet asyncTouchedSourceFileNamesSet = new AsyncTouchedFileNamesSet();
+            private readonly AsyncTouchedFileNamesSet asyncTouchedSourceFileNamesSet = new AsyncTouchedFileNamesSet();
             private volatile int asyncErrorCount;
 
-            private HashSet<string> pendingSourceFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> pendingSourceFileNameAndRelativePathSet = new HashSet<string>();
 
             private long sourceFileIDGen; // use pre-increment as generate method.  FileID zero is reserved (aka is not used)
             private long syncFileInfoSeqNumGen;     // use pre-increment as generate method.  SyncFileInfoSeqNum zero is reserved (aka is not used)
-            private IDictionaryWithCachedArrays<string, FileTracker> fileTrackerByNameDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
+            private readonly IDictionaryWithCachedArrays<string, FileTracker> fileTrackerByNameDictionary = new IDictionaryWithCachedArrays<string, FileTracker>();
 
-            SortedList<long, FileTracker> fileTrackerListSortedByFileID = new SortedList<long, FileTracker>();
-            IListWithCachedArray<FileTracker> pendingTransferFileTrackerList = new IListWithCachedArray<FileTracker>();
-            HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
-            IListWithCachedArray<FileTracker> pendingEvaluateFileTrackerList = new IListWithCachedArray<FileTracker>();
+            private readonly SortedList<long, FileTracker> fileTrackerListSortedByFileID = new SortedList<long, FileTracker>();
+            private readonly IListWithCachedArray<FileTracker> pendingTransferFileTrackerList = new IListWithCachedArray<FileTracker>();
+            private readonly HashSet<FileTracker> pendingEvaluateFileTrackerSet = new HashSet<FileTracker>();
+            private readonly IListWithCachedArray<FileTracker> pendingEvaluateFileTrackerList = new IListWithCachedArray<FileTracker>();
 
             private void AddToPendingEvaluateListIfNeeded(FileTracker ft)
             {
@@ -2971,8 +2974,8 @@ namespace Mosaic.ToolsLib.File.FileSync
             int lastByteTransferCount, lastBlockTransferCount, lastFileScanCount;
 
             private IValueAccessor ivaMBytesPerSec, ivaBlockTransfersPerSec;
-            private MosaicLib.Utils.Tools.EventRateTool mBytesPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
-            private MosaicLib.Utils.Tools.EventRateTool blockTransfersPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
+            private readonly MosaicLib.Utils.Tools.EventRateTool mBytesPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
+            private readonly MosaicLib.Utils.Tools.EventRateTool blockTransfersPerSecTool = new MosaicLib.Utils.Tools.EventRateTool();
 
             private void SetupIVAPublication()
             {
@@ -3084,12 +3087,12 @@ namespace Mosaic.ToolsLib.File.FileSync
                 ignoreFileNameAndRelativePathSet.Clear();
             }
 
-            private HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
-            private HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> newFileNameAndRelativePathSet = new HashSet<string>();
+            private readonly HashSet<string> ignoreFileNameAndRelativePathSet = new HashSet<string>();
 
             private bool fullUpdateNeeded = true;
             private bool rescanDirectoryNeeded = true;
-            QpcTimer rescanIntervalTimer;
+            private QpcTimer rescanIntervalTimer;
 
             private int ServiceFileTracking(QpcTimeStamp qpcTimeStamp, bool forceFullUpdate = false)
             {
@@ -3605,8 +3608,8 @@ namespace Mosaic.ToolsLib.File.FileSync
                 public TimeSpan readRunTime, totalRunTime;
             }
 
-            private IListWithCachedArray<TransferBlock> activeTransferBlockList = new IListWithCachedArray<TransferBlock>();
-            private MosaicLib.Utils.Pooling.BasicFreeList<TransferBlock> transferBlockFreeList = new MosaicLib.Utils.Pooling.BasicFreeList<TransferBlock>() { FactoryDelegate = () => new TransferBlock(), ClearDelegate = (item) => item.Clear(), MaxItemsToKeep = 100 };
+            private readonly IListWithCachedArray<TransferBlock> activeTransferBlockList = new IListWithCachedArray<TransferBlock>();
+            private readonly MosaicLib.Utils.Pooling.BasicFreeList<TransferBlock> transferBlockFreeList = new MosaicLib.Utils.Pooling.BasicFreeList<TransferBlock>() { FactoryDelegate = () => new TransferBlock(), ClearDelegate = (item) => item.Clear(), MaxItemsToKeep = 100 };
 
             private struct OpenFileTracker
             {
@@ -4023,8 +4026,8 @@ namespace Mosaic.ToolsLib.File.FileSync
 
                     Count -= 1;
 
-                    ItemsArray[Count] = default(SyncFileInfo);
-                    ItemsNoNameArray[Count] = default(SyncFileInfo);
+                    ItemsArray[Count] = default;
+                    ItemsNoNameArray[Count] = default;
 
                     return true;
                 }

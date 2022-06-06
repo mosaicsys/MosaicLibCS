@@ -34,46 +34,41 @@ namespace MosaicLib.Utils
     public static partial class Fcns
     {
         /// <summary>
-        /// Helper function used to dispose of things who's type can be casted to an IDisposable type.  
-        /// This method captures the handle in the referenced variable or field casted as an IDisposable object.
-        /// Then it sets the referenced variable or field to null and finally if the cast produced a non-null object then the object's Dispose method is invoked.
+        /// Helper method that is used to combine (optional) Disposal with clearing of the given ref <paramref name="oRef"/> parameter.
+        /// First this method attempts to cast (and capture) the given <paramref name="oRef"/> using the <see cref="IDisposable"/> interface.
+        /// Next this method sets the given <paramref name="oRef"/> to its default value.
+        /// Finally if the captured version is non-null (aka the given <paramref name="oRef"/> was non-null and implements the <see cref="IDisposable"/> interface)
+        /// then this method calls the Dispose method on it.
         /// </summary>
-        /// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
-        /// <param name="oRef">
-        /// Gives a reference to the ref object that the caller wants to dispose of.  
-        /// The given referenced handle will be set to null just before the object's Dispose method is called
-        /// </param>
-        public static void DisposeOfObject<ObjType>(ref ObjType oRef) where ObjType : class
+        public static void DisposeOfObject<ObjType>(ref ObjType oRef)
         {
-            IDisposable d = oRef as IDisposable;
+            IDisposable asIDisposable = oRef as IDisposable;
 
-            oRef = null;
+            oRef = default(ObjType);
 
-            if (d != null)
-                d.Dispose();
+            if (asIDisposable != null)
+                asIDisposable.Dispose();
         }
 
         /// <summary>
-        /// Helper function used to dispose of things that can be casted to an IDisposable type.
-        /// obj.Dispose() method is only called if ObjType can be casted to an IDisposable object.
-        /// This method has no effect if the underlying object cannot be casted to the IDisposable type.
+        /// Helper function used to attempt to dispose of things that can be casted to an <see cref="IDisposable"/> type.
+        /// If the given <paramref name="obj"/> can be casted to the <see cref="IDisposable"/> type then this method will call
+        /// <paramref name="obj"/>.Dispose.  Otherwise this method has no effect.
+        /// <para/>If the given <paramref name="obj"/> is null then this method will have no effect as null is not castable to the <see cref="IDisposable"/> interface.
         /// </summary>
-		/// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
-        /// <param name="obj">Gives the object that is to be disposed.</param>
-        public static void DisposeOfGivenObject<ObjType>(this ObjType obj) where ObjType : class
+        public static void DisposeOfGivenObject<ObjType>(this ObjType obj)
         {
-            IDisposable d = obj as IDisposable;
+            IDisposable asIDisposable = obj as IDisposable;
 
-            if (d != null)
-                d.Dispose();
+            if (asIDisposable != null)
+                asIDisposable.Dispose();
         }
 
         /// <summary>
-        /// Helper function used to remove, and dispose of each IDisposable item, in a given list (using DisposeOfGivenObject).
-        /// <para/>Removes all items from the list even if not all of them are IDisposable.
+        /// Helper function used to remove, and dispose of each IDisposable item, in the given <paramref name="objList"/> (using DisposeOfGivenObject).
+        /// <para/>Removes all items from the given <paramref name="objList"/> including ones that do not implement the <see cref="IDisposable"/> interface.
         /// </summary>
-        /// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
-        public static void TakeAndDisposeOfGivenObjects<ObjType>(this IList<ObjType> objList) where ObjType : class
+        public static void TakeAndDisposeOfGivenObjects<ObjType>(this IList<ObjType> objList)
         {
             while (!objList.IsNullOrEmpty())
             {

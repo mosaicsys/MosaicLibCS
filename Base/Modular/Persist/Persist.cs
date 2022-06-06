@@ -690,7 +690,7 @@ namespace MosaicLib.Modular.Persist
                         if (loadedObj == (object)Object)        // if the derived object does not create new objects on InnerReadObject then we may need to reload the last oldest object at the end
                             reloadAtEnd = true;
 
-                        UInt64 currentObjSeqNum = currentObj.PersistedVersionSequenceNumber;
+                        UInt64 currentObjSeqNum = (currentObj != null) ? currentObj.PersistedVersionSequenceNumber : 0uL;
 
                         if (currentObjSeqNum == 0)
                             zeroSeqNumPath = trialPath;
@@ -948,14 +948,7 @@ namespace MosaicLib.Modular.Persist
                     InnerWriteObject(Object, fs);
 
                     if (ringConfig.UseFlushFileBuffersAfterWrite)
-                    {
-                        fs.Flush();     // flush any buffered data in the stream to the OS level before calling FlushFileBuffers
-
-                        using (SafeHandle sh = fs.SafeFileHandle)
-                        {
-                            LocalWin32API.FlushFileBuffers(sh);
-                        }
-                    }
+                        fs.Flush(true);
 
                     fs.Close();
 
@@ -1098,20 +1091,13 @@ namespace MosaicLib.Modular.Persist
         }
     }
 
-    /// <summary>
-    /// This is a kernel32.dll Wind32 API access helper class that allows us to call FlushFileBuffers on a specific file handle in order to
-    /// force the file system to fully commit corresponding file write data to permanent storage when configured and desired.
-    /// </summary>
+    [Obsolete("The use of this class is deprecated no longer used by this file (2022-06-02)")]
     public static partial class LocalWin32API
     {
-        /// <summary>
-        /// P-Invoke interface to Win32 FlushFileBuffers API method.  Generally causes the OS to flush both its memory cache for the given file and to block
-        /// the caller until the hardware has committed all prior issued writes to persistent storage so that the side effects of any such changes will be retained, complete
-        /// and visible even if the power is interrupted right after the method returns.
-        /// </summary>
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool FlushFileBuffers(System.Runtime.InteropServices.SafeHandle hFile);
+        [Obsolete("This method is deprecated no longer used by this file (2022-06-02)")]
+        public static extern bool FlushFileBuffers(SafeHandle hFile);
     }
 
     #endregion

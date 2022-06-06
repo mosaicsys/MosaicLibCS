@@ -134,13 +134,15 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>
-        /// This method attempts to return each of the items in the given <paramref name="list"/> and then clears the given list.
+        /// This method attempts to return each of the items in the given <paramref name="list"/> and then clears the given <paramref name="list"/>.
         /// </summary>
         public void ReleaseAndClear(IList<TItemType> list)
         {
             if (list != null)
             {
-                list.DoForEach(item => ReleaseGivenItem(item));
+                foreach (var item in list)
+                    ReleaseGivenItem(item);
+
                 list.Clear();
             }
         }
@@ -151,7 +153,10 @@ namespace MosaicLib.Utils.Pooling
         public void ReleaseSet(IEnumerable<TItemType> set)
         {
             if (set != null)
-                set.DoForEach(item => ReleaseGivenItem(item));
+            {
+                foreach (var item in set)
+                    ReleaseGivenItem(item);
+            }
         }
 
         /// <summary>
@@ -217,8 +222,8 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>
-        /// This propery defines the delegate that is used to construct new objects in the pool.  This property is generally initialized during object construction.
-        /// <para/>This propertie's setter is not threadsafe and must not be changed after the first call to GetFreeObjectFromPool has been made if the GetFreeObjectFromPool method
+        /// This propery defines the delegate that is used to construct new objects in the pool.  This property is generally initialized during pool object construction.
+        /// <para/>This property's setter is not thread-safe and must not be changed after the first call to GetFreeObjectFromPool has been made if the GetFreeObjectFromPool method
         /// is being used by more than one thread at a time.
         /// </summary>
         public System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
@@ -282,7 +287,11 @@ namespace MosaicLib.Utils.Pooling
             Fcns.DisposeOfObject(ref objRefCopy);
         }
 
-        /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
+        /// <summary>
+        /// Returns the maximum number of free objects that can be contained in the pool.
+        /// <para/>Note: this value is only used when returning objects to the pool.  
+        /// Changing this capacity will not change the current count.
+        /// </summary>
         public int Capacity { get { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } set { freeObjectStackCapacity = value; } }
 
         /// <summary>Returns the number of free objects in the pool.</summary>

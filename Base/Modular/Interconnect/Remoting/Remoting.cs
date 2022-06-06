@@ -21,7 +21,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
 using MosaicLib.Modular.Action;
@@ -51,6 +50,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     /// </summary>
     public interface IRemoting : IActivePartBase
     {
+        /// <summary>
+        /// Allows a client of a RemotingServer or RemotingClient instance to get access to the state and counters that the underlying BufferPool maintains.
+        /// </summary>
+        IBufferPoolInfo BufferPoolInfo { get; }
+
         /// <summary>
         /// Action factory method.  When the resulting action is run it will attempt to run a Sync operation as determined by the contents of the given <paramref name="syncFlags"/>
         /// </summary>
@@ -164,6 +168,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         private Transport.ITransportConnection transport;
         private Sessions.SessionManager sessionManager;
         private BufferPool bufferPool;
+
+        /// <inheritdoc/>
+        public IBufferPoolInfo BufferPoolInfo { get { return bufferPool; } }
 
         private IValueAccessor<int> sessionCountIVA;
         private IValueAccessor<INamedValueSet> sessionStatesIVA;
@@ -475,7 +482,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             foreach (var cst in clientSessionTrackerList.Array)
             {
-                count += cst.messageStreamToolTrackerList.Array.Sum(mstt => InnerServiceStream(qpcTimeStamp, cst, mstt));
+                foreach (var mstt in cst.messageStreamToolTrackerList.Array)
+                    count += InnerServiceStream(qpcTimeStamp, cst, mstt);
             }
 
             int perminantelyClosedCount = 0;
@@ -567,7 +575,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     if (mstt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
                     {
-                        mstt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
+                        mstt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp, "RemotingServer.InnerServiceStream: lastGeneratedMessage was delivered");
                         mstt.lastGeneratedMessage = null;
                         count++;
                     }
@@ -657,7 +665,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
             }
 
-            message.ReturnBuffersToPool(qpcTimeStamp);
+            message.ReturnBuffersToPool(qpcTimeStamp, "RemotingServer.HandleInboundMessage");
         }
 
         private string CreateMessageStreamTool(QpcTimeStamp qpcTimeStamp, MessageStreamToolTracker mstt, Messages.Message message)
@@ -730,15 +738,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             bufferPool = new BufferPool(PartID + ".bp", configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
-            AddMainThreadStoppingAction(() => Release(releaseBufferPool: true, releaseMSTTs: true));
+            AddMainThreadStoppingAction(() => Release(releaseMSTTs: true));
 
             ActionLoggingReference.Config = new ActionLoggingConfig(ActionLoggingConfig.Debug_Debug_Trace_Trace, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            TraceActionLoggingReference = new ActionLogging(ActionLoggingReference) { Config = ActionLoggingConfig.Trace_Trace_Trace_Trace };
+            NoneActionLoggingReference = new ActionLogging(ActionLoggingReference) { Config = ActionLoggingConfig.None_None_None_None };
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>();
             serverInfoNVSIVA = (config.PartIVI ?? Interconnect.Values.Values.Instance).GetValueAccessor("{0}.ServerInfoNVS".CheckedFormat(PartID));
 
             EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, config.PartIVI);
         }
+
+        private readonly ActionLogging TraceActionLoggingReference;
+        private readonly ActionLogging NoneActionLoggingReference;
 
         public readonly string MyUUID = Guid.NewGuid().ToString();
 
@@ -757,6 +770,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         public INamedValueSet ConfigNVS { get { return Config.ConfigNVS; } }
 
         private BufferPool bufferPool;
+
+        /// <inheritdoc/>
+        public IBufferPoolInfo BufferPoolInfo { get { return bufferPool; } }
+
         private Transport.ITransportConnection transport;
         private Sessions.ConnectionSession session;
         private Sessions.SessionConfig sessionConfig;
@@ -786,7 +803,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private MessageStreamTools.IActionRelayMessageStreamTool actionRelayStreamTool = null;
 
-        private void Release(bool releaseBufferPool = false, bool releaseMSTTs = false, bool setConnStateToDisconnectedIfNeeded = true)
+        private void Release(bool releaseMSTTs = false, bool setConnStateToDisconnectedIfNeeded = true)
         {
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
@@ -800,9 +817,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 messageStreamToolTrackerArray = EmptyArrayFactory<MessageStreamToolTracker>.Instance;
                 actionRelayStreamTool = null;
             }
-
-            if (releaseBufferPool)
-                Fcns.DisposeOfObject(ref bufferPool);
 
             if (BaseState.ConnState.IsConnectedOrConnecting() && setConnStateToDisconnectedIfNeeded)
                 SetBaseState(ConnState.Disconnected, "Release");
@@ -969,6 +983,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 Log.Debug.Emit("{0} failed: {1}", actionDescription, ec);
 
             return ec;
+        }
+
+        public override IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues)
+        {
+            var actionLoggingSelect = (namedParamValues.MapNullToEmpty())["ActionLoggingSelect"].VC.GetValueA(rethrow: false);
+
+            switch (actionLoggingSelect)
+            {
+                case "None": return CreateServiceAction(serviceName, namedParamValues, NoneActionLoggingReference);
+                case "Trace": return CreateServiceAction(serviceName, namedParamValues, TraceActionLoggingReference);
+                default: return CreateServiceAction(serviceName, namedParamValues, ActionLoggingReference);
+            }
         }
 
         protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
@@ -1140,7 +1166,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (session != null)
                 count += session.Service(qpcTimeStamp);
 
-            count += messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, mstt));
+            foreach (var mstt in messageStreamToolTrackerArray)
+                count += InnerServiceStream(qpcTimeStamp, mstt);
 
             NoteWorkCount(count);
 
@@ -1302,7 +1329,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     if (stt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
                     {
-                        stt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
+                        stt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp, "RemotingClient.InnerServiceStream: lastGeneratedMessage was delivered");
                         stt.lastGeneratedMessage = null;
                         count++;
                     }
@@ -1347,7 +1374,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (stt != null && stt.messageStreamTool != null)
                 stt.messageStreamTool.HandleInboundMessage(qpcTimeStamp, message);
 
-            message.ReturnBuffersToPool(qpcTimeStamp);
+            message.ReturnBuffersToPool(qpcTimeStamp, "RemotingClient.HandleInboundMessage");
         }
 
         #region NoteWorkCount, WaitForSomethingToDo - adpative sleep times.
@@ -1377,7 +1404,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
     public interface IEventAndPerformanceRecording : IServiceable
     {
-        void RecordReceived(params Buffers.Buffer[] bufferParamsArray);
+        void RecordReceived(Buffers.Buffer buffer);
+        void RecordReceived(Buffers.Buffer[] bufferArray, int firstBufferIndex);
         void RecordReceived(Messages.Message message);
         void RecordReceived(ManagementType managementType);
 
@@ -1505,12 +1533,34 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return count;
         }
 
-        public void RecordReceived(params Buffers.Buffer[] bufferParamsArray)
+        public void RecordReceived(Buffers.Buffer buffer)
         {
             RateCounterSet tcs = new RateCounterSet();
 
-            foreach (var buffer in bufferParamsArray)
+            if (buffer != null)
             {
+                tcs.Buffers++;
+                tcs.Bytes += buffer.byteCount;
+
+                if (buffer.PurposeCode == PurposeCode.Ack)
+                    tcs.Acks++;
+
+                if ((buffer.Flags & BufferHeaderFlags.BufferIsBeingResent) != 0)
+                    counterValues.ResentBuffersRx++;
+            }
+
+            avgReceiveRateCounterSetTool.RecordValues(tcs);
+        }
+
+        public void RecordReceived(Buffers.Buffer[] bufferArray, int firstBufferIndex)
+        {
+            RateCounterSet tcs = new RateCounterSet();
+
+            int bufferArrayLength = bufferArray.Length;
+            for (int index = firstBufferIndex; index < bufferArrayLength; index++)
+            {
+                var buffer = bufferArray[index];
+
                 if (buffer == null)
                     continue;
 

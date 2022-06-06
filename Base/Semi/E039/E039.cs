@@ -1013,10 +1013,11 @@ namespace MosaicLib.Semi.E039
         /// <summary>Returns true if the contents of this link object are equal to the contents of the given <paramref name="other"/> link object</summary>
         public bool Equals(E039Link other)
         {
-            return (FromID.Equals(other.FromID)
+            var result = (FromID.SafeEquals(other.FromID)
                     && Key == other.Key
-                    && ToID.Equals(other.ToID)
+                    && ToID.SafeEquals(other.ToID)
                     );
+            return result;
         }
 
         public string FullIDAndKeyStr
@@ -1139,7 +1140,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public static IE039Object MapNullToEmpty(this IE039Object obj)
         {
-            return ((obj != null) ? obj : E039Object.Empty);
+            return (obj ?? E039Object.Empty);
         }
 
         /// <summary>
@@ -1163,7 +1164,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public static E039ObjectID MapNullToEmpty(this E039ObjectID objID)
         {
-            return ((objID != null) ? objID : E039ObjectID.Empty);
+            return (objID ?? E039ObjectID.Empty);
         }
 
         /// <summary>
@@ -1227,6 +1228,7 @@ namespace MosaicLib.Semi.E039
     /// primary IE039Object implementation class.  Also used for (most?) E039 related serialization purposes.
     /// This object supports mutability within this assembly and is immutable for all code outside of this assembly (property setters are defined to be internal)
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
     public class E039Object : IE039Object, IEquatable<E039Object>
     {
@@ -1364,13 +1366,14 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public bool Equals(IE039Object other)
         {
-            return (other != null
-                    && ID.Equals(other.ID)
+            var result = (other != null
+                    && ID.SafeEquals(other.ID)
                     && Flags == other.Flags
                     && Attributes.MapNullToEmpty().Equals(other.Attributes.MapNullToEmpty())
                     && LinksToOtherObjectsList.IsEqualTo(other.LinksToOtherObjectsList)
                     && LinksFromOtherObjectsList.IsEqualTo(other.LinksFromOtherObjectsList)
                 );
+            return result;
         }
 
         /// <summary>Debug and Logging helper.  Returns ToString(E039ToStringSelect.DefaultObjSelect) [DefaultObjIDSelect(FullName | UUID) | Attributes | FlagsIfNeeded | LinkedShortIDs]</summary>
@@ -1446,6 +1449,8 @@ namespace MosaicLib.Semi.E039
 
             _isi = other._isi;
 
+            AddSimpleActivePartBehaviorOptions = other.AddSimpleActivePartBehaviorOptions;
+
             PersistStorageAdapterFactory = other.PersistStorageAdapterFactory ?? ((PersistentObjectFileRingConfig config, Logging.IBasicLogger log) => 
                 {
                     return new DataContractPersistentXmlTextFileRingStorageAdapter<E039PersistFileContents>("psa.{0}".CheckedFormat(config.FileBaseName), config)
@@ -1498,6 +1503,9 @@ namespace MosaicLib.Semi.E039
         public string ObjectIVAPrefix { get; set; }
 
         public ISetsInterconnection ISI { get { return _isi ?? Sets.Instance; } set { _isi = value; } }
+
+        /// <summary>May be used to select additional <see cref="SimpleActivePartBehaviorOptions"/> for the resulting part.</summary>
+        public SimpleActivePartBehaviorOptions AddSimpleActivePartBehaviorOptions { get; set; }
 
         public Func<PersistentObjectFileRingConfig, Logging.IBasicLogger, IPersistentStorage<E039PersistFileContents>> PersistStorageAdapterFactory { get; set; }
 
@@ -1663,7 +1671,7 @@ namespace MosaicLib.Semi.E039
         /// Constructor - most behavior features are defined by the provided <paramref name="config"/> contents.
         /// </summary>
         public E039BasicTablePart(E039BasicTablePartConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartBaseIVI), queueSize: Math.Max(10, config.PartQueueSize))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartBaseIVI, addSimpleActivePartBehaviorOptions: config.AddSimpleActivePartBehaviorOptions), queueSize: Math.Max(10, config.PartQueueSize))
         {
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
             Config.SetupForUse();
@@ -1781,16 +1789,14 @@ namespace MosaicLib.Semi.E039
             SetupMainThreadStartingAndStoppingActions();
         }
 
-        E039BasicTablePartConfig Config { get; set; }
+        private E039BasicTablePartConfig Config { get; set; }
 
         /// <summary>IVI to be used when creating object IVA's - this behavior is triggered based on the object's tracker has the E039ObjectFlags.CreateIVA flag set (generally only used for object types that bound for display by name.</summary>
-        IValuesInterconnection ObjectIVI { get; set; }
+        private IValuesInterconnection ObjectIVI { get; set; }
 
-        IE039ExternalSyncFactory ExternalSyncFactory { get; set; }
+        private IE039ExternalSyncFactory ExternalSyncFactory { get; set; }
 
-        static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
-
-        ReadOnlyIDictionary<string, ActionLogging> customActionLoggingReferenceDict = null;
+        private readonly ReadOnlyIDictionary<string, ActionLogging> customActionLoggingReferenceDict;
 
         #endregion
 
@@ -1900,7 +1906,7 @@ namespace MosaicLib.Semi.E039
                 return customActionLoggingReferenceDict.SafeTryGetValue(logConfigSelect) ?? ActionLoggingReference;
         }
 
-        string PerformUpdates(IProviderFacet action, E039UpdateItem firstUpdateItem, E039UpdateItem[] updateItems)
+        private string PerformUpdates(IProviderFacet action, E039UpdateItem firstUpdateItem, E039UpdateItem[] updateItems)
         {
             if (!BaseState.IsOnline)
                 return "BaseState is not Online [{0}]".CheckedFormat(BaseState);
@@ -1947,7 +1953,7 @@ namespace MosaicLib.Semi.E039
             return null;
         }
 
-        string InnerPerformUpdate(IProviderFacet action, E039UpdateItem updateItem, ref bool addedPendingSyncOperation)
+        private string InnerPerformUpdate(IProviderFacet action, E039UpdateItem updateItem, ref bool addedPendingSyncOperation)
         {
             if (updateItem == null)
                 return string.Empty;
@@ -2035,7 +2041,7 @@ namespace MosaicLib.Semi.E039
             return "UpdateItem type '{0}' was not recognized".CheckedFormat(updateItem.GetType());
         }
 
-        string InnerPerformTestAndSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.TestAndSetAttributes updateItem)
+        private string InnerPerformTestAndSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.TestAndSetAttributes updateItem)
         {
             INamedValueSet testAttributes = updateItem.TestAttributeSet;
             INamedValueSet objAttributes = ot.objAttributesWorking;
@@ -2053,7 +2059,7 @@ namespace MosaicLib.Semi.E039
                 return string.Empty;
         }
 
-        string InnerPerformSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.SetAttributes updateItem)
+        private string InnerPerformSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.SetAttributes updateItem)
         {
             INamedValueSet attributes = updateItem.Attributes;
 
@@ -2067,7 +2073,7 @@ namespace MosaicLib.Semi.E039
             return string.Empty;
         }
 
-        string InnerPerformAddLinkUpdateItem(ObjectTracker ot, E039Link link, E039UpdateItem.AddLink addLink)
+        private string InnerPerformAddLinkUpdateItem(ObjectTracker ot, E039Link link, E039UpdateItem.AddLink addLink)
         {
             ObjectTracker otherOT = null;
 
@@ -2085,7 +2091,7 @@ namespace MosaicLib.Semi.E039
 
             LinkTrackerPair ltp = ot.linkTrackerPairsToOtherObjectsDictionary.SafeTryGetValue(linkKeyStr);
 
-            if (ltp != null && (addLink.Link.ToID.IsEmpty || ltp.Link.ToID.Equals(link.ToID)) && addLink.IfNeeded)
+            if (ltp != null && (addLink.Link.ToID.IsEmpty || ltp.Link.ToID.SafeEquals(link.ToID)) && addLink.IfNeeded)
                 return string.Empty;        // we are adding a link key that already exists and the caller provided target is empty and the caller indicated to add the link if needed.  So do nothing.
 
             if (ltp != null && (ltp.ObjectTracker != null || !ltp.Link.IsToIDEmpty))
@@ -2123,9 +2129,9 @@ namespace MosaicLib.Semi.E039
             return string.Empty;
         }
 
-        string InnerPerformRemoveLinkUpdateItem(ObjectTracker objectTracker, E039Link link)
+        private string InnerPerformRemoveLinkUpdateItem(ObjectTracker objectTracker, E039Link link)
         {
-            LinkTrackerPair ltp = null;
+            LinkTrackerPair ltp;
 
             if (!objectTracker.linkTrackerPairsToOtherObjectsDictionary.TryGetValue(link.Key, out ltp) || ltp == null || !ltp.Link.Equals(link))
                 return "Link to other object '{0}' not found, or did not match".CheckedFormat(link);
@@ -2137,7 +2143,7 @@ namespace MosaicLib.Semi.E039
             return string.Empty;
         }
 
-        string InnerUnlinkFromToOtherObjectsSet(ObjectTracker ot, LinkTrackerPair ltp)
+        private string InnerUnlinkFromToOtherObjectsSet(ObjectTracker ot, LinkTrackerPair ltp)
         {
             string ec = null;
 
@@ -2173,7 +2179,7 @@ namespace MosaicLib.Semi.E039
             return ec.MapNullToEmpty();
         }
 
-        string InnerPerformAddObjectUpdateItem(E039UpdateItem.AddObject updateItem)
+        private string InnerPerformAddObjectUpdateItem(E039UpdateItem.AddObject updateItem)
         {
             updateItem.AddedObjectPublisher = null;
 
@@ -2246,11 +2252,11 @@ namespace MosaicLib.Semi.E039
             return string.Empty;
         }
 
-        List<ObjectTracker> objectTrackersToRemoveList = new List<ObjectTracker>();
+        private readonly List<ObjectTracker> objectTrackersToRemoveList = new List<ObjectTracker>();
 
-        List<ObjectTracker> potentialObjectTrackersToRemoveListPerPass = new List<ObjectTracker>();
+        private readonly List<ObjectTracker> potentialObjectTrackersToRemoveListPerPass = new List<ObjectTracker>();
 
-        void InnerPerformRemoveObjectUpdateItem(ObjectTracker ot, E039UpdateItem.RemoveObject updateItem)
+        private void InnerPerformRemoveObjectUpdateItem(ObjectTracker ot, E039UpdateItem.RemoveObject updateItem)
         {
             objectTrackersToRemoveList.Add(ot);
 
@@ -2331,13 +2337,13 @@ namespace MosaicLib.Semi.E039
             }
         }
 
-        string InnerPerformSyncPublicationUpdateItem()
+        private string InnerPerformSyncPublicationUpdateItem()
         {
             InnerPublishTouchedObjectTrackers();
             return string.Empty;
         }
 
-        string InnerPerformSyncPersistUpdateItem(IProviderFacet action, E039UpdateItem.SyncPersist updateItem, ref bool addedPendingSyncOperation)
+        private string InnerPerformSyncPersistUpdateItem(IProviderFacet action, E039UpdateItem.SyncPersist updateItem, ref bool addedPendingSyncOperation)
         {
             if (addedPendingSyncOperation)
                 return "Only one SyncPersist update item may be used in any given Update action";
@@ -2346,8 +2352,6 @@ namespace MosaicLib.Semi.E039
 
             // publish touched items (as if this was a SyncPublish item)
             InnerPublishTouchedObjectTrackers();
-
-            ulong completeAfterSeqNum = seqNums.PublishedObjectSeqNum;
 
             string typeName = updateItem.ObjID.Type;
             TypeSetTracker[] selectedTypeSetTrackerArray = (typeName.IsNullOrEmpty() ? typeSetTrackerArray : new[] { FindTypeSetTrackerForType(typeName) });
@@ -2375,8 +2379,8 @@ namespace MosaicLib.Semi.E039
                 action = action,
                 qpcTimeStamp = QpcTimeStamp.Now,
                 syncUpdateItem = updateItem,
-                completeAfterSeqNum = completeAfterSeqNum,
                 relevantTypeSetTrackerArray = relevantTypeSetTrackerArray,
+                completeAfterSeqNumArray = relevantTypeSetTrackerArray.Select(tss => tss.lastPublishedSeqNum).ToArray(),
             };
 
             pendingSyncPersistOperationList.Add(pendingSyncOperation);
@@ -2386,7 +2390,7 @@ namespace MosaicLib.Semi.E039
             return string.Empty;
         }
 
-        string InnerPerformSyncExternalUpdateItem(E039UpdateItem.SyncExternal updateItem)
+        private string InnerPerformSyncExternalUpdateItem(E039UpdateItem.SyncExternal updateItem)
         {
             string ec = string.Empty;
 
@@ -2442,7 +2446,7 @@ namespace MosaicLib.Semi.E039
         /// <summary>
         /// Checks if the linksFromOtherObjectsListTouched or linksToOtherObjectsListTouched flag was set and rebuilds the E039Object's corresponding E039Link ILists from it.
         /// </summary>
-        void InnerHandleChangedLinksIfNeeded(ObjectTracker ot)
+        private void InnerHandleChangedLinksIfNeeded(ObjectTracker ot)
         {
             if (ot.rebuildLinksFromOtherObjectsList)
             {
@@ -2463,7 +2467,7 @@ namespace MosaicLib.Semi.E039
         /// if the given <paramref name="objectTracker"/> has not been marked touched then this method
         /// marks it touched and adds it to the recentlyTouchedObjectTrackerList
         /// </summary>
-        void InnerMarkedTouchedIfNeeded(ObjectTracker objectTracker)
+        private void InnerMarkedTouchedIfNeeded(ObjectTracker objectTracker)
         {
             if (!objectTracker.touched)
             {
@@ -2477,7 +2481,7 @@ namespace MosaicLib.Semi.E039
         /// publishes each one (assigning a unique sequence number to each such publication), and then 
         /// recursively publishes each of the upward linked objects using the publicationTriggeredByLinkedObject option by invoking InnerRecursivePublishThroughUplinks on these published objects.
         /// </summary>
-        void InnerPublishTouchedObjectTrackers()
+        private void InnerPublishTouchedObjectTrackers()
         {
             ObjectTracker[] touchedOTArray = recentlyTouchedObjectTrackerList.ToArray();
 
@@ -2559,7 +2563,7 @@ namespace MosaicLib.Semi.E039
         /// At each layer, this method checks if the object already has the given seqNum or a newer one and if not then this method republishes the last published object to trigger clients to be aware that one or more linked object states may have changed.
         /// The requirement that we stop recursing if the current tracker is not the firstLevel and its lastPublishedSeqNum is the same as, or newer than, the given seqNum also prevents infinite loops even if the client concocts object patterns with loops in them.
         /// </summary>
-        void InnerRecursivePublishThroughLinksFromOtherObjects(ObjectTracker ot, ulong seqNum, bool firstLevel = false)
+        private void InnerRecursivePublishThroughLinksFromOtherObjects(ObjectTracker ot, ulong seqNum, bool firstLevel = false)
         {
             if (ot != null && ot.lastPublishedSeqNum < seqNum || firstLevel)
             {
@@ -2607,7 +2611,7 @@ namespace MosaicLib.Semi.E039
             }
         }
 
-        QpcTimer e039ObjectHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
+        private QpcTimer e039ObjectHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
 
         #endregion
 
@@ -2693,23 +2697,24 @@ namespace MosaicLib.Semi.E039
 
         #region PendingSyncPersist operations
 
-        void ServicePendingSyncOperations()
+        private void ServicePendingSyncOperations()
         {
             if (pendingSyncPersistOperationList.Count > 0)
             {
-                foreach (var pendingSyncOp in pendingSyncPersistOperationList.ToArray())
+                QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
+
+                var pendingSyncPersistOperationListArray = pendingSyncPersistOperationList.Array;
+                foreach (var pendingSyncOp in pendingSyncPersistOperationListArray)
                 {
                     if (!pendingSyncOp.action.ActionState.IsComplete)
                     {
-                        TimeSpan syncOpAge = pendingSyncOp.qpcTimeStamp.Age;
-                        if (pendingSyncOp.relevantTypeSetTrackerArray.All(tst => tst.lastSucceededSaveActionSeqNum >= pendingSyncOp.completeAfterSeqNum))
-                            pendingSyncOp.action.CompleteRequest(string.Empty);
-                        else if (pendingSyncOp.syncUpdateItem.WaitTimeLimit != null && syncOpAge > (pendingSyncOp.syncUpdateItem.WaitTimeLimit ?? TimeSpan.Zero))
-                            pendingSyncOp.action.CompleteRequest(pendingSyncOp.syncUpdateItem.FailOnWaitTimeLimitReached ? "Time limit reached after {0:f6} seconds".CheckedFormat(syncOpAge.TotalSeconds) : string.Empty);
+                        var resultCode = pendingSyncOp.GetPendingOperationResultCode(qpcTimeStamp);
+                        if (resultCode != null)
+                            pendingSyncOp.action.CompleteRequest(resultCode);
                     }
 
                     if (pendingSyncOp.action.ActionState.IsComplete)
-                        pendingSyncPersistOperationList.Remove(pendingSyncOp);      // this is safe since the foreach captured the list contents as an array.
+                        pendingSyncPersistOperationList.Remove(pendingSyncOp);      // this is safe since the foreach is iterating on the captured array.
                 }
             }
         }
@@ -2719,34 +2724,61 @@ namespace MosaicLib.Semi.E039
             public E039UpdateItem.SyncPersist syncUpdateItem;
             public QpcTimeStamp qpcTimeStamp;
             public IProviderFacet action;
-            public ulong completeAfterSeqNum;
             public TypeSetTracker[] relevantTypeSetTrackerArray;
+            public ulong[] completeAfterSeqNumArray;
+
+            public string GetPendingOperationResultCode(QpcTimeStamp qpcTimeStampIn)
+            {
+                TimeSpan syncOpAge = qpcTimeStampIn - qpcTimeStamp;
+
+                int relevantTypeSetTrackerArrayLength = relevantTypeSetTrackerArray.Length;
+                int completeAfterSeqNumArrayLength = completeAfterSeqNumArray.Length;
+
+                if (relevantTypeSetTrackerArrayLength != completeAfterSeqNumArrayLength)
+                    return "Internal: pending sync operation array lengths do not match [{0} != {1}]".CheckedFormat(relevantTypeSetTrackerArrayLength, completeAfterSeqNumArrayLength);
+
+                var allComplete = true;
+                for (int index = 0; index < relevantTypeSetTrackerArrayLength; index++)
+                {
+                    var tss = relevantTypeSetTrackerArray[index];
+                    var completeAfterSeqNum = completeAfterSeqNumArray[index];
+
+                    if (tss.lastSucceededSaveActionSeqNum < completeAfterSeqNum)
+                        allComplete = false;
+                }
+
+                if (allComplete)
+                    return string.Empty;
+                
+                if (syncUpdateItem.WaitTimeLimit != null && syncOpAge > (syncUpdateItem.WaitTimeLimit ?? TimeSpan.Zero))
+                    return (syncUpdateItem.FailOnWaitTimeLimitReached ? "Time limit reached after {0:f6} seconds".CheckedFormat(syncOpAge.TotalSeconds) : string.Empty);
+
+                return null;    // still waiting
+            }
         }
 
-        List<PendingSyncPersistOperation> pendingSyncPersistOperationList = new List<PendingSyncPersistOperation>();
+        private readonly IListWithCachedArray<PendingSyncPersistOperation> pendingSyncPersistOperationList = new IListWithCachedArray<PendingSyncPersistOperation>();
 
         #endregion
 
         #region internal fields (persistHelperPart, typeSetTrackerArray, uuidToObjectTrackerDictionary, typeNameToTypeTableTrackerDictionary, recentlyTouchedObjectTrackerList)
 
-        PersistHelper persistHelperPart;
+        private PersistHelper persistHelperPart;
 
-        TypeSetTracker[] typeSetTrackerArray = null;
-        readonly TypeSetTracker defaultTypeSetTracker = null;
-        Dictionary<string, ObjectTracker> uuidToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
-        Dictionary<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new Dictionary<string, TypeTableTracker>();
+        private readonly TypeSetTracker[] typeSetTrackerArray;
+        private readonly TypeSetTracker defaultTypeSetTracker;
+        private readonly Dictionary<string, ObjectTracker> uuidToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
+        private readonly Dictionary<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new Dictionary<string, TypeTableTracker>();
 
-        List<ObjectTracker> recentlyTouchedObjectTrackerList = new List<ObjectTracker>();
-
-        static readonly ObjectTracker emptyObjectTracker = new ObjectTracker(E039ObjectID.Empty, null);
+        private readonly List<ObjectTracker> recentlyTouchedObjectTrackerList = new List<ObjectTracker>();
 
         #endregion
 
         #region ReferenceSetUpdateCollector and related fields
 
-        HashSet<ReferenceSetUpdateCollector> activeSetUpdateCollectorHashSet = new HashSet<ReferenceSetUpdateCollector>();
-        List<ReferenceSetUpdateCollector> activeSetUpdateCollectorList = new List<ReferenceSetUpdateCollector>();
-        static readonly IComparer<long> seqNumComparer = Comparer<long>.Default;
+        private readonly HashSet<ReferenceSetUpdateCollector> activeSetUpdateCollectorHashSet = new HashSet<ReferenceSetUpdateCollector>();
+        private readonly List<ReferenceSetUpdateCollector> activeSetUpdateCollectorList = new List<ReferenceSetUpdateCollector>();
+        private static readonly IComparer<long> seqNumComparer = Comparer<long>.Default;
 
         private class ReferenceSetUpdateCollector
         {
@@ -2770,18 +2802,18 @@ namespace MosaicLib.Semi.E039
 
         #region support fields for asynchronous methods
 
-        readonly object externalDictionaryMutex = new object();
-        Dictionary<string, ObjectTracker> externalUUIDToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
-        Dictionary<string, Dictionary<string, ObjectTracker>> externalTypeToObjectNameDictionaryDictionary = new Dictionary<string, Dictionary<string, ObjectTracker>>();
+        private readonly object externalDictionaryMutex = new object();
+        private readonly Dictionary<string, ObjectTracker> externalUUIDToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
+        private readonly Dictionary<string, Dictionary<string, ObjectTracker>> externalTypeToObjectNameDictionaryDictionary = new Dictionary<string, Dictionary<string, ObjectTracker>>();
 
         #endregion
 
-        ObjectTracker FindObjectTrackerForID(E039ObjectID id, bool createIfNeeded = false, E039ObjectFlags initialFlags = E039ObjectFlags.None)
+        private ObjectTracker FindObjectTrackerForID(E039ObjectID id, bool createIfNeeded = false, E039ObjectFlags initialFlags = E039ObjectFlags.None)
         {
             if (id == null || id.IsEmpty)
                 return null;
 
-            ObjectTracker ot = null;
+            ObjectTracker ot;
  
             if (!id.UUID.IsNullOrEmpty() && uuidToObjectTrackerDictionary.TryGetValue(id.UUID, out ot) && ot != null)
                 return ot;
@@ -2844,11 +2876,11 @@ namespace MosaicLib.Semi.E039
                 ot.objIVA = ObjectIVI.GetValueAccessor<E039Object>("{0}{1}.{2}".CheckedFormat(Config.ObjectIVAPrefix, id.Type, id.Name));
         }
 
-        TypeTableTracker FindTypeTableTrackerForType(string typeName, bool createIfNeeded = false)
+        private TypeTableTracker FindTypeTableTrackerForType(string typeName, bool createIfNeeded = false)
         {
             typeName = typeName.Sanitize();
 
-            TypeTableTracker ttt = null;
+            TypeTableTracker ttt;
             if (typeNameToTypeTableTrackerDictionary.TryGetValue(typeName, out ttt) && ttt != null)
                 return ttt;
 
@@ -2872,7 +2904,7 @@ namespace MosaicLib.Semi.E039
             return ttt;
         }
 
-        TypeSetTracker FindTypeSetTrackerForType(string typeName)
+        private TypeSetTracker FindTypeSetTrackerForType(string typeName)
         {
             typeName = typeName.Sanitize();
 
@@ -2885,12 +2917,12 @@ namespace MosaicLib.Semi.E039
             return defaultTypeSetTracker;      // we always use the default one if none other match
         }
 
-        ulong seqNumGenerator = 0;
+        private ulong seqNumGenerator = 0;
 
         /// <summary>
         /// increments the seqNumGenerator value and returns it.
         /// </summary>
-        ulong GetNextSeqNum()
+        private ulong GetNextSeqNum()
         {
             return ++seqNumGenerator;
         }
@@ -2902,12 +2934,12 @@ namespace MosaicLib.Semi.E039
         }
 
         /// <summary>This is the reference copy for the sequence number information that this part publishes.</summary>
-        E039TableSeqNums seqNums;
+        private E039TableSeqNums seqNums;
 
         /// <summary>This is a copy of the last sequence number that this part has published.</summary>
-        E039TableSeqNums lastPublishedSeqNums;
+        private E039TableSeqNums lastPublishedSeqNums;
 
-        GuardedNotificationValueObject<E039TableSeqNums> seqNumsPublisher = new GuardedNotificationValueObject<E039TableSeqNums>(default(E039TableSeqNums));
+        private readonly GuardedNotificationValueObject<E039TableSeqNums> seqNumsPublisher = new GuardedNotificationValueObject<E039TableSeqNums>(default(E039TableSeqNums));
 
         private class LinkTrackerPair
         {
@@ -3041,7 +3073,7 @@ namespace MosaicLib.Semi.E039
             {
                 typeName = typeName.Sanitize();
 
-                TypeTableTracker ttt = null;
+                TypeTableTracker ttt;
 
                 if ((!typeNameToTypeTableTrackerDictionary.TryGetValue(typeName, out ttt) || ttt == null) && createIfNeeded)
                 {
@@ -3357,7 +3389,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public virtual bool Update(bool forceUpdate = false)
         {
-            bool didUpdate = (objObserver != null) ? objObserver.Update() : false;
+            bool didUpdate = (objObserver != null) && objObserver.Update();
 
             if (didUpdate || forceUpdate)
             {

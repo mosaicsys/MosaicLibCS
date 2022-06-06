@@ -775,7 +775,7 @@ namespace MosaicLib
             }
 
 			private LoggerConfig localValueCopy;
-			private Utils.GuardedSequencedValueObject<LoggerConfig> guardedValue = new MosaicLib.Utils.GuardedSequencedValueObject<LoggerConfig>();
+			private readonly Utils.GuardedSequencedValueObject<LoggerConfig> guardedValue = new MosaicLib.Utils.GuardedSequencedValueObject<LoggerConfig>();
 
             /// <summary>
             /// get/set property which implements the essential utility of this class.  
@@ -952,11 +952,12 @@ namespace MosaicLib
             string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault);
         }
 
-		/// <summary>This class implements the public sharable container that is used for all information that is to be logged using this logging system.</summary>
-		/// <remarks>
-		/// Messages are generated from a specific source and also include:
-		///		a MesgType, a message string, an optional INamedValueSet, and an optional data byte array
-		/// </remarks>
+        /// <summary>This class implements the public sharable container that is used for all information that is to be logged using this logging system.</summary>
+        /// <remarks>
+        /// Messages are generated from a specific source and also include:
+        ///		a MesgType, a message string, an optional INamedValueSet, and an optional data byte array
+        /// </remarks>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
         [DataContract(Namespace=Constants.LoggingNameSpace), Serializable]
         public class LogMessage : ILogMessage, IEquatable<LogMessage>
         {
@@ -1052,7 +1053,7 @@ namespace MosaicLib
                     _mesg = mesg,
                     _nvs = nvs.ConvertToReadOnly(),
                     _data = data,
-                    _emitted = emitted,
+                    Emitted = emitted,
                     _emittedQpcTime = emittedQpcTime,
                     SeqNum = seqNum,
                     ThreadID = threadID,
@@ -1722,7 +1723,7 @@ namespace MosaicLib
             /// Preallocated array of IMesgEmitters that have been created.  Allows this caller to create only the emitters that are actually used
             /// but also allows it to reuse each emitter type without effort.
             /// </summary>
-            private IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
+            private readonly IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
 
             /// <summary>
             /// per type IMesgEmitter cached results to further improve the code paths for the high usage direct message type IMesgEmitter properies
@@ -1856,12 +1857,61 @@ namespace MosaicLib
             /// Preallocated array of IMesgEmitters that have been created.  Allows this caller to create only the emitters that are actually used
             /// but also allows it to reuse each emitter type without effort.
             /// </summary>
-            private IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
+            private readonly IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
 
             /// <summary>
             /// per type IMesgEmitter cached results to further improve the code paths for the high usage direct message type IMesgEmitter properies
             /// </summary>
             private IMesgEmitter error, warning, signif, info, debug, trace;
+        }
+
+        #endregion
+
+        #region LMHLogger, ConsoleLogger
+
+        /// <summary>
+        /// This logger type allows the direct us of a log message handler from within a single logger instance.
+        /// </summary>
+        public class LMHLogger : BasicLoggerBase
+        {
+            /// <summary>
+            /// Constructor.  caller provides the <paramref name="lmh"/> instance to use for emitted messages.
+            /// If this logger is intended to support muti-threaded use then the <paramref name="useMutex"/> property should be passed as true (the default) so that 
+            /// resulting calls into the lmh.HandleLogMessage method will be synchronized and will not be called in a re-enterant/parallel manner.
+            /// </summary>
+            public LMHLogger(string loggerName, ILogMessageHandler lmh, bool useMutex = true)
+            {
+                loggerSourceInfo = new LoggerSourceInfo(LoggerID_Invalid, loggerName);
+
+                this.lmh = lmh;
+
+                if (useMutex)
+                    mutexToUse = new object();
+            }
+
+            private readonly LoggerSourceInfo loggerSourceInfo;
+            private readonly ILogMessageHandler lmh;
+            private readonly object mutexToUse;
+
+            protected override IMesgEmitter CreateMesgEmitter(MesgType mesgType)
+            {
+                return new LMHMesgEmitter(lmh, mesgType, mutexToUse: mutexToUse, loggerSourceInfo: loggerSourceInfo);
+            }
+        }
+
+        /// <summary>
+        /// This is a variation on the SimpleLMHLogger that constructs and uses a ConsoleLogMessageHandler as its lmh instance.
+        /// </summary>
+        public class ConsoleLogger : LMHLogger
+        {
+            /// <summary>
+            /// Constructor.  
+            /// Gives caller access to the parameters that are passed to the <see cref="CreateConsoleLogMessageHandler"/> method.  
+            /// <paramref name="useMutex"/> parameter is passed to the <see cref="LMHLogger"/>.
+            /// </summary>
+            public ConsoleLogger(string loggerName = null, string lmhName = null, LogGate? logGate = null, bool data = true, bool nvs = true, bool useMutex = true)
+                : base(loggerName ?? "Console", CreateConsoleLogMessageHandler(name: lmhName, logGate: logGate ?? LogGate.All, data: data, nvs: nvs), useMutex: useMutex)
+            { }
         }
 
         #endregion
@@ -2061,20 +2111,25 @@ namespace MosaicLib
         #region LMHMesgEmitter
 
         /// <summary>
-        /// This emitter is used to emit messages directly into a given ILogMessageHandler instance.  This is currently used for unit testing.
+        /// This emitter is used to emit messages directly into a given ILogMessageHandler instance.
         /// </summary>
         public class LMHMesgEmitter : GenericMesgEmitterBase
         {
             /// <summary>Constructor</summary>
-            public LMHMesgEmitter(ILogMessageHandler lmh, MesgType mesgType)
+            public LMHMesgEmitter(ILogMessageHandler lmh, MesgType mesgType, object mutexToUse = null, LoggerSourceInfo loggerSourceInfo = null)
             {
+                this.loggerSourceInfo = loggerSourceInfo ?? LoggerSourceInfo.Empty;
                 this.lmh = lmh;
+                this.mutexToUse = mutexToUse;
+
                 MesgType = mesgType;
 
                 IsEnabled = (lmh != null) && lmh.LoggerConfig.LogGate.IsTypeEnabled(mesgType);
             }
 
-            private ILogMessageHandler lmh;
+            private readonly LoggerSourceInfo loggerSourceInfo;
+            private readonly ILogMessageHandler lmh;
+            private readonly object mutexToUse;
 
             /// <summary>
             /// Method implements the required abstract basic Emit method from the base class.
@@ -2086,10 +2141,11 @@ namespace MosaicLib
                 if (IsEnabled)
                 {
                     LogMessage lm = new LogMessage()
-                        .Setup(LoggerSourceInfo.Empty, MesgType, str)
+                        .Setup(loggerSourceInfo, MesgType, str)
                         .NoteEmitted();
 
-                    lmh.HandleLogMessage(lm);
+                    using (var _ = new ScopedLockStruct(mutexToUse))
+                        lmh.HandleLogMessage(lm);
                 }
             }
 
@@ -2105,10 +2161,11 @@ namespace MosaicLib
                 if (IsEnabled)
                 {
                     LogMessage lm = new LogMessage()
-                        .Setup(LoggerSourceInfo.Empty, MesgType, str, nvs: nvs, data: data)
+                        .Setup(loggerSourceInfo, MesgType, str, nvs: nvs, data: data)
                         .NoteEmitted();
 
-                    lmh.HandleLogMessage(lm);
+                    using (var _ = new ScopedLockStruct(mutexToUse))
+                        lmh.HandleLogMessage(lm);
                 }
             }
         }
@@ -2158,7 +2215,7 @@ namespace MosaicLib
 
                 Item item = new Item() { MesgStr = str, NVS = nvs, Data = data, SeqNum = staticItemSeqNumGen.Increment() };
 
-                using (new ScopedLock(EmittedItemListMutex))
+                using (new ScopedLockStruct(EmittedItemListMutex))
                 {
                     EmittedItemList.Add(item);
                 }
@@ -2172,10 +2229,10 @@ namespace MosaicLib
             public List<Item> EmittedItemList { get; private set; }
 
             /// <summary>Clears the contents of the EmittedItemList.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
-            public void Clear() { using (new ScopedLock(EmittedItemListMutex)) { EmittedItemList.Clear(); } }
+            public void Clear() { using (new ScopedLockStruct(EmittedItemListMutex)) { EmittedItemList.Clear(); } }
 
             /// <summary>Captures and returns an array of the Items that are currently in the.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
-            public Item[] EmitterItemArray { get { using (new ScopedLock(EmittedItemListMutex)) { return EmittedItemList.ToArray(); } } }
+            public Item[] EmitterItemArray { get { using (new ScopedLockStruct(EmittedItemListMutex)) { return EmittedItemList.ToArray(); } } }
 
             /// <summary>
             /// Returns an IEnumerable that produces the set of MesgStrs from each of the items that are currently in the list
@@ -2307,7 +2364,7 @@ namespace MosaicLib
                     ex.Throw();
             }
 
-            private ExceptionFactoryDelegate exceptionFactoryDelegate;
+            private readonly ExceptionFactoryDelegate exceptionFactoryDelegate;
         }
 
         #endregion
@@ -2608,7 +2665,7 @@ namespace MosaicLib
             #region MyTraceEmitter - used for logging trace messages related to use of the logger itself
 
             /// <summary>MyTraceEmitter storage field.  Defaults to Logging.NullEmitter</summary>
-            private IMesgEmitter myTraceEmitter;
+            private readonly IMesgEmitter myTraceEmitter;
 
             /// <summary>Property provides IMesgEmitter that is used for logger trace messages (construction, destruction, cloning, ...)</summary>
             protected IMesgEmitter MyTraceEmitter { get { return myTraceEmitter ?? Logging.NullEmitter; } }
@@ -2902,17 +2959,24 @@ namespace MosaicLib
         #endregion
 
         //-------------------------------------------------------------------
-		#region Trace helper objects (CtorDisposeTrace, EntryExitTrace, TimerTrace, RateTrace)
+        #region Trace helper objects (CtorDisposeTrace, EntryExitTrace, TimerTrace, RateTrace)
 
         /// <summary>
-        /// This class is used to provide a Trace on construction/destruction.  It logs a configurable message on construction and explicit disposal.
-        /// Generally this class is used as the base class for the EnterExitTrace and TimerTrace classes.  By default messages use MesgType.Trace.
+        /// This class is used to provide a Trace on construction/dispose using on-construction and an on-dispose message prefix ("Ctor:" and "Dispose:")
+        /// It logs a configurable message on construction and explicit disposal.
+        /// Generally this class is used as the base class for the EnterExitTrace, TimerTrace, and other similar classes.  
+        /// By default messages use <see cref="MesgType.Trace"/>.
         /// </summary>
         /// <remarks>
         /// The following Trace object classes were inspired by the use of the TraceLogger class from logger.h in the log4cplus library developed by Tad E. Smith.
         /// In most cases these objects should be used in the context of a using statement such as:
         ///
-        ///	using (var ctTrace = new MosaicLib.Logging.CtorDisposeTrace(logger, "TraceID")) { [do stuff] }
+        ///	<code>
+        ///	using (var ctTrace = new MosaicLib.Logging.CtorDisposeTrace(logger, "TraceID")) 
+        ///	{ 
+        ///	    // [do stuff] 
+        ///	}
+        ///	</code>
         /// </remarks>
         public class CtorDisposeTrace : IDisposable
 		{
@@ -2989,6 +3053,8 @@ namespace MosaicLib
 
             /// <summary>
             /// Implementation method for <see cref="IDisposable"/> interface.
+            /// This method will format and emit the "closing" message that uses the configured <see cref="disposeStr"/> value as a prefix
+            /// combined with optional runTime, count, rate and/or <see cref="ExtraMessage"/>
             /// </summary>
 			public void Dispose()
 			{
@@ -3086,15 +3152,21 @@ namespace MosaicLib
             private double count = 0.0;
 		}
 
-		//-------------------------------------------------------------------
+        //-------------------------------------------------------------------
 
         /// <summary>
-        /// This class is generally used as a method entry/exit Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
-        /// By default messages use CtorDisposeTrace default message type (MesgType.Trace)
+        /// This class is generally used as a method entry/exit Trace.  
+        /// It is based on the <see cref="CtorDisposeTrace"/> with modified default log message prefixes (Enter:, Exit:)
+        /// By default messages use <see cref="CtorDisposeTrace"/> default message type (<see cref="MesgType.Trace"/>)
         /// <para/>Also supports ExtraMessage property.
         /// </summary>
         /// <remarks>
-        ///	using (var eeTrace = new MosaicLib.Logging.EntryExitTrace(logger)) { [do stuff] }
+        /// <code>
+        ///	using (var eeTrace = new MosaicLib.Logging.EntryExitTrace(logger)) 
+        ///	{ 
+        ///	    // [do stuff] 
+        ///	}
+        /// </code>
         /// </remarks>
         public class EnterExitTrace : CtorDisposeTrace
 		{
@@ -3137,15 +3209,21 @@ namespace MosaicLib
             { }
         }
 
-		//-------------------------------------------------------------------
+        //-------------------------------------------------------------------
 
         /// <summary>
-        /// This class is generally used as a section start/stop Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
-        /// By default start and stop messages use MesgType.Debug.
+        /// This class is generally used as a section start/stop Trace.
+        /// It is based on the <see cref="CtorDisposeTrace"/> with modified default log message prefixes ("Start:", "Stop:").
+        /// By default start and stop messages use <see cref="MesgType.Debug"/>.
         /// <para/>Also supports Count and ExtraMessage properties.
         /// </summary>
         /// <remarks>
-        ///	using (var tTrace = new MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
+        /// <code>
+        ///	using (var tTrace = new MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) 
+        ///	{ 
+        ///	    // [do stuff] 
+        ///	}
+        /// </code>
         /// </remarks>
         public class TimerTrace : CtorDisposeTrace
 		{
@@ -3153,8 +3231,6 @@ namespace MosaicLib
             private const string startPrefixStr = "Start:";
             /// <summary>Stop:</summary>
             private const string stopPrefixStr = "Stop:";
-            /// <summary>MesgType.Debug</summary>
-            private const MesgType defaultStartStopMesgType = MesgType.Debug;
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Start(ctor) and Stop(dispose) messages</param>
@@ -3189,19 +3265,23 @@ namespace MosaicLib
 		}
 
         /// <summary>
-        /// This class is generally used as a rate calculator.  It is based on the CtorDisposeTrace with modified default log message prefixes.
-        /// By default Result messages use MesgType.Debug.
+        /// This class is generally used as a rate calculator.  It only emits an on-dispose message using the "Result:" prefix.
+        /// It is based on the <see cref="CtorDisposeTrace"/> with modified default log message prefixes.
+        /// By default Result messages use <see cref="MesgType.Debug"/>.
         /// <para/>Also supports Count and ExtraMessage properties.
         /// </summary>
         /// <remarks>
-        ///	using (var tTrace = new MosaicLib.Logging.RateTrace(logger, "MeasurementName")) { [do stuff] }
+        /// <code>
+        ///	using (var tTrace = new MosaicLib.Logging.RateTrace(logger, "MeasurementName")) 
+        ///	{ 
+        ///	    // [do stuff] 
+        ///	}
+        /// </code>
         /// </remarks>
         public class RateTrace : CtorDisposeTrace
         {
             /// <summary>Result:</summary>
             private const string resultPrefixStr = "Result:";
-            /// <summary>MesgType.Debug</summary>
-            private const MesgType defaultStartStopMesgType = MesgType.Debug;
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Result(dispose) messages</param>

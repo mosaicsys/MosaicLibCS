@@ -68,29 +68,69 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     #region IMDRFWriter and related definitions (GroupInfo, GroupPointInfo, OccurrenceInfo)
 
+    /// <summary>
+    /// Defines the standard interface that MDRF1 and MDRF2 writers provide.
+    /// </summary>
     public interface IMDRFWriter : IPartBase
     {
+        /// <summary>Adds the given set of <see cref="GroupInfo"/> objects to this writter.  Will cause the writer to start a new file if needed.</summary>
         IMDRFWriter Add(params GroupInfo[] groupInfoParamsArray);
+
+        /// <summary>Adds the given set of <see cref="GroupInfo"/> objects to this writter.  Will cause the writer to start a new file if needed.</summary>
         IMDRFWriter AddRange(IEnumerable<GroupInfo> groupInfoSet);
+
+        /// <summary>Adds the given set of <see cref="OccurrenceInfo"/> objects to this writter.  Will cause the writer to start a new file if needed.</summary>
         IMDRFWriter Add(params OccurrenceInfo[] occurrenceInfoParamsArray);
+
+        /// <summary>Adds the given set of <see cref="OccurrenceInfo"/> objects to this writter.  Will cause the writer to start a new file if needed.</summary>
         IMDRFWriter AddRange(IEnumerable<OccurrenceInfo> occurrenceInfoSet);
 
+        /// <summary>
+        /// Requests the writer to write all group that indicate that they have pending changes.  
+        /// If <paramref name="writeAll"/> is true or if the MinNominalWriteAllInterval has elapsed then all values from all groups will be written.
+        /// </summary>
         string RecordGroups(bool writeAll = false, DateTimeStampPair dtPair = null);
 
+        /// <summary>
+        /// Requests the writer to record the given <paramref name="occurrenceInfo"/> with the corresponding <paramref name="dataValue"/> encapsulated in a <see cref="ValueContainer"/>.
+        /// </summary>
         string RecordOccurrence(IOccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false);
+
+        /// <summary>
+        /// Requests the writer to record the given <paramref name="occurrenceInfo"/> with the corresponding <paramref name="dataVC"/>.
+        /// </summary>
         string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false);
 
+        /// <summary>
+        /// Requests the writer to flush all pending and/or unwriten data to the file system.
+        /// </summary>
         string Flush(FlushFlags flushFlags = FlushFlags.All, DateTimeStampPair dtPair = null);
 
+        /// <summary>
+        /// Returns the last recorded file size for the current file (or for the last written file if there is no current file).
+        /// </summary>
 	    int GetCurrentFileSize();
 
+        /// <summary>
+        /// Returns true if the file is open
+        /// </summary>
         bool IsFileOpen { get; }
+
+        /// <summary>Returns the <see cref="FileInfo"/> for the current file.</summary>
         FileInfo CurrentFileInfo { get; }
+
+        /// <summary>Returns the <see cref="FileInfo"/> for the last file at the point it was being closed.</summary>
         FileInfo LastFileInfo { get; }
 
-        /// <summary>Returns the FileInfo for the next file that was reported as being closed.  Continues to return the next one from the internal list until the client catches up with the number of files that the writer has recently closed.</summary>
+        /// <summary>
+        /// Returns the FileInfo for the next file that was reported as being closed.  
+        /// Continues to return the next one from the internal list until the client catches up with the number of files that the writer has recently closed.
+        /// </summary>
         MDRF.Writer.FileInfo? NextClosedFileInfo { get; }
 
+        /// <summary>
+        /// Requests the writer to close the the current file.  The caller must provide a <paramref name="reason"/> that will be included in the file.
+        /// </summary>
         int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null);
     }
 
@@ -109,6 +149,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         /// <summary>Requests that the flush operation update/write the file index (0x02)</summary>
         Index = 0x02,
+
+        /// <summary>
+        /// Requests that the flush opreation block until the buffered data has been persisted to disk (using FlushFileBuffers or equiv)
+        /// <para/>Use of this flag is non-default and is only supported with MDRF2 writers, and only with output stream types that support the use of the Flush(true) method such as <see cref="FileStream"/>
+        /// </summary>
+        ToDisk = 0x04,
 
         /// <summary>Selects that all flush actions be performed (File | Index)</summary>
         All = (FlushFlags.File | FlushFlags.Index),
@@ -400,7 +446,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public void Release()
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 CloseCurrentFile("On Release");
             }
@@ -418,7 +464,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public MDRFWriter AddRange(IEnumerable<GroupInfo> groupInfoSet)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 groupInfoList.AddRange(groupInfoSet.Where(gi => gi != null));
                 groupOrOccurrenceInfoListModified = true;
@@ -439,7 +485,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public MDRFWriter AddRange(IEnumerable<OccurrenceInfo> occurrenceInfoSet)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 occurrenceInfoList.AddRange(occurrenceInfoSet.Where(oi => oi != null));
                 groupOrOccurrenceInfoListModified = true;
@@ -481,7 +527,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
@@ -599,7 +645,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
 
@@ -655,7 +701,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
 
@@ -703,7 +749,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 string ec = string.Empty;
 
@@ -764,7 +810,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return 0;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 return (InnerIsFileOpen ? CurrentFileInfo : LastFileInfo).FileSize;
             }
@@ -777,7 +823,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (IsDisposed)
                     return false;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     return currentFileInfo.IsActive && InnerIsFileOpen;
                 }
@@ -791,7 +837,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (IsDisposed)
                     return default(FileInfo);
 
-                using (var scopedLock = new ScopedLock(mutex)) 
+                using (var scopedLock = new ScopedLockStruct(mutex)) 
                 { 
                     return currentFileInfo; 
                 }
@@ -805,7 +851,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (IsDisposed)
                     return default(FileInfo);
 
-                using (var scopedLock = new ScopedLock(mutex)) 
+                using (var scopedLock = new ScopedLockStruct(mutex)) 
                 { 
                     return lastFileInfo; 
                 }
@@ -823,7 +869,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (volatileClosedFileListCount <= 0)
                     return null;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     if (closedFileList.Count <= 0)
                         return null;
@@ -842,7 +888,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (IsDisposed)
                 return 0;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 

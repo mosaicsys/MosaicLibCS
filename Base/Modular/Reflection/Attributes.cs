@@ -49,7 +49,8 @@ namespace MosaicLib.Modular.Reflection
 
             /// <summary>
             /// This property is used to guide the generation of the derived name by choosing which strategy is to be used.
-            /// <para/>Defaults to Prefix0.  Other choices are None, Format, Prefix1, Prefix2, or Prefix3
+            /// <para/>Defaults to Prefix0.  Choices are None, Prefix0, Prefix1, Prefix2, or Prefix3, Format, FormatWithMemberName
+            /// <para/>A .. D are mapped to Prefix0 .. Prefix3
             /// </summary>
             NameAdjust NameAdjust { get; }
 
@@ -221,13 +222,13 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>The item's Name property (if non-null) or the items MemberInfo.Name will be used without further modification.</summary>
             None = 0,
 
-            /// <summary>The params string[0] is used as a prefix (if it is present and non-empty).  This is the default value.</summary>
+            /// <summary>The params string[0], passed to the Setup method, is used as a prefix (if it is present and non-empty).  This is the default value.</summary>
             Prefix0 = 1,
-            /// <summary>The params string[1] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[1], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix1 = 2,
-            /// <summary>The params string[2] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[2], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix2 = 3,
-            /// <summary>The params string[3] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[3], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix3 = 4,
 
             /// <summary>For backwards compatibility.  Identical to Prefix0 (1)</summary>
@@ -240,20 +241,19 @@ namespace MosaicLib.Modular.Reflection
             D = Prefix3,
 
             /// <summary>
-            /// Uses the Name property as the format string combined with the corresonding params string array values
-            /// to support more arbitrary mechanisms for generating derived names.  
-            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
-            /// that are passed to the method.
+            /// This <see cref="NameAdjust"/> selection supports a form of arbitrary name generation mechanism.
+            /// In this case the Name property is used as the format string which is evaluated in combination with the corresonding params string values, 
+            /// which are typically passed to the corresponding Setup method.  
+            /// The MosaicLib.Utils.Fcns.CheckedFormat method is used to generate the final name, and as such it will produce error messages if the referenced {} arguments do not match the actual set of params strings that are passed to the Setup method.
             /// (5)
             /// </summary>
             Format = 5,
 
             /// <summary>
-            /// Uses the Name property as the format string combined with the corresonding params string array values, prefixed with the memberInfo.Name value,
-            /// to support more arbitrary mechanisms for generating derived names.  As such format field {0} becomes the memberInfo.Name while {1} ... {n} given params string array
-            /// values 0 .. n-1.
-            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
-            /// that are passed to the method.
+            /// This <see cref="NameAdjust"/> selection supports a second form of arbitrary name generation mechanism.
+            /// In this case the Name property is used as a format string which is evaluated in combination with the name of the member that the attribute is applied to concatinated with the set of params string values,
+            /// which are typically passed to the corresponding Setup method.  As such format field {0} becomes the memberInfo.Name while {1} ... {n} given params string values 0 .. n-1.
+            /// The MosaicLib.Utils.Fcns.CheckedFormat method is used to generate the final name, and as such it will produce error messages if the referenced {} arguments do not match the actual set of params strings that are passed to the Setup method, prefixed with the member name.
             /// (6)
             /// </summary>
             FormatWithMemberName = 6,
@@ -1343,8 +1343,6 @@ namespace MosaicLib.Modular.Reflection
                 return memberFromVCDelegate;
             }
 
-            private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
-
             #endregion
 
             #region GenerateGetter, GenerateSetter
@@ -1360,7 +1358,7 @@ namespace MosaicLib.Modular.Reflection
             /// <returns>a System.Func{TAnnotatedClass, TValueType} object that may be invoked later obtain the value of the selected field or property from an instance of the TAnnotatedClass that is given to the Func when it is invoked.</returns>
             public static Func<TAnnotatedClass, TValueType> GenerateGetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
-                Func<TAnnotatedClass, TValueType> func = null;
+                Func<TAnnotatedClass, TValueType> func;
 
                 if (item.IsField)
                     func = Reflection.GetterSetterFactory.CreateFieldGetterFunc<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
@@ -1381,7 +1379,7 @@ namespace MosaicLib.Modular.Reflection
             /// <returns>a System.Action{TAnnotatedClass, TValueType} object that may be invoked later to assign a value to the selected field or propety in an instance of the TAnnotatedClass that is given to the Action when it is invoked.</returns>
             public static Action<TAnnotatedClass, TValueType> GenerateSetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
-                Action<TAnnotatedClass, TValueType> action = null;
+                Action<TAnnotatedClass, TValueType> action;
 
                 if (item.IsField)
                     action = Reflection.GetterSetterFactory.CreateFieldSetterAction<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
@@ -1486,10 +1484,12 @@ namespace MosaicLib.Modular.Reflection
                         continue;		// skip properties that are not selected for inclusion
 
                     // save relevant parts in list
-                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>();
-                    iai.ItemType = piType;
-                    iai.ItemAttribute = ia;
-                    iai.PropertyInfo = pi;
+                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>()
+                    {
+                        ItemType = piType,
+                        ItemAttribute = ia,
+                        PropertyInfo = pi
+                    };
 
                     itemAccessInfoList.Add(iai);
                 }
@@ -1511,10 +1511,12 @@ namespace MosaicLib.Modular.Reflection
                         continue;		// skip fields that are not selected for inclusion
 
                     // save relevant parts in list
-                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>();
-                    iai.ItemType = fiType;
-                    iai.ItemAttribute = ia;
-                    iai.FieldInfo = fi;
+                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>()
+                    {
+                        ItemType = fiType,
+                        ItemAttribute = ia,
+                        FieldInfo = fi
+                    };
 
                     itemAccessInfoList.Add(iai);
                 }

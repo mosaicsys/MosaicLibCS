@@ -83,6 +83,12 @@ namespace MosaicLib
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E094</summary>
         public const string E094NameSpace = SemiNameSpace + ".E094";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E116</summary>
+        public const string E116NameSpace = SemiNameSpace + ".E116";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E157</summary>
+        public const string E157NameSpace = SemiNameSpace + ".E157";
+
         /// <summary>urn://mosaicsys.com/NS/MLib.PartsLib</summary>
         public const string PartsLibNameSpace = MosaicLibNameSpaceRoot + ".PartsLib";
 

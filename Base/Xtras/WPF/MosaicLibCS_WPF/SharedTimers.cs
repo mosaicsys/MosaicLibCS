@@ -38,7 +38,7 @@ namespace MosaicLib.WPF.Timers
     /// A client can ask the corresponding timer to start by obtaining IDisposable RunTimerToken using the GetRunTimerToken method.  Once this has been done (by the first client of the shared timer),
     /// the timer will continue to run until the last resulting token has been disposed, at which point the timer will be stopped.  This pattern may be used indefinitely as needed.
     /// </summary>
-    public interface ISharedDispatcherTimer
+    public interface ISharedDispatcherTimer : IDisposable
     {
         /// <summary>Gives the rate value that this timer has been requested to run at</summary>
         double Rate { get; }
@@ -93,6 +93,36 @@ namespace MosaicLib.WPF.Timers
         private static Dictionary<TimeSpan, ISharedDispatcherTimer> sharedTimerDictionary = new Dictionary<TimeSpan, ISharedDispatcherTimer>();
 
         /// <summary>
+        /// This method removes all shared dispatch timers.  
+        /// <para/>This method is generally used as part of unit test code.
+        /// </summary>
+        public static void RemoveAllSharedTimers()
+        {
+            var capturedSptArray = sharedTimerDictionary.Values.ToArray();
+
+            sharedTimerDictionary.Clear();
+
+            foreach (var spt in capturedSptArray)
+            {
+                spt.DisposeOfGivenObject();
+            }           
+        }
+
+        /// <summary>
+        /// This method causes all of the shared timers to invoke all attached tick handler methods immediately.
+        /// <para/>This method is generally used as part of unit test code.
+        /// </summary>
+        public static void ForceServiceAllTimers()
+        {
+            foreach (var spt in sharedTimerDictionary.Values.ToArray())
+            {
+                INotifyable notifyable = spt.TickNotificationList as INotifyable;
+                if (notifyable != null)
+                    notifyable.Notify();
+            }
+        }
+
+        /// <summary>
         /// Obtains the ISharedDispatcherTimer instance from the dictionary (creating one if needed),
         /// Adds any of the optional Tick event handler signatures (as supported by the ISharedDispatchTimer's TickNotificationList)
         /// and returns an IDisposable token that will release use of the timer and will remove any given Tick event handler signatures from the underlying TickNotificationList when the token is dipsosed.
@@ -136,7 +166,7 @@ namespace MosaicLib.WPF.Timers
             void Release(string lastClientName);
         }
 
-        public class SharedDispatcherTimer : SharedResourceSetupAndReleaseBase, ISharedDispatcherTimer, ISetupAndRelease
+        public class SharedDispatcherTimer : SharedResourceSetupAndReleaseBase, ISharedDispatcherTimer, ISetupAndRelease, IDisposable
         {
             public SharedDispatcherTimer(double rate, TimeSpan tickInterval)
             {
@@ -158,7 +188,7 @@ namespace MosaicLib.WPF.Timers
 
             /// <summary>Gives the IBasicNotificationList that gets Notified each time the timer "Ticks".</summary>
             public IBasicNotificationList TickNotificationList { get { return tickNotificationList; } }
-            BasicNotificationList tickNotificationList = new BasicNotificationList();
+            private readonly BasicNotificationList tickNotificationList = new BasicNotificationList();
 
             private DispatcherTimer timer;
 
@@ -176,8 +206,17 @@ namespace MosaicLib.WPF.Timers
             /// <summary>abstract internal Rlease method implementation.  Stops the timer and disposes of it (as well as nulling the local field that holds on to it).</summary>
             protected override void Release(string lastClientName)
             {
-                timer.Stop();
-                Fcns.DisposeOfObject(ref timer);
+                Dispose();
+            }
+
+            /// <summary>Implementation for <see cref="IDisposable"/> interface.  Stops the underlying DispatcherTimer (if any).</summary>
+            public void Dispose()
+            {
+                if (timer != null)
+                {
+                    timer.Stop();
+                    timer = null;       // the DispatcherTimer is not IDisposable.
+                }
             }
 
             void ISetupAndRelease.Setup(string firstClientName) { this.Setup(firstClientName); }

@@ -263,7 +263,7 @@ namespace MosaicLib.Modular.Action
                     UpdateEmitters();
                 else
                 {
-                    Logging.IMesgEmitter emitter = null;
+                    Logging.IMesgEmitter emitter;
                     if (value.TryGetValue("Done", out emitter)) 
                         Done = emitter ?? Logging.NullEmitter;
                     if (value.TryGetValue("Error", out emitter)) 
@@ -526,10 +526,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Passthough override method include to prevent warnings due to custom Equals implementation
         /// </summary>
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
+        public override int GetHashCode() { return base.GetHashCode(); }
 
         #endregion
 
@@ -565,6 +562,7 @@ namespace MosaicLib.Modular.Action
     /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState.
     /// This class is also used as the source/destination class for all DataContract serialization/deserialization of an IActionState's contents.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateCopy : ActionStateImplBase
     {
@@ -971,7 +969,8 @@ namespace MosaicLib.Modular.Action
         public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging loggingIn, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 		{
 			this.actionQ = actionQ;
-			this.method = method;
+            this.actionStateMutex = ((actionQ != null) ? actionQ.SharedActionStateMutex : null) ?? new object();
+            this.method = method;
 
             var cloneLogging = !doNotCloneLogging;
 
@@ -1008,16 +1007,16 @@ namespace MosaicLib.Modular.Action
 		#region private and protected fields and properties
 
 		private volatile bool isCancelRequestActive = false;
-		private ActionQueue actionQ = null;
-		private FullActionMethodDelegate<ParamType, ResultType> method = null;
-		private ActionLogging logging;
-		private readonly object actionStateMutex = new object();
-		private ActionStateImpl actionState = new ActionStateImpl();
+		private readonly ActionQueue actionQ;
+        private readonly object actionStateMutex;
+        private readonly FullActionMethodDelegate<ParamType, ResultType> method;
+		private readonly ActionLogging logging;
+		private readonly ActionStateImpl actionState = new ActionStateImpl();
         private IActionState iActionState = null;
-        private BasicNotificationList notifyOnComplete = new BasicNotificationList();
-        private BasicNotificationList notifyOnUpdate = new BasicNotificationList();
+        private readonly BasicNotificationList notifyOnComplete = new BasicNotificationList();
+        private readonly BasicNotificationList notifyOnUpdate = new BasicNotificationList();
         private ParamType paramValue;
-		private bool paramValueIsFixed;
+		private readonly bool paramValueIsFixed;
 		private ResultType resultValue = default(ResultType);
 
         /// <summary>Protected property that reports the ActionLogging instance that this Action is using for its logging.</summary>
@@ -1025,11 +1024,13 @@ namespace MosaicLib.Modular.Action
 
         IActionLogging IProviderFacet.Logging { get { return logging; } }
 
+
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
         protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
 
         /// <summary>Private static SingletonHelper used to create and manage the standard Action's SharedWaitEventNotifierSet</summary>
-        private static Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
+        private static readonly Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
 
 		#endregion
 
@@ -1327,7 +1328,7 @@ namespace MosaicLib.Modular.Action
 		#region IProviderActionBase<ParamType, ResultType> (et. al.)
 
         /// <summary>
-        /// Gives the provider get/set access to set the ParamValue - getter simple returns the stored value as last set by the client or the provider.  Setter locks the actionState, sets the value and Emits an action event
+        /// Gives the provider get/set access to set the ParamValue - getter simply returns the stored value as last set by the client or the provider.  Setter locks the actionState, sets the value and Emits an action event
         /// </summary>
         ParamType IProviderActionBase<ParamType, ResultType>.ParamValue
         {
@@ -1363,7 +1364,7 @@ namespace MosaicLib.Modular.Action
 		}
 
         /// <summary>
-        /// Sets the state to ActionStateCode.Issues.  Used internally and by unit test code.
+        /// Sets the state to <see cref="ActionStateCode.Issued"/>.  Used internally and by unit test code.
         /// </summary>
         public void SetStateIssued()
         {
@@ -1372,6 +1373,8 @@ namespace MosaicLib.Modular.Action
                 actionState.SetStateIssued(logging);
                 NoteActionStateUpdated();
             }
+
+            notifyOnUpdate.Notify();
         }
 
         /// <summary>Provider invokes this to dispatch the mark the action as issued and invoke its delegate method.</summary>
@@ -1439,6 +1442,8 @@ namespace MosaicLib.Modular.Action
                 actionState.UpdateNamedValues(namedValueSet, logging);
                 NoteActionStateUpdated();
             }
+
+            notifyOnUpdate.Notify();
         }
 
         /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
@@ -1468,7 +1473,8 @@ namespace MosaicLib.Modular.Action
                 NoteActionStateUpdated();
             }
 
-			notifyOnComplete.Notify();
+            notifyOnUpdate.Notify();
+            notifyOnComplete.Notify();
         }
 
 		#endregion
@@ -1520,11 +1526,13 @@ namespace MosaicLib.Modular.Action
                 return "{0}[{1}] state:{2}".CheckedFormat(mesg, eMesgDetail, ActionState);
         }
 
-        /// <summary>Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.</summary>
+        /// <summary>
+        /// Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.
+        /// <para/>Note: this method no longer calls Notify on the notifyOnUpdate list as that operation must only be done while not owning the action state mutex.
+        /// </summary>
         protected void NoteActionStateUpdated()
         {
             iActionState = null;
-            notifyOnUpdate.Notify();
         }
 
         /// <summary>
@@ -1603,6 +1611,8 @@ namespace MosaicLib.Modular.Action
                 actionState.SetStateStarted(logging);
                 NoteActionStateUpdated();
 			}
+
+            notifyOnUpdate.Notify();
 
             if (actionQ != null)
     			return actionQ.Enqueue(this);

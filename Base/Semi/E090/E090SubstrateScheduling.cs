@@ -539,6 +539,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         /// <summary>Makes a copy of the contents of the given <paramref name="other"/> instance.</summary>
         public PreparednessStateForPublication(IPreparednessState other)
         {
+            ProcessSpecRecipeName = other.ProcessSpecRecipeName;
+            ProcessStepSpecRecipeName = other.ProcessStepSpecRecipeName;
             SummaryState = other.SummaryState;
             SummaryStateTimeStamp = other.SummaryStateTimeStamp;
             EstimatedTimeToReady = other.EstimatedTimeToReady;
@@ -597,7 +599,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             return (other != null
                     && ProcessSpecRecipeName == other.ProcessSpecRecipeName
                     && ProcessStepSpecRecipeName == other.ProcessStepSpecRecipeName
-                    && SummaryState.Equals(other.SummaryState)
+                    && SummaryState == other.SummaryState
                     && SummaryStateTimeStamp == other.SummaryStateTimeStamp
                     && EstimatedTimeToReady == other.EstimatedTimeToReady
                     && Reason == other.Reason
@@ -996,12 +998,18 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     }
 
     /// <summary>
-    /// Interface for results produced by running a process step spec.  Contains a ResultCode and an SPS.
+    /// Interface for results produced by running a process step spec.  Contains a ResultCode, a (pseudo) SPS and an optional NVS
     /// </summary>
     public interface IProcessStepResult
     {
+        /// <summary>empty indicates success, non-empty indicates that an issue happened during step processing (which is usually described here)</summary>
         string ResultCode { get; }
+
+        /// <summary>Gives the SPS or pseudoSPS that the step produced.  Typically ProcessStepCompleted, Rejected, Stopped, or Aborted</summary>
         SubstProcState SPS { get; }
+
+        /// <summary>May be used to pass additional arbitraty information back to the client that may help additionally clarify the resulting disposition or followon handling of the processed substrate(s).</summary>
+        INamedValueSet NVS { get; }
     }
 
     /// <summary>
@@ -1013,6 +1021,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public TProcessStepSpecType StepSpec { get; set; }
         public IProcessStepResult StepResult { get; set; }
 
+        /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
             if (StepSpec != null && StepResult != null && StepResult.ResultCode.IsNullOrEmpty() && (StepResult.SPS == SubstProcState.Processed || StepResult.SPS == SubstProcState.ProcessStepCompleted))
@@ -1237,6 +1246,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public INamedValueSet RecipeVariables { get; private set; }
         public ReadOnlyIList<TProcessStepSpecType> Steps { get; private set; }
 
+        /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
             return "ProcessSpec Rcp:'{0}' RcpVars:{1} Steps:{2}".CheckedFormat(RecipeName, RecipeVariables.SafeToStringSML(), Steps.SafeCount());
@@ -1282,6 +1292,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 StepRecipeName = defaultStepRecipeName;
         }
 
+        /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
             var processRcpNameStr = ((ProcessSpec != null) ? " ProcRcp:'{0}'".CheckedFormat(ProcessSpec.RecipeName) : " [NullProcessSpec]");
@@ -1296,14 +1307,31 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class ProcessStepResultBase : IProcessStepResult
     {
-        public ProcessStepResultBase(string resultCode = "", SubstProcState sps = SubstProcState.Undefined, SubstProcState fallbackFailedSPS = SubstProcState.Rejected, SubstProcState defaultSucceededSPS = SubstProcState.ProcessStepCompleted)
+        public ProcessStepResultBase(string resultCode = "", SubstProcState sps = SubstProcState.Undefined, SubstProcState fallbackFailedSPS = SubstProcState.Rejected, SubstProcState defaultSucceededSPS = SubstProcState.ProcessStepCompleted, INamedValueSet nvs = null)
         {
             ResultCode = resultCode.MapNullToEmpty();
             SPS = (sps != SubstProcState.Undefined) ? sps : (ResultCode.IsNullOrEmpty() ? defaultSucceededSPS : fallbackFailedSPS);
+            NVS = nvs.ConvertToReadOnly(mapNullToEmpty: true);
         }
 
+        /// <inheritdoc/>
         public string ResultCode { get; private set; }
+
+        /// <inheritdoc/>
         public SubstProcState SPS { get; private set; }
+
+        /// <inheritdoc/>
+        public INamedValueSet NVS { get; private set; }
+
+        /// <summary>Debugging and logging helper method</summary>
+        public override string ToString()
+        {
+            var nvsStr = (NVS.IsNeitherNullNorEmpty() ? string.Concat(" ", NVS.ToStringSML()) : "");
+            if (ResultCode.IsNullOrEmpty())
+                return "Step Succeeded SPS:{0}{1}".CheckedFormat(SPS, nvsStr);
+            else
+                return "Step Failed:'{0}' SPS:{1}{2}".CheckedFormat(ResultCode, SPS, nvsStr);
+        }
     }
 
     #endregion
@@ -1315,9 +1343,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class SubstrateTrackerBase : ISubstrateTrackerBase
     {
-        /// <summary>
-        /// Debugging and logging helper method
-        /// </summary>
+        /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
             string inMotionStr = (IsMotionPending ? " MotionPending" : "");

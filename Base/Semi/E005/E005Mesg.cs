@@ -21,13 +21,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Time;
+using MosaicLib.Modular.Config;
 using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
 using MosaicLib.Semi.E005.Data;
 
 namespace MosaicLib.Semi.E005
@@ -92,8 +90,22 @@ namespace MosaicLib.Semi.E005
 	/// <summary>This is the implemenation object for the IMessageBase, IMessage and IMessagePortFacet interfaces.</summary>
 	public class Message : IMessage
 	{
-		//-----------------------------
-		#region Construction
+        #region static configuration
+
+        /// <summary>
+        /// This proproperty is used to control the byte count length limit, above which the Message.ToString method will no longer attempt to generate an SML'ish output.
+        /// <para/>When this value is set to zero then no size limit is applied.
+        /// <para/>When this value is non-zero and the contents are no longer then this limit then the method attempts to decode and produce the expected SML'ish version.
+        /// <para/>Otherwise the method shows the hex contents of the truncated version of the content bytes.
+        /// <para/>Defaults to 1000.
+        /// </summary>
+        public static int MaxNormalToStringContentDecodeCount { get { return maxNormalToStringContentDecodeCount; } set { maxNormalToStringContentDecodeCount = value; } }
+        private static int maxNormalToStringContentDecodeCount = Config.Instance.GetConfigKeyAccessOnce("Config.Semi.E005.Message.DefaultMaxNormalToStringContentDecodeCount").GetValue(1000); 
+
+        #endregion
+
+        //-----------------------------
+        #region Construction
 
         /// <summary>
         /// Constructs a message for this given <paramref name="sf"/> which will be sent through the given <paramref name="port"/>.
@@ -244,7 +256,7 @@ namespace MosaicLib.Semi.E005
             {
                 return "{0} [header only]".CheckedFormat(headerStr);
             }
-            else if (_contentBytes.Length <= 1000)
+            else if (_contentBytes.Length <= MaxNormalToStringContentDecodeCount || MaxNormalToStringContentDecodeCount == 0)
             {
                 try
                 {

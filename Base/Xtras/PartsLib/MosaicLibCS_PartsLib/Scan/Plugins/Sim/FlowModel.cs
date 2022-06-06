@@ -734,7 +734,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         break;
 
                     default:
-                        new System.ArgumentException("gaugeType").Throw();
+                        new System.ArgumentException("{0} is not supported here".CheckedFormat(GaugeType), "gaugeType").Throw();
                         break;
                 }
 

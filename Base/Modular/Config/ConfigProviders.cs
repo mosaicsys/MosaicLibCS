@@ -21,16 +21,12 @@
 
 using System;
 using System.Collections.Generic;
-using System.ServiceModel;
 using System.Runtime.Serialization;
 using System.Collections.Specialized;
-using System.Configuration;
 using System.Linq;
-using System.Text;
 using System.Collections;
 using Microsoft.Win32;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Persist;
@@ -100,7 +96,7 @@ namespace MosaicLib.Modular.Config
         /// <summary>Gives the default INamedValueSet that is put into each config key provided by this provider.</summary>
         public INamedValueSet ProviderMetaData { get; private set; }
 
-        private INamedValueSet originalProviderMetaData;
+        private readonly INamedValueSet originalProviderMetaData;
 
         protected void UpdateProviderMetaData()
         {
@@ -338,7 +334,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public override IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists = false, ValueContainer initialValue = default(ValueContainer))
         {
-            DictionaryKeyItem item = null;
+            DictionaryKeyItem item;
             string key = ((keyAccessSpec != null) ? keyAccessSpec.Key : null) ?? String.Empty;
 
             if (!keyItemDictionary.TryGetValue(key, out item))
@@ -517,7 +513,7 @@ namespace MosaicLib.Modular.Config
         public MainArgsConfigKeyProvider(string name, ref string[] mainArgs, string keyPrefix = "", INamedValueSet providerMetaData = null)
             : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
-            KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
+            KeyPrefix = keyPrefix.MapNullToEmpty();
 
             if (mainArgs != null)
             {
@@ -564,13 +560,13 @@ namespace MosaicLib.Modular.Config
     public class EnvVarsConfigKeyProvider : DictionaryConfigKeyProvider
     {
         /// <summary>
-        /// Constructor.  enumerates all current environment variables and adds them this provider's dictionary of key/value pairs using given keyPrefix value.
+        /// Constructor.  
+        /// Enumerates all current environment variables and adds them this provider's dictionary of key/value pairs using given <paramref name="keyPrefix"/> value.
         /// </summary>
         public EnvVarsConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet providerMetaData = null)
             : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
-            KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
-
+            KeyPrefix = keyPrefix.MapNullToEmpty();
 
             List<KeyValuePair<string, ValueContainer>> generatedKeyValuePairList = new List<KeyValuePair<string, ValueContainer>>();
 
@@ -604,7 +600,7 @@ namespace MosaicLib.Modular.Config
         public AppConfigConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet providerMetaData = null)
             : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
-            KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
+            KeyPrefix = keyPrefix.MapNullToEmpty();
 
             Dictionary<string, ValueContainer> generatedKeyValueDictionary = new Dictionary<string, ValueContainer>();
 
@@ -661,12 +657,12 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Constructor: searches the existing config key space for keys that start with the search prefix, processes these keys as include file specifiers:
         /// either path names or |includeKeyPrefix|includeFilePath| type items.  Then loads each of the resulting files, validates the KeyItem entires contained there and
-        /// then adds each of them to the dictionary of key/value pairs provided by this provider using the given keyPrefix combined with the IncludeKeyPrefix (as appropriate).
+        /// then adds each of them to the dictionary of key/value pairs provided by this provider using the given <paramref name="keyPrefix"/> combined with the IncludeKeyPrefix (as appropriate).
         /// </summary>
         public IncludeFilesConfigKeyProvider(string name, string searchPrefix, IConfig config, string keyPrefix = "", INamedValueSet providerMetaData = null)
             : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
-            KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
+            KeyPrefix = keyPrefix.MapNullToEmpty();
 
             string[] includeKeysArray = config.SearchForKeys(new MatchRuleSet() { { MatchType.Prefix, searchPrefix } });
 
@@ -715,7 +711,7 @@ namespace MosaicLib.Modular.Config
                 }
                 catch (System.Exception ex)
                 {
-                    Logger.Debug.Emit("Include file load from '{0}' w/Prefix:'{1}' failed: {2}", includePath, keyPrefix, ex);
+                    Logger.Debug.Emit("Include file load from '{0}' w/Prefix:'{1}' failed: {2}", includePath, KeyPrefix, ex);
                 }
             }
 
@@ -736,8 +732,8 @@ namespace MosaicLib.Modular.Config
     public class IniFileConfigKeyProvider : DictionaryConfigKeyProvider
     {
         /// <summary>
-        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
-        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// Constructor: Accepts provider <paramref name="name"/>, filePath to ini file to read/write, <paramref name="keyPrefix"/> to prefix on all contained keys, 
+        /// and <paramref name="isReadWrite"/> to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix = "", bool isReadWrite = false, INamedValueSet providerMetaData = null, IEnumerable<string> ensureSectionsExist = null)
             : base(name, !isReadWrite, providerMetaData, keysMayBeAddedUsingEnsureExistsOption : isReadWrite)
@@ -747,9 +743,8 @@ namespace MosaicLib.Modular.Config
 
             ConfigKeyAccessFlags defaultAccessFlags = new ConfigKeyAccessFlags();
 
-            KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
+            KeyPrefix = keyPrefix.MapNullToEmpty();
 
-            givenFilePath = filePath;
             fullFilePath = System.IO.Path.GetFullPath(filePath);
 
             string[] rawFileLines = EmptyArrayFactory<string>.Instance;
@@ -843,13 +838,10 @@ namespace MosaicLib.Modular.Config
             AddRange(sectionItemArray.SelectMany(sectionItem => sectionItem.valueLineItemList.Select((vItem) => vItem.ckai)));
         }
 
-        string givenFilePath = null;
-        string fullFilePath = null;
+        private readonly string fullFilePath = null;
 
-        Dictionary<string, FileSectionLineItem> sectionItemDictionary = new Dictionary<string, FileSectionLineItem>() { { "", new FileSectionLineItem() } };
-        FileSectionLineItem[] sectionItemArray;
-
-        string[] savedLines = null;
+        private readonly Dictionary<string, FileSectionLineItem> sectionItemDictionary = new Dictionary<string, FileSectionLineItem>() { { "", new FileSectionLineItem() } };
+        private readonly FileSectionLineItem[] sectionItemArray;
 
         class LineItem
         {
@@ -992,8 +984,6 @@ namespace MosaicLib.Modular.Config
             {
                 System.IO.File.WriteAllLines(fullFilePath, linesToSave);
 
-                savedLines = linesToSave;
-
                 Logger.Debug.Emit("Updated contents of INI File '{0}'", fullFilePath);
 
                 return String.Empty;
@@ -1019,8 +1009,9 @@ namespace MosaicLib.Modular.Config
     public class PersistentXmlTextFileRingProvider : PersistentSerializedTextFileRingProviderBase
     {
         /// <summary>
-        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
-        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// Constructor: Accepts provider <paramref name="name"/>, <paramref name="ringConfig"/> to specify the ring files to be accessed, 
+        /// <paramref name="keyPrefix"/> to prefix on all contained keys, 
+        /// and <paramref name="isReadWrite"/> to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public PersistentXmlTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
             : base(name, ringConfig, new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, providerMetaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
@@ -1035,11 +1026,12 @@ namespace MosaicLib.Modular.Config
     public class PersistentSerializedTextFileRingProviderBase : DictionaryConfigKeyProvider
     {
         /// <summary>
-        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
-        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// Constructor: Accepts provider <paramref name="name"/>, <paramref name="ringConfig"/> and <paramref name="ringAdapter"/> to specify the adapter and files to access, 
+        /// <paramref name="keyPrefix"/> to prefix on all contained keys, 
+        /// and <paramref name="isReadWrite"/> to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public PersistentSerializedTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, IPersistentStorage<ConfigKeyStore> ringAdapter, string keyPrefix = "", bool isReadWrite = true, bool keysMayBeAddedUsingEnsureExistsOption = true, INamedValueSet providerMetaData = null, bool sortKeysOnSave = false)
-            : base(name, !isReadWrite, providerMetaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite)
+            : base(name, !isReadWrite, providerMetaData, keysMayBeAddedUsingEnsureExistsOption: keysMayBeAddedUsingEnsureExistsOption && isReadWrite)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -1103,10 +1095,10 @@ namespace MosaicLib.Modular.Config
             }
         }
 
-        IPersistentStorage<ConfigKeyStore> ringAdapter;
-        ConfigKeyStore configKeyStore;
-        List<PersistKeyTracker> persistKeyTrackerList = new List<PersistKeyTracker>();
-        bool regenerateConfigKeyStoreKeySetOnNextSave = false;
+        private readonly IPersistentStorage<ConfigKeyStore> ringAdapter;
+        private readonly ConfigKeyStore configKeyStore;
+        private readonly List<PersistKeyTracker> persistKeyTrackerList = new List<PersistKeyTracker>();
+        private bool regenerateConfigKeyStoreKeySetOnNextSave = false;
         public bool SortKeysOnSave { get; private set; }
 
         private void RegenerateConfigKeyStoreKeySetIfNeeded()
@@ -1202,8 +1194,9 @@ namespace MosaicLib.Modular.Config
     public class RegistryKeyTreeProvider : DictionaryConfigKeyProvider
     {
         /// <summary>
-        /// Constructor: Accepts provider name, rootKeyPath to enumerate through, keyPrefix to prefix on all contained keys, 
-        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// Constructor: Accepts provider <paramref name="name"/>, <paramref name="registryRootPath"/> to enumerate through, 
+        /// <paramref name="keyPrefix"/> to prefix on all contained keys, 
+        /// and <paramref name="isReadWrite"/> to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public RegistryKeyTreeProvider(string name, string registryRootPath, string keyPrefix, bool isReadWrite, INamedValueSet metaData = null)
             : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption : false)
@@ -1242,7 +1235,7 @@ namespace MosaicLib.Modular.Config
                     RegistryKey rootRegKey = Win32.Registry.Fcns.OpenRegistryKeyPath(parentReadOnlyKey, lastKey, keyTreePermissions);
                     openRegKeyList.Add(rootRegKey);
 
-                    Enumerate(keyPrefix, rootRegKey, keyTreePermissions);
+                    Enumerate(KeyPrefix, rootRegKey, keyTreePermissions);
                 }
             }
             catch (System.Exception ex)
@@ -1315,12 +1308,12 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public bool ForceFullFlushOnUpdate { get; set; }
 
-        string RegistryRootPath {get; set;}
+        private string RegistryRootPath {get; set;}
 
-        List<RegistryKey> openRegKeyList = new List<RegistryKey>();
-        List<ValueItem> valueItemList = new List<ValueItem>();
+        private readonly List<RegistryKey> openRegKeyList = new List<RegistryKey>();
+        private readonly List<ValueItem> valueItemList = new List<ValueItem>();
 
-        class ValueItem
+        private class ValueItem
         {
             public RegistryKey parentRegKey;
 
@@ -1461,6 +1454,7 @@ namespace MosaicLib.Modular.Config
     /// Used with <see cref="KeySet"/> and <seealso cref="ConfigKeyFile"/> and <seealso cref="ConfigKeyStore"/> classes.
     /// Used to associate the Key name, the string Value and other related properties both for load only cases (Include key source) and load/save cases (Persist)
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = Constants.ModularNameSpace)]
     [KnownType(typeof(Int32Validator))]
     [KnownType(typeof(DoubleValidator))]
@@ -1478,8 +1472,8 @@ namespace MosaicLib.Modular.Config
         [DataMember(Name = "VC", Order = 90, IsRequired = false, EmitDefaultValue = false)]
         private ValueContainerEnvelope VCE 
         {
-            get { return ((internalVCE != null) ? internalVCE : (internalVCE = new ValueContainerEnvelope())); } 
-            set { internalVCE = ((value != null) ? value : new ValueContainerEnvelope()); } 
+            get { return internalVCE ?? (internalVCE = new ValueContainerEnvelope()); } 
+            set { internalVCE = value ?? new ValueContainerEnvelope(); } 
         }
         private ValueContainerEnvelope internalVCE = null;  // construction must match default value produced when using DataContract based deserialization.
 
@@ -1720,8 +1714,8 @@ namespace MosaicLib.Modular.Config
             CreateCKAIForAnyRequest = createRootCKAForAnyRequest;
         }
 
-        bool CreateCKAIForAnyRequest { get; set; }
-        ITrackingSet<ConfigKeyAccessCopy> localTrackingSet;
+        private bool CreateCKAIForAnyRequest { get; set; }
+        private readonly ITrackingSet<ConfigKeyAccessCopy> localTrackingSet;
 
         public override IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists, ValueContainer initialValue)
         {
@@ -1800,7 +1794,7 @@ namespace MosaicLib.Modular.Config
             return deltaCount;
         }
 
-        Dictionary<string, ConfigKeyAccessCopy> setCkacsByKeyDictionary = new Dictionary<string, ConfigKeyAccessCopy>();
+        private readonly Dictionary<string, ConfigKeyAccessCopy> setCkacsByKeyDictionary = new Dictionary<string, ConfigKeyAccessCopy>();
     }
 
     #endregion

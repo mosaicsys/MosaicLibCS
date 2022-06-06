@@ -35,7 +35,6 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
-using MosaicLib.Semi.E005.Data;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -50,6 +49,10 @@ using MosaicLib.PartsLib.Tools.MDRF.Writer;
 using Mosaic.ToolsLib.MDRF2.Common;
 using Mosaic.ToolsLib.Compression;
 
+using MessagePack;
+using Mosaic.ToolsLib.MDRF2.Reader;
+using System.Runtime.InteropServices;
+
 namespace Mosaic.ToolsLib.MDRF2.Writer
 {
     #region MDRF2Writer implementation
@@ -59,8 +62,33 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
     /// </summary>
     public interface IMDRF2Writer : MDRF.Writer.IMDRFWriter
     {
+        /// <summary>
+        /// Registers the given <paramref name="keyName"/> by assigning and returning a keyID.  
+        /// If the <paramref name="keyName"/> has already been used or registered then the previously assigned value will be returned.
+        /// <para/>If the caller passes a non-zero value for the <paramref name="addAssociatedUserRowFlagBits"/> then all future records that are generated in relation to the given 
+        /// <paramref name="keyName"/> or its related keyID will implicitly apply the related user row flag bits as well.
+        /// </summary>
+        /// <remarks>
+        /// Assigned KeyIDs are non-zero positive integer values.  
+        /// </remarks>
+        int RegisterAndGetKeyID(string keyName, ulong addAssociatedUserRowFlagBits = 0);
+
+        /// <summary>
+        /// Registers the given <typeparamref name="TItemType"/> to use the given <paramref name="typeNameHandler"/> along with the given optional <paramref name="typeName"/>
+        /// When <paramref name="typeName"/> is given as null it will be replaced with the string representation of the given <typeparamref name="TItemType"/>.
+        /// </summary>
+        /// <remarks>
+        /// This method will replace any established handler for this type (or any known matching types) and/or for the corresponding derived
+        /// <paramref name="typeName"/>.  As such this method should generally only be called/used before starting normal use of the writer.
+        /// This method can (intentionally) be used to replace most internal object type name handler selections including most built in ones.
+        /// <para/>Note: The "Mesg", "Error", "tavc" <paramref name="typeName"/> values cannot be used or replaced here as they are implemented internally in both readers and writers.  
+        /// Attempting to do so will throw an excpetion.
+        /// </remarks>
+        /// <exception cref="System.ArgumentException">Will be thrown if the derived <paramref name="typeName"/> is either "Mesg", "Error", or "tavc"</exception>
+        void RegisterTypeNameHandler<TItemType>(IMDRF2TypeNameHandler typeNameHandler, string typeName = null);
+
         /// <summary>Method used to record an object into the current MDRF2 file</summary>
-        string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0);
+        string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null);
 
         /// <summary>Gives the total number of client operations that this writer has been asked to perform.  This allows a client to tell if other clients have used the writer recently.</summary>
         ulong ClientOpRequestCount { get; }
@@ -83,18 +111,26 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <summary>Gives the set of occurrence definitions to use.  Set to null to create the default occurrences.  The empty array (this default) selects that no occurrences are created.</summary>
         public MDRF.Writer.OccurrenceInfo[] OccurrenceInfoArray { get; set; } = EmptyArrayFactory<MDRF.Writer.OccurrenceInfo>.Instance;
 
-        /// <summary>Selects the writer behavior.  Defaults to MDRF2WriterConfigBehavior.EnableAPILocking.  Set to None to disable API locking (so as to increase performance at the expense of built in thread safety).</summary>
-        public MDRF2WriterConfigBehavior WriterBehavior { get; set; } = MDRF2WriterConfigBehavior.EnableAPILocking;
+        /// <summary>
+        /// Selects the writer behavior.  
+        /// Defaults to (<see cref="MDRF2WriterConfigBehavior.EnableAPILocking"/> | <see cref="MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID"/>).
+        /// </summary>
+        public MDRF2WriterConfigBehavior WriterBehavior { get; set; } = MDRF2WriterConfigBehavior.EnableAPILocking | MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID;
 
-        /// <summary>Gives </summary>
+        /// <summary>Used to select the compression type that will be used by this writter.  Defaults to LZ4.</summary>
         public CompressorSelect CompressorSelect { get; set; } = CompressorSelect.LZ4;
 
-        /// <summary>When the CompressorSelect is not set to None, this gives the desired compression level for the selected Compressor type.  Defaults to 2.</summary>
+        /// <summary>
+        /// When the <see cref="CompressorSelect"/> is not None, this gives the desired compression level for the selected Compressor.  Defaults to 2.
+        /// </summary>
         /// <remarks>
-        /// Values generally range from 0 to 15 depending on compressor engine type.  This value is clipped to the supported range for the selected compressor type.
-        /// 0 means least (or no) compression.  For GZip this disables compression.
-        /// 1 is the fastest selectable compression which produces the least compression cost.
-        /// 2 appears to be the sweet spot for both LZ4 and 2 or 3 for GZip compression - good tradoff of compression rate/cost and decompression speed.
+        /// Values generally range from 0 to 15 depending on compressor engine type.  
+        /// This value is clipped to the supported range for the selected compressor type.
+        /// <list type="table">
+        /// <item>0: means least (or no) compression.  For GZip this disables compression.</item>
+        /// <item>1: is the fastest selectable compression which produces the least compression cost.</item>
+        /// <item>2 or 3: appears to be the sweet spot for both LZ4 and GZip compression - good tradoff of compression rate/cost and decompression speed.</item>
+        /// </list>
         /// </remarks>
         public int CompressionLevel { get; set; } = 2;
 
@@ -113,7 +149,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
     /// <summary>
     /// Used to select the behaviors that are to be implemented by the MDRF2Writer
-    /// <para/>None (0x00), EnableAPILocking (0x01)
+    /// <para/>None (0x00), EnableAPILocking (0x01), WriteObjectsUsingTypeID (0x02)
     /// </summary>
     [Flags]
     public enum MDRF2WriterConfigBehavior : int
@@ -123,6 +159,13 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         /// <summary>When this flag is selected it requests the writer to use a mutex to control access to the public API methods so that the instance may be safely used by more than one thread. [0x01]</summary>
         EnableAPILocking = 0x01,
+
+        /// <summary>When this flag is selected it requests the writer to make us of TypeIDs when writing objects. [0x02]</summary>
+        /// <remarks>
+        /// This causes the writer to add generation of TypeName/ID assignment metadata (both in header and incrementally)
+        /// and causes the writer to write the TypeID in place of the prior TypeName.
+        /// </remarks>
+        WriteObjectsUsingTypeID = 0x02,
     }
 
     /// <summary>
@@ -153,6 +196,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             ExternallyProvidedFileStream = externallyProvidedFileStream;
 
             compressorSelect = WriterConfig.CompressorSelect;
+            writeObjectsUsingTypeID = ((WriterConfig.WriterBehavior & MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID) != 0);
 
             mutex = ((WriterConfig.WriterBehavior & MDRF2WriterConfigBehavior.EnableAPILocking) != 0) ? new object() : null;
 
@@ -207,17 +251,20 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     }
                 }
             }
+
+            InitializeDefaultRegisteredTypes();
         }
 
         private MDRF2WriterConfig WriterConfig { get; set; }
         private Stream ExternallyProvidedFileStream { get; set; }
 
-        private CompressorSelect compressorSelect;
+        private readonly CompressorSelect compressorSelect;
+        private readonly bool writeObjectsUsingTypeID;
         private static readonly MessagePack.MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
 
         public void Release()
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 try
                 {
@@ -263,7 +310,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <inheritdoc/>
         public MDRF2Writer AddRange(IEnumerable<MDRF.Writer.GroupInfo> groupInfoSet)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -289,7 +336,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <inheritdoc/>
         public MDRF2Writer AddRange(IEnumerable<MDRF.Writer.OccurrenceInfo> occurrenceInfoSet)
         {
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -305,11 +352,11 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// </summary>
         public string SetupResultCode { get; set; }
 
-        List<MDRF.Writer.GroupInfo> groupInfoList = new List<MDRF.Writer.GroupInfo>();
-        List<MDRF.Writer.OccurrenceInfo> occurrenceInfoList = new List<MDRF.Writer.OccurrenceInfo>();
-        bool groupOrOccurrenceInfoListModified = false;
+        private readonly List<MDRF.Writer.GroupInfo> groupInfoList = new List<MDRF.Writer.GroupInfo>();
+        private readonly List<MDRF.Writer.OccurrenceInfo> occurrenceInfoList = new List<MDRF.Writer.OccurrenceInfo>();
+        private bool groupOrOccurrenceInfoListModified = false;
 
-        static readonly SetupInfo defaultSetupInfo = SetupInfo.DefaultForMDRF2;
+        private static readonly SetupInfo defaultSetupInfo = SetupInfo.DefaultForMDRF2;
 
         #endregion
 
@@ -326,7 +373,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -353,7 +400,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (!writeAll)
                 {
                     // if this is the first call or the MinNominalWriteAllInterval has elapsed then make this a writeall call
-                    if (lastWriteAllTimeStamp.IsZero || ((tsNow - lastWriteAllTimeStamp) >= setup.MinNominalWriteAllInterval))
+                    if (lastWriteAllTimeStamp.IsZero || (!setup.MinNominalWriteAllInterval.IsZero() && (tsNow - lastWriteAllTimeStamp) >= setup.MinNominalWriteAllInterval))
                         writeAll = true;
                 }
 
@@ -383,7 +430,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                             if (groupTracker != null && groupTracker.touched)
                             {
-                                // [L1 +GroupID [Ln pointValues]]
+                                // [L2 +GroupID [Ln pointValues]]
                                 mpWriter.WriteArrayHeader(2);
                                 mpWriter.Write(groupTracker.ClientID);    // these will be positive values
 
@@ -451,7 +498,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -517,18 +564,378 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         }
 
         /// <inheritdoc/>
-        public string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0)
+        public int RegisterAndGetKeyID(string keyName, ulong addAssociatedUserRowFlagBits = 0)
+        {
+            if (IsDisposed)
+                return default;
+
+            using (var scopedLock = new ScopedLockStruct(mutex))
+            {
+                var keyInfo = InnerGetKeyInfo(keyName, addAssociatedUserRowFlagBits);
+
+                return keyInfo?.KeyID ?? default;
+            }
+        }
+
+        /// <summary>
+        /// This is the internal version of GetKeyID (aka mutex must already be acquired before calling this as needed).
+        /// It attempts to obtain the given 
+        /// </summary>
+        private KeyInfo InnerGetKeyInfo(string keyName, ulong addAssociatedUserRowFlagBits = 0, MDRF2DateTimeStampPair ? dtPairIn = null)
+        {
+            keyName = keyName ?? string.Empty;
+
+            var keyInfo = keyInfoByNameDictionary.SafeTryGetValue(keyName);
+
+            if (keyInfo != null)
+            {
+                if (addAssociatedUserRowFlagBits != 0)
+                    keyInfo.KeyUserRowFlagBits |= addAssociatedUserRowFlagBits;
+
+                return keyInfo;
+            }
+
+            keyInfo = new KeyInfo()
+            {
+                KeyName = keyName,
+                KeyHashCode = keyName.GetHashCode(),
+                KeyID = 1 + keyInfoByIDDictionary.Count,
+                KeyUserRowFlagBits = addAssociatedUserRowFlagBits,
+            };
+
+            keyInfoByNameDictionary[keyInfo.KeyName] = keyInfo;
+            keyInfoByIDDictionary[keyInfo.KeyID] = keyInfo;
+
+            if (InnerIsFileActiveAndWritable)
+            {
+                string ec;
+
+                // generate and write the first file header block with single InlineMAP
+                try
+                {
+                    InnerNoteClientOpRequested();
+
+                    MDRF2DateTimeStampPair dtPair = dtPairIn ?? MDRF2DateTimeStampPair.NowQPCOnly;
+
+                    var mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
+
+                    StartNewBlockIfNeeded(ref dtPair);
+
+                    UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
+
+                    AddInlineMap_IncrementalKeyIDs(ref mpWriter, new[] { keyInfo });
+
+                    mpWriter.Flush();
+
+                    var rowFlagBits = FileIndexRowFlagBits.ContainsHeaderOrMetaData;
+
+                    ec = NoteRecordAddedToBufferAndWriteIfNeeded(blockBufferWriter, ref dtPair, rowFlagBits, keyInfo.KeyUserRowFlagBits, keyInfo);
+                }
+                catch (System.Exception ex)
+                {
+                    ec = "{0} failed: {1}".CheckedFormat(CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                }
+
+                if (!ec.IsNullOrEmpty())
+                    RecordError(ec);
+            }
+
+            return keyInfo;
+        }
+
+        private readonly Dictionary<string, KeyInfo> keyInfoByNameDictionary = new Dictionary<string, KeyInfo>();
+        private readonly Dictionary<int, KeyInfo> keyInfoByIDDictionary = new Dictionary<int, KeyInfo>();
+
+        /// <inheritdoc/>
+        public void RegisterTypeNameHandler<TItemType>(IMDRF2TypeNameHandler typeNameHandler, string typeName = null)
+        {
+            if (IsDisposed)
+                return;
+
+            Type type = typeof(TItemType);
+
+            typeName = typeName ?? type.ToString();
+
+            switch (typeName)
+            {
+                case MDRF2.Common.Constants.ObjKnownType_Error:
+                case MDRF2.Common.Constants.ObjKnownType_Mesg:
+                case MDRF2.Common.Constants.ObjKnownType_TypeAndValueCarrier:
+                    new System.ArgumentException($"The given type key name '{typeName}' is reserved and cannot be used here", "typeName").Throw();
+                    break;
+            }
+
+            bool addedTypeKeyID = false;
+
+            using (var scopedLock = new ScopedLockStruct(mutex))
+            {
+                var typeID = typeIDByNameDictionary.SafeTryGetValue(typeName);
+                if (typeID == default)
+                {
+                    typeID = typeIDByNameDictionary.Count + 1;
+                    typeIDByNameDictionary[typeName] = typeID;
+                    addedTypeKeyID = true;
+                }
+
+                var typeInfo = registeredTypeInfoByTypeDictionary.SafeTryGetValue(type);
+
+                if (typeInfo == null)
+                {
+                    typeInfo = new TypeInfo()
+                    {
+                        Type = type,
+                        TypeName = typeName,
+                        TypeID = typeID,
+                        TypeNameHandler = typeNameHandler,
+                    };
+
+                    registeredTypeInfoByTypeDictionary[type] = typeInfo;
+
+                    expandedTypeInfoByTypeDictionary.Clear();
+                }
+                else if (typeInfo.TypeName != typeName || typeInfo.TypeID != typeID || typeInfo.TypeNameHandler != typeNameHandler)                
+                {
+                    MDRF2DateTimeStampPair dtPair = MDRF2DateTimeStampPair.NowQPCOnly;
+                    RecordMessage($"{Fcns.CurrentMethodName}: Updating TypeInfo for type '{type}' to TypeID/Name:{typeID}/'{typeName}'", ref dtPair);
+
+                    typeInfo.TypeName = typeName;
+                    typeInfo.TypeID = typeID;
+                    typeInfo.TypeNameHandler = typeNameHandler;
+
+                    expandedTypeInfoByTypeDictionary.Clear();
+                }
+
+                if (InnerIsFileActiveAndWritable && addedTypeKeyID)
+                {
+                    string ec;
+
+                    // generate and write the first file header block with single InlineMAP
+                    try
+                    {
+                        InnerNoteClientOpRequested();
+
+                        MDRF2DateTimeStampPair dtPair = MDRF2DateTimeStampPair.NowQPCOnly;
+
+                        var mpWriter = new MessagePack.MessagePackWriter(blockBufferWriter);
+
+                        StartNewBlockIfNeeded(ref dtPair);
+
+                        UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
+
+                        AddInlineMap_IncrementalTypeIDs(ref mpWriter, new[] { KVP.Create(typeInfo.TypeName, typeInfo.TypeID) });
+
+                        mpWriter.Flush();
+
+                        var rowFlagBits = FileIndexRowFlagBits.ContainsHeaderOrMetaData;
+
+                        ec = NoteRecordAddedToBufferAndWriteIfNeeded(blockBufferWriter, ref dtPair, rowFlagBits, 0);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ec = "{0} failed: {1}".CheckedFormat(CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                    }
+
+                    if (!ec.IsNullOrEmpty())
+                        RecordError(ec);
+                }
+            }
+        }
+
+        private TypeInfo InnerGetTypeInfoForType(Type type)
+        {
+            if (type == null)
+                return NullTypeInfo;
+
+            {
+                var typeInfo = expandedTypeInfoByTypeDictionary.SafeTryGetValue(type);
+
+                if (typeInfo != null)
+                    return typeInfo;
+
+                typeInfo = registeredTypeInfoByTypeDictionary.SafeTryGetValue(type);
+
+                if (typeInfo != null)
+                {
+                    expandedTypeInfoByTypeDictionary[type] = typeInfo;
+                    return typeInfo;
+                }
+            }
+
+            foreach (var tryTypeInfo in registeredTypeInfoByTypeDictionary.Values)
+            {
+                if (tryTypeInfo.Type.IsAssignableFrom(type))
+                {
+                    expandedTypeInfoByTypeDictionary[type] = tryTypeInfo;
+                    return tryTypeInfo;
+                }
+            }
+
+            {
+                expandedTypeInfoByTypeDictionary[type] = FallbackTAVCTypeInfo;
+                return FallbackTAVCTypeInfo;
+            }
+        }
+
+        private void InitializeDefaultRegisteredTypes()
+        {
+            // Initialize the typeKeyIDByNameDictionary
+            typeIDByNameDictionary[Common.Constants.ObjKnownType_LogMessage] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Common.Constants.ObjKnownType_E039Object] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Common.Constants.ObjKnownType_ValueContainer] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Common.Constants.ObjKnownType_NamedValueSet] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Common.Constants.ObjKnownType_TypeAndValueCarrier] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Semi.CERP.E116.E116EventRecord.MDRF2TypeName] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[Semi.CERP.E157.E157EventRecord.MDRF2TypeName] = typeIDByNameDictionary.Count + 1;
+
+            //  LogMesg, E039Obj, VC, NVS, KVCSet,
+            var initialSpecSet = new (Type type, string typeName, IMDRF2TypeNameHandler typeNameHandler) []
+            {
+                (typeof(MosaicLib.Logging.ILogMessage), Common.Constants.ObjKnownType_LogMessage, new TypeNameHandlers.ILogMessageTypeNameHandler()),
+                (typeof(MosaicLib.Semi.E039.IE039Object), Common.Constants.ObjKnownType_E039Object, new TypeNameHandlers.IE039ObjectTypeNameHandler()),
+                (typeof(ValueContainer), Common.Constants.ObjKnownType_ValueContainer, new TypeNameHandlers.ValueContainerTypeNameHandler()),
+                (typeof(INamedValueSet), Common.Constants.ObjKnownType_NamedValueSet, new TypeNameHandlers.INamedValueSetTypeNameHandler()),
+                (typeof(ICollection<KeyValuePair<string, ValueContainer>>), Common.Constants.ObjKnownType_NamedValueSet, new TypeNameHandlers.KVCSetTypeNameHandler()),
+                (typeof(Semi.CERP.E116.E116EventRecord), Semi.CERP.E116.E116EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E116.E116EventRecord>()),
+                (typeof(Semi.CERP.E157.E157EventRecord), Semi.CERP.E157.E157EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E157.E157EventRecord>()),
+            };
+
+            foreach (var (type, typeName, typeNameHandler) in initialSpecSet)
+            {
+                registeredTypeInfoByTypeDictionary[type] = new TypeInfo()
+                {
+                    Type = type,
+                    TypeName = typeName,
+                    TypeID = typeIDByNameDictionary.SafeTryGetValue(typeName),
+                    TypeNameHandler = typeNameHandler,
+                };
+            }
+        }
+
+        private class TypeInfo
+        {
+            public Type Type { get; set; }
+
+            public string TypeName { get; set; }
+
+            public int TypeID { get; set; }
+
+            public IMDRF2TypeNameHandler TypeNameHandler { get; set; }
+        };
+
+        private static readonly TypeInfo NullTypeInfo = new TypeInfo()
+        {
+            Type = null,
+            TypeName = null,
+            TypeID = 0,
+            TypeNameHandler = new NullObjectTypeNameHandler(),
+        };
+
+        private static readonly TypeInfo FallbackTAVCTypeInfo = new TypeInfo()
+        {
+            Type = null,
+            TypeName = Common.Constants.ObjKnownType_TypeAndValueCarrier,
+            TypeID = 0,
+            TypeNameHandler = new TAVCTypeNameHandlerHandler(),
+        };
+
+        internal class NullObjectTypeNameHandler : IMDRF2TypeNameHandler
+        {
+            /// <inheritdoc/>
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "Part of API")]
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                mpWriter.WriteNil();
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                // this class is only used for recording null objects
+                throw new NotImplementedException();
+            }
+        }
+
+        internal class TAVCTypeNameHandlerHandler : IMDRF2TypeNameHandler
+        {
+            /// <inheritdoc/>
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "Part of API")]
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                var oType = value.GetType();
+                var customSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType);
+                var tavc = customSerializer.Serialize(value);
+
+                TypeAndValueCarrierFormatter.Instance.Serialize(ref mpWriter, tavc, mpOptions);
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                // this class is only used for recording objects using the TAVC format.
+                throw new NotImplementedException();
+            }
+        }
+
+        /// <summary>
+        /// Serializes the given <paramref name="mesgItem"/> into the <paramref name="mpWriter"/> in 
+        /// <para/>old version object representation: [L3 "Mesg"|"Error" [L3 issueFDT issueUTC1601 mesg] nil]
+        /// </summary>
+        private static void MesgAndErrorObjectSerializer(ref MessagePackWriter mpWriter, MessageItem mesgItem, MessagePackSerializerOptions mpOptions)
+        {
+            bool isError = (mesgItem.blockTypeID == FixedBlockTypeID.ErrorV1);
+
+            mpWriter.WriteArrayHeader(3);   // fixed list length used to represent objects
+
+            mpWriter.Write(isError ? MDRF2.Common.Constants.ObjKnownType_Error : MDRF2.Common.Constants.ObjKnownType_Mesg);
+            MesgAndErrorBodyFormatter.Instance.Serialize(ref mpWriter, (mesgItem.mesg, mesgItem.dtPair), mpOptions);
+            mpWriter.WriteNil();
+        }
+
+        private readonly IDictionaryWithCachedArrays<string, int> typeIDByNameDictionary = new IDictionaryWithCachedArrays<string, int>();
+        private readonly Dictionary<Type, TypeInfo> registeredTypeInfoByTypeDictionary = new Dictionary<Type, TypeInfo>();
+        private readonly Dictionary<Type, TypeInfo> expandedTypeInfoByTypeDictionary = new Dictionary<Type, TypeInfo>();
+
+        /// <inheritdoc/>
+        public string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null)
         {
             var oType = obj?.GetType();
 
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
+
+                var irki = obj as IMDRF2RecoringKeyInfo;
+                if (irki != null)
+                {
+                    if (keyID == default)
+                        keyID = irki.RecordingKeyInfo.id;
+
+                    if (keyName == null)
+                        keyName = irki.RecordingKeyInfo.name;
+                }
+
+                KeyInfo keyInfo = ((keyID != default) ? keyInfoByIDDictionary.SafeTryGetValue(keyID) : null)
+                                ?? ((keyName != null) ? InnerGetKeyInfo(keyName, dtPairIn: dtPair) : null); // do not pass userRowFlagBits in so that we do not change the KeyInfo contents
+
+                if (keyInfo == null && keyID != default)
+                {
+                    keyInfo = new KeyInfo()
+                    {
+                        KeyName = null,
+                        KeyID = keyID,
+                        KeyUserRowFlagBits = 0u, // do not record userRowFlagBits in so that we do not change the KeyInfo contents
+                    };
+
+                    keyInfoByIDDictionary[keyID] = keyInfo;
+                }
+
+                var derivedKeyID = keyInfo?.KeyID ?? keyID;
+                var derivedUserRowFlagBits = userRowFlagBits | (keyInfo?.KeyUserRowFlagBits ?? default);
 
                 writeAll |= ((writerBehavior & MDRF.Writer.WriterBehavior.WriteAllBeforeEveryObject) != 0);
 
@@ -547,47 +954,19 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                         UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
 
-                        // [L3 userRowFlagBits objectKnownType serializedObject]
-                        // older version was [L3 objectKnownType serializedObject nil]
+                        // [L3 userRowFlagBits|[L2 userRowFlagBits keyID] objectKnownType serializedObject]
+                        // older version was [L3 objectKnownType serializedObject nil] - this version is still used for messages and errors.
                         mpWriter.WriteArrayHeader(3);
 
-                        if (obj == null)
-                        {
-                            mpWriter.Write(userRowFlagBits);
-                            mpWriter.WriteNil();
-                            mpWriter.WriteNil();
-                        }
-                        else if (oType == typeof(MosaicLib.Logging.LogMessage))
-                        {
-                            mpWriter.Write(userRowFlagBits);
-                            mpWriter.Write(Common.Constants.ObjKnownType_LogMessage);
-                            LogMessageFormatter.Instance.Serialize(ref mpWriter, obj as Logging.ILogMessage, mpOptions);
-                        }
-                        else if (typeof(MosaicLib.Semi.E039.IE039Object).IsAssignableFrom(oType))
-                        {
-                            mpWriter.Write(userRowFlagBits);
-                            mpWriter.Write(Common.Constants.ObjKnownType_E039Object);
-                            E039ObjectFormatter.Instance.Serialize(ref mpWriter, obj as MosaicLib.Semi.E039.IE039Object, mpOptions);
-                        }
-                        else if (oType == typeof(MosaicLib.Modular.Common.ValueContainer))
-                        {
-                            mpWriter.Write(userRowFlagBits);
-                            mpWriter.Write(Common.Constants.ObjKnownType_ValueContainer);
-                            VCFormatter.Instance.Serialize(ref mpWriter, (ValueContainer)obj, mpOptions);
-                        }
-                        else
-                        {
-                            var customSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType);
-                            var tavc = customSerializer.Serialize(obj);
+                        var typeInfo = InnerGetTypeInfoForType(obj?.GetType());
 
-                            mpWriter.Write(userRowFlagBits);
-                            mpWriter.Write(Common.Constants.ObjKnownType_TypeAndValueCarrier);
-                            TypeAndValueCarrierFormatter.Instance.Serialize(ref mpWriter, tavc, mpOptions);
-                        }
+                        InnerWriteURFBAndKeyIDVariantItem(ref mpWriter, derivedUserRowFlagBits, derivedKeyID);
+                        InnerWriteObjectKnownTypeAsNameOrID(ref mpWriter, typeInfo);
+                        typeInfo.TypeNameHandler.Serialize(ref mpWriter, obj, mpOptions);
 
                         mpWriter.Flush();
 
-                        ec = NoteRecordAddedToBufferAndWriteIfNeeded(blockBufferWriter, ref dtPair, isSignificant ? FileIndexRowFlagBits.ContainsSignificantObject : FileIndexRowFlagBits.ContainsObject, userRowFlagBits);
+                        ec = NoteRecordAddedToBufferAndWriteIfNeeded(blockBufferWriter, ref dtPair, isSignificant ? FileIndexRowFlagBits.ContainsSignificantObject : FileIndexRowFlagBits.ContainsObject, derivedUserRowFlagBits, keyInfo);
                     }
                     catch (System.Exception ex)
                     {
@@ -605,13 +984,38 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InnerWriteURFBAndKeyIDVariantItem(ref MessagePack.MessagePackWriter mpWriter, ulong userRowFlagBits, int keyID)
+        {
+            if (keyID == 0)
+            {
+                mpWriter.Write(userRowFlagBits);
+            }
+            else
+            {
+                mpWriter.WriteArrayHeader(2);
+                mpWriter.Write(userRowFlagBits);
+                mpWriter.Write(keyID);
+            }
+        }
+
+        private void InnerWriteObjectKnownTypeAsNameOrID(ref MessagePack.MessagePackWriter mpWriter, TypeInfo typeInfo)
+        {
+            if (typeInfo.TypeID != default && writeObjectsUsingTypeID)
+                mpWriter.Write(typeInfo.TypeID);
+            else if (typeInfo.TypeName != null)
+                mpWriter.Write(typeInfo.TypeName);
+            else
+                mpWriter.WriteNil();
+        }
+
         /// <inheritdoc/>
         public string Flush(MDRF.Writer.FlushFlags flushFlags = MDRF.Writer.FlushFlags.All, DateTimeStampPair dtPairIn = null)
         {
             if (IsDisposed)
                 return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -651,6 +1055,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             try
             {
                 ec = FinishAndWriteCurrentBlock(blockBufferWriter, ref dtPair, ifNeeded: true, flush: (flushFlags & MDRF.Writer.FlushFlags.File) != 0);
+
+                if ((flushFlags & FlushFlags.ToDisk) != 0)                
+                    outputStream.FlushEx(true);
             }
             catch (System.Exception ex)
             {
@@ -671,7 +1078,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (IsDisposed)
                 return 0;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 return (InnerIsStreamWritable ? CurrentFileInfo : LastFileInfo).FileSize;
             }
@@ -685,12 +1092,15 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (IsDisposed)
                     return false;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
-                    return currentFileInfo.IsActive && InnerIsStreamWritable;
+                    return InnerIsFileActiveAndWritable;
                 }
             }
         }
+
+        /// <summary>returns (currentFileInfo.IsActive && InnerIsStreamWritable)</summary>
+        private bool InnerIsFileActiveAndWritable { get { return currentFileInfo.IsActive && InnerIsStreamWritable; } }
 
         /// <inheritdoc/>
         public MDRF.Writer.FileInfo CurrentFileInfo
@@ -700,7 +1110,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (IsDisposed)
                     return default;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     return currentFileInfo;
                 }
@@ -715,16 +1125,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (IsDisposed)
                     return default;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     return lastFileInfo;
                 }
             }
         }
 
-        const int maxClosedFileListLength = 10;
-        volatile int volatileClosedFileListCount = 0;
-        List<MDRF.Writer.FileInfo> closedFileList = new List<MDRF.Writer.FileInfo>();
+        private const int maxClosedFileListLength = 10;
+        private volatile int volatileClosedFileListCount = 0;
+        private readonly List<MDRF.Writer.FileInfo> closedFileList = new List<MDRF.Writer.FileInfo>();
 
         /// <inheritdoc/>
         public MDRF.Writer.FileInfo? NextClosedFileInfo
@@ -734,7 +1144,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 if (volatileClosedFileListCount <= 0)
                     return null;
 
-                using (var scopedLock = new ScopedLock(mutex))
+                using (var scopedLock = new ScopedLockStruct(mutex))
                 {
                     if (closedFileList.Count <= 0)
                         return null;
@@ -754,7 +1164,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (IsDisposed)
                 return 0;
 
-            using (var scopedLock = new ScopedLock(mutex))
+            using (var scopedLock = new ScopedLockStruct(mutex))
             {
                 InnerNoteClientOpRequested();
 
@@ -1080,12 +1490,12 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                         ec = FinishAndWriteCurrentBlock(metaDataBlockBufferWriter, ref dtPair);
                     }
 
-                    // generate and write the first file header block with single InlineMAP
+                    // generate and write the second file header block with single InlineMAP
                     if (ec.IsNullOrEmpty())
                     {
                         StartNewBlockIfNeeded(ref dtPair);
 
-                        AddInlineMap2_LibSessionClientAndSpecItems(ref mpWriter);
+                        AddInlineMap2_RestOfHeaderItems(ref mpWriter);
 
                         mpWriter.Flush();
 
@@ -1119,7 +1529,14 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             return ec;
         }
 
-        // [MAP "MDRF2_Start":nil "DateTime":DateTimeNVS]
+        /// <summary>
+        /// Writes the first Header Map block.  
+        /// <para/>
+        /// [MAP 
+        ///     "MDRF2_Start":nil 
+        ///     "DateTime":DateTimeNVS
+        /// ]
+        /// </summary>
         private void AddInlineMap1_StartAndDateTime(ref MessagePack.MessagePackWriter mpWriter, ref MDRF2DateTimeStampPair dtPair)
         {
             mpWriter.WriteMapHeader(2);
@@ -1146,17 +1563,34 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData, 0);
         }
 
+        private readonly DateTimeInfo dtInfo = new DateTimeInfo();
+        private readonly NamedValueSet dateTimeBlockNVSet = new NamedValueSet();
+        private readonly NamedValueSet currentProcessNVS = new NamedValueSet();
 
-        DateTimeInfo dtInfo = new DateTimeInfo();
-        NamedValueSet dateTimeBlockNVSet = new NamedValueSet();
-        NamedValueSet currentProcessNVS = new NamedValueSet();
+        private INamedValueSet libNVS, setupNVS, environmentNVS;
 
-        INamedValueSet libNVS, setupNVS, environmentNVS;
-
-        // [MAP "UUID":uuid "Lib":libNVS "Setup":setupNVS "Client":clientNVS "HostName":hostName "CurrentProcess":currentProcessNVS "Environment":environmentNVS "SpecItems":specItemsLOfNVS]
-        void AddInlineMap2_LibSessionClientAndSpecItems(ref MessagePack.MessagePackWriter mpWriter)
+        /// <summary>
+        /// Writes the second Header Map block.  
+        /// <para/>
+        /// [MAP 
+        ///     "UUID":uuid 
+        ///     "Lib":libNVS 
+        ///     "Setup":setupNVS 
+        ///     "Client":clientNVS 
+        ///     "HostName":hostName 
+        ///     "CurrentProcess":currentProcessNVS 
+        ///     "Environment":environmentNVS 
+        ///     "SpecItems":specItemsLOfNVS
+        ///     [optional]"KeyIDs":keyIDsKVCSet (as known at this point)
+        ///     [optional]"TypIDs":typeIDsKVCSet (as known at this point)
+        /// ]
+        /// </summary>
+        private void AddInlineMap2_RestOfHeaderItems(ref MessagePack.MessagePackWriter mpWriter)
         {
-            mpWriter.WriteMapHeader(8);
+            int baseCount = 8;
+            bool includeKeyIDs = keyInfoByIDDictionary.Count > 0;
+
+            mpWriter.WriteMapHeader(baseCount + includeKeyIDs.MapToInt() + writeObjectsUsingTypeID.MapToInt());
 
             // UUID
             {
@@ -1260,7 +1694,93 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     mpWriter.SerializeAsVC(nvs);
             }
 
+            // KeyIDs [only included if map is non-empty]
+            if (includeKeyIDs)
+            {
+                InnerAddKeyIDsInlineMapItemContents(ref mpWriter, keyInfoByIDDictionary.Values.ToArray());
+            }
+
+            // TypeID [only include if the WriteObjectsUsingTypeKeyID behavior has been selected/enabled]
+            if (writeObjectsUsingTypeID)
+            {
+                InnerAddTypeIDsInlineMapItemContents(ref mpWriter, typeIDByNameDictionary.KeyValuePairArray);
+            }
+
             NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData, 0);
+        }
+
+        /// <summary>
+        /// Writes an inline MetaData Map block.  
+        /// <para/>
+        /// [MAP
+        ///     "KeyIDs":incrementalKeyIDMapSet (incremental set of additions/updates)
+        /// ]
+        /// </summary>
+        private void AddInlineMap_IncrementalKeyIDs(ref MessagePack.MessagePackWriter mpWriter, KeyInfo[] incrementalKeyInfoArray)
+        {
+            // When we are generating an incremental record we wrap the MapItem in an outer map record that has a single map item in it.
+            mpWriter.WriteMapHeader(1);
+
+            {
+                InnerAddKeyIDsInlineMapItemContents(ref mpWriter, incrementalKeyInfoArray);
+            }
+
+            NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData, 0);
+        }
+
+        /// <summary>
+        /// Writes to MP items:
+        /// <para/>"KeyIDs"
+        /// <para/>[MAPn [A keyInfo.KeyName] [I keyInfo.KeyID] ...]
+        /// </summary>
+        private void InnerAddKeyIDsInlineMapItemContents(ref MessagePack.MessagePackWriter mpWriter, KeyInfo [] keyInfoArray)
+        {
+            mpWriter.Write(Common.Constants.KeyIDsInlineMapKey);
+
+            mpWriter.WriteMapHeader(keyInfoArray.Length);
+
+            foreach (var keyInfo in keyInfoArray)
+            {
+                mpWriter.Write(keyInfo.KeyName);
+                mpWriter.Write(keyInfo.KeyID);
+            }
+        }
+
+        /// <summary>
+        /// Writes an inline MetaData Map block.  
+        /// <para/>
+        /// [MAP
+        ///     "TypeIDs":incrementalTypeInfoArray (incremental set of additions/updates)
+        /// ]
+        /// </summary>
+        private void AddInlineMap_IncrementalTypeIDs(ref MessagePack.MessagePackWriter mpWriter, KeyValuePair<string, int>[] kvpArray)
+        {
+            // When we are generating an incremental record we wrap the MapItem in an outer map record that has a single map item in it.
+            mpWriter.WriteMapHeader(1);
+
+            {
+                InnerAddTypeIDsInlineMapItemContents(ref mpWriter, kvpArray);
+            }
+
+            NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData, 0);
+        }
+
+        /// <summary>
+        /// Writes to MP items:
+        /// <para/>"TypeIDs"
+        /// <para/>[MAPn [A Key] [I Value] ...]
+        /// </summary>
+        private void InnerAddTypeIDsInlineMapItemContents(ref MessagePack.MessagePackWriter mpWriter, KeyValuePair<string, int> [] kvpArray)
+        {
+            mpWriter.Write(Common.Constants.TypeIDsInlineMapKey);
+
+            mpWriter.WriteMapHeader(kvpArray.Length);
+
+            foreach (var kvp in kvpArray)
+            {
+                mpWriter.Write(kvp.Key);
+                mpWriter.Write(kvp.Value);
+            }
         }
 
         // [MAP "MDRF2.End":nil]
@@ -1421,13 +1941,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                             UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
 
-                            // use object representation: [L3 "Mesg"|"Error" [L3 issueFDT issueUTC1601 mesg] nil]
                             bool isError = (writeItem.blockTypeID == FixedBlockTypeID.ErrorV1);
 
-                            mpWriter.WriteArrayHeader(3);   // fixed list length used to represent objects
-                            mpWriter.Write(isError ? MDRF2.Common.Constants.ObjKnownType_Error : MDRF2.Common.Constants.ObjKnownType_Mesg);
-                            MesgAndErrorBodyFormatter.Instance.Serialize(ref mpWriter, Tuple.Create(writeItem.mesg, writeItem.dtPair), mpOptions);
-                            mpWriter.WriteNil();
+                            MesgAndErrorObjectSerializer(ref mpWriter, writeItem, mpOptions);
 
                             mpWriter.Flush();
 
@@ -1786,12 +2302,12 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private string NoteRecordAddedToBufferAndWriteIfNeeded(ByteArrayBufferWriter bufferWriter, ref MDRF2DateTimeStampPair dtPair, FileIndexRowFlagBits rowFlagBits, UInt64 userRowFlagBits)
+        private string NoteRecordAddedToBufferAndWriteIfNeeded(ByteArrayBufferWriter bufferWriter, ref MDRF2DateTimeStampPair dtPair, FileIndexRowFlagBits rowFlagBits, UInt64 userRowFlagBits, KeyInfo keyInfo = default)
         {
             if (!HasBlockBeenStarted)
                 return "Cannot add a record to a block that has not been started";
 
-            NoteRecordAddedToBuffer(rowFlagBits, userRowFlagBits);
+            NoteRecordAddedToBuffer(rowFlagBits, userRowFlagBits, keyInfo: keyInfo);
 
             return FinishAndWriteCurrentBlockIfNeeded(bufferWriter, ref dtPair);
         }
@@ -1811,7 +2327,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void NoteRecordAddedToBuffer(FileIndexRowFlagBits rowFlagBits, UInt64 userRowFlagBits)
+        private void NoteRecordAddedToBuffer(FileIndexRowFlagBits rowFlagBits, UInt64 userRowFlagBits, KeyInfo keyInfo = default)
         {
             inlineIndexRecord.BlockRecordCount += 1;
 
@@ -1823,6 +2339,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             inlineIndexRecord.BlockFileIndexRowFlagBits |= rowFlagBits;
             inlineIndexRecord.BlockUserRowFlagBits |= userRowFlagBits;
+
+            if (keyInfo != default)
+                inlineIndexRecord.NoteKeyRecorded(keyInfo);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1881,7 +2400,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         private ByteArrayBufferWriter metaDataBlockBufferWriter;
         private ByteArrayBufferWriter blockBufferWriter;
 
-        private InlineIndexRecord inlineIndexRecord = new InlineIndexRecord();
+        private readonly InlineIndexRecord inlineIndexRecord = new InlineIndexRecord();
         private MDRF2DateTimeStampPair blockBufferFirstDTPair = default;
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "supports debugging.")]
         private int numBlocksWritten = 0;
@@ -1904,7 +2423,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             inlineIndexRecord.BlockRecordCount++;
         }
 
-        double currentFileDeltaTimeStamp;
+        private double currentFileDeltaTimeStamp;
 
         #endregion
 
@@ -1913,51 +2432,51 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <remarks>
         /// Annotate this as readonly since the value is only assigned once in the constructor (to either new object() or null).
         /// </remarks>
-        readonly object mutex;
+        private readonly object mutex;
 
-        SetupInfo setupOrig;
-        SetupInfo setup;
+        private readonly SetupInfo setupOrig;
+        private readonly SetupInfo setup;
 
-        MDRF.Writer.WriterBehavior writerBehavior;
+        private readonly MDRF.Writer.WriterBehavior writerBehavior;
 
         /// <summary>
         /// This is the underlying stream for the file we are writing to
         /// </summary>
-        System.IO.FileStream fileStream;
+        private System.IO.FileStream fileStream;
 
         /// <summary>
         /// If we are using compression then this is the stream that is used to compress into the file stream
         /// </summary>
-        System.IO.Stream compressorStream;
+        private System.IO.Stream compressorStream;
 
         /// <summary>
         /// This is a shorthand for either the compressor stream or the file stream depeding on wether compression is being used or not.
         /// </summary>
-        System.IO.Stream outputStream;
+        private System.IO.Stream outputStream;
 
-        DateTime fileReferenceDateTime = default;
-        MDRF2DateTimeStampPair fileReferenceQPCDTPair = default;
-        int fileReferenceDayOfYear = 0;
-        bool fileReferenceIsDST;
-        TimeSpan fileReferenceUTCOffset;
-        bool allowImmediateReopen;
+        private DateTime fileReferenceDateTime = default;
+        private MDRF2DateTimeStampPair fileReferenceQPCDTPair = default;
+        private int fileReferenceDayOfYear = 0;
+        private bool fileReferenceIsDST;
+        private TimeSpan fileReferenceUTCOffset;
+        private bool allowImmediateReopen;
 
-        MDRF.Writer.FileInfo currentFileInfo = new MDRF.Writer.FileInfo();
-        MDRF.Writer.FileInfo lastFileInfo = new MDRF.Writer.FileInfo();
+        private MDRF.Writer.FileInfo currentFileInfo = new MDRF.Writer.FileInfo();
+        private MDRF.Writer.FileInfo lastFileInfo = new MDRF.Writer.FileInfo();
 
-        QpcTimeStamp lastWriteAllTimeStamp;
+        private QpcTimeStamp lastWriteAllTimeStamp;
 
-        SourceTracker[] sourceTrackerArray;
-        GroupTracker[] groupTrackerArray;
-        OccurrenceTracker[] occurrenceTrackerArray;
-        TrackerCommon[] allMetaDataItemsArray;     // in order of source, group, occurrence
+        private SourceTracker[] sourceTrackerArray;
+        private GroupTracker[] groupTrackerArray;
+        private OccurrenceTracker[] occurrenceTrackerArray;
+        private TrackerCommon[] allMetaDataItemsArray;     // in order of source, group, occurrence
 
-        Queue<MessageItem> errorQueue = new Queue<MessageItem>(MessageItem.maxQueueSize);
-        int errorQueueCount;
-        Queue<MessageItem> mesgQueue = new Queue<MessageItem>(MessageItem.maxQueueSize);
-        int mesgQueueCount;
+        private readonly Queue<MessageItem> errorQueue = new Queue<MessageItem>(MessageItem.maxQueueSize);
+        private int errorQueueCount;
+        private readonly Queue<MessageItem> mesgQueue = new Queue<MessageItem>(MessageItem.maxQueueSize);
+        private int mesgQueueCount;
 
-        DroppedCounts droppedCounts = new DroppedCounts();
+        private DroppedCounts droppedCounts = new DroppedCounts();
 
         #endregion
     }
@@ -1984,7 +2503,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// If <paramref name="isSignificant"/> is true then this action will record the object using being significant.
         /// If <paramref name="userRowFlagBits"/> is non-zero then its value will be added (logically ored) into the inline index user row flag bit values and will be attached to the object record (for newly recorded MDRF2 objects).
         /// </summary>
-        IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0);
+        IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null);
 
         /// <summary>
         /// Action factory method.  When run the resulting action will record the given set of objects from <paramref name="objArray"/> using MDRF2's object recording mechanism.
@@ -1993,7 +2512,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// If <paramref name="isSignificant"/> is true then this action will record the objects using being significant.
         /// If <paramref name="userRowFlagBits"/> is non-zero then its value will be added (logically ored) into the inline index user row flag bit values and will be attached to the object records (for newly recorded MDRF2 objects).
         /// </summary>
-        IClientFacet RecordObjects(object [] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0);
+        IClientFacet RecordObjects(object [] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null);
 
         /// <summary>
         /// Action factory method.  When run the resulting action will request the underlying MDRFWriter instance to perform a Flush operation with the given <paramref name="flushFlags"/>.
@@ -2104,6 +2623,12 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         /// <summary>Defines ActionLoggingConfig used for actions that are indicated by the client as being "high rate".</summary>
         public ActionLoggingConfig HighRateActionLoggingConfig { get; set; } = ActionLoggingConfig.Trace_Trace_Trace_Trace;
+
+        /// <summary>
+        /// Defines the base value that will be used to configure the MDRF2Writer's behavior.
+        /// Defaults to <see cref="MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID"/>
+        /// </summary>
+        public MDRF2WriterConfigBehavior MDRF2WriterConfigBehavior { get; set; } = MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID;
     }
 
     namespace MDRF2RecordingEngineItems
@@ -2145,8 +2670,6 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             private INamedValueSet _occurrenceMetaData;
         }
     }
-
-    #endregion
 
     /// <summary>
     /// This class defines a part that can be used to implement standard MDRF recording scenarios.
@@ -2281,23 +2804,23 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
-        MDRF.Writer.OccurrenceInfo defaultRecordEventOccurranceInfo;
-        private Dictionary<string, MDRF.Writer.OccurrenceInfo> eventNameToOccurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
-        private Dictionary<string, MDRF.Writer.OccurrenceInfo> occurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
+        private MDRF.Writer.OccurrenceInfo defaultRecordEventOccurranceInfo;
+        private readonly Dictionary<string, MDRF.Writer.OccurrenceInfo> eventNameToOccurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
+        private readonly Dictionary<string, MDRF.Writer.OccurrenceInfo> occurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
 
         ///<inheritdoc/>
-        public IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0)
+        public IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll, isSignificant, userRowFlagBits), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, obj.SafeToString());
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll, isSignificant, userRowFlagBits, keyID, keyName), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, obj.SafeToString());
         }
 
         ///<inheritdoc/>
-        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0)
+        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0, int keyID = default, string keyName = null)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll, isSignificant, userRowFlagBits), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll, isSignificant, userRowFlagBits, keyID, keyName), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
         }
 
-        private string PerformRecordObjects(object obj1, object[] objArray, bool writeAll, bool isSignificant, ulong userRowFlagBits)
+        private string PerformRecordObjects(object obj1, object[] objArray, bool writeAll, bool isSignificant, ulong userRowFlagBits, int keyID, string keyName)
         {
             if (!BaseState.IsOnline)
                 return "Part is not Online";
@@ -2305,7 +2828,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             string ec = string.Empty;
             if (obj1 != null)
             {
-                ec = mdrfWriter.RecordObject(obj1, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits);
+                ec = mdrfWriter.RecordObject(obj1, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits, keyID: keyID, keyName: keyName);
 
                 lastWriterClientOpRequestCount++;
             }
@@ -2317,7 +2840,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     var obj = objArray[idx];
 
-                    ec = mdrfWriter.RecordObject(obj, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits);
+                    ec = mdrfWriter.RecordObject(obj, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits, keyID: keyID, keyName: keyName);
 
                     lastWriterClientOpRequestCount++;
 
@@ -2463,7 +2986,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     PartID = $"{PartID}.mw",
                     SetupInfo = Config.SetupInfo,
-                    WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking,
+                    WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | Config.MDRF2WriterConfigBehavior,
                     CompressorSelect = Config.CompressorSelect,
                     CompressionLevel = Config.CompressionLevel,
                 };
@@ -2583,6 +3106,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         #endregion
     }
+
+    #endregion
 
     #region MDRF2LogMessageHandlerAdapter, MDRF2LogMessageHandlerAdapterConfig
 

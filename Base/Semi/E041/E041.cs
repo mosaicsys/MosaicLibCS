@@ -534,6 +534,7 @@ namespace MosaicLib.Semi.E041
     /// <summary>
     /// This struct is used to contain and serialize a triplet of a sequence number, a QpcTimeStamp and a DateTime.  It is used to record and propagate timeing and sequence information for ANState objects.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
     public struct ANSeqAndTimeInfo : IEquatable<ANSeqAndTimeInfo>
     {
@@ -583,6 +584,7 @@ namespace MosaicLib.Semi.E041
     }
 
     /// <summary>This is the storage implementation and serialization object for the IANState interface.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
     [KnownType(typeof(ANSpec))]
     public class ANState : IANState, IEquatable<ANState>
@@ -1069,6 +1071,7 @@ namespace MosaicLib.Semi.E041
         public ANManagerPartConfig(string partID)
         {
             PartID = partID;
+
             DefaultAlarmANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
             DefaultErrorANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
             DefaultWarningANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
@@ -1090,6 +1093,8 @@ namespace MosaicLib.Semi.E041
             IVI = other.IVI ?? Values.Instance;
             IConfig = other.IConfig ?? Modular.Config.Config.Instance;
             ISI = other.ISI ?? Modular.Interconnect.Sets.Sets.Instance;
+
+            AddSimpleActivePartBehaviorOptions = other.AddSimpleActivePartBehaviorOptions;
 
             E30ALIDHandlerFacet = other.E30ALIDHandlerFacet;
             ALIDDictionary = other.ALIDDictionary;
@@ -1119,6 +1124,10 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>Gives the ISetsInterconnection instance that the constructed part will use.  If null then the part will use the default singleton one.</summary>
         public ISetsInterconnection ISI { get; set; }
+
+        /// <summary>May be used to select additional <see cref="SimpleActivePartBehaviorOptions"/> for the resulting part.</summary>
+        public SimpleActivePartBehaviorOptions AddSimpleActivePartBehaviorOptions { get; set; }
+
 
         /// <summary>Gives the optional IE30ALIDHandlerFacet instance that the part will use.  Use of this property cannot be combined with use of the following ALIDDictionary property</summary>
         public IE30ALIDHandlerFacet E30ALIDHandlerFacet { get; set; }
@@ -1219,7 +1228,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         public static IANManagerPart Instance { get { return singletonHelper.Instance; } set { singletonHelper.Instance = value; } }
  
-        private static SingletonHelperBase<IANManagerPart> singletonHelper = new SingletonHelperBase<IANManagerPart>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ANManagerPart("ANManager", null, Values.Instance));
+        private static readonly SingletonHelperBase<IANManagerPart> singletonHelper = new SingletonHelperBase<IANManagerPart>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ANManagerPart("ANManager", null, Values.Instance));
 
         #endregion
 
@@ -1236,7 +1245,7 @@ namespace MosaicLib.Semi.E041
         /// ANManagerPartConfig based Constructor.  Given <paramref name="anManagerPartConfig"/> object contents defines the configuration for this part
         /// </summary>
         public ANManagerPart(ANManagerPartConfig anManagerPartConfig)
-            : base(anManagerPartConfig.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true))
+            : base(anManagerPartConfig.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, addSimpleActivePartBehaviorOptions: anManagerPartConfig.AddSimpleActivePartBehaviorOptions))
         {
             ANManagerPartConfig = new ANManagerPartConfig(anManagerPartConfig);
 
@@ -1581,11 +1590,11 @@ namespace MosaicLib.Semi.E041
 
         #region internal sets of ANSourceTracking objects and support for name to ANSourceTracking lookup (FindANSourceTrackingByName)
 
-        private IListWithCachedArray<ANSourceTracking> anSourceTrackingList = new IListWithCachedArray<ANSourceTracking>();
-        private Dictionary<string, ANSourceTracking> anNameToSourceTrackingDictionary = new Dictionary<string, ANSourceTracking>();
-        private IListWithCachedArray<ANSourceImpl> anSourceServiceList = new IListWithCachedArray<ANSourceImpl>();
+        private readonly IListWithCachedArray<ANSourceTracking> anSourceTrackingList = new IListWithCachedArray<ANSourceTracking>();
+        private readonly Dictionary<string, ANSourceTracking> anNameToSourceTrackingDictionary = new Dictionary<string, ANSourceTracking>();
+        private readonly IListWithCachedArray<ANSourceImpl> anSourceServiceList = new IListWithCachedArray<ANSourceImpl>();
 
-        private List<ANSourceTracking> pendingLookupANSourceTrackingList = new List<ANSourceTracking>();
+        private readonly List<ANSourceTracking> pendingLookupANSourceTrackingList = new List<ANSourceTracking>();
 
         private ANSourceTracking FindANSourceTrackingByName(string anName, bool createIfNeeded)
         {
@@ -2105,7 +2114,7 @@ namespace MosaicLib.Semi.E041
             /// <summary>IBasicNotificationList which is notified when an action is selected on an annunciator or when an action abort is requested.</summary>
             IBasicNotificationList IANSource.NotifyOnActionSelectedOrAbortedList { get { return notifyOnActionSelectedOrAbortedBNL; } }
 
-            private BasicNotificationList notifyOnActionSelectedOrAbortedBNL = new BasicNotificationList();
+            private readonly BasicNotificationList notifyOnActionSelectedOrAbortedBNL = new BasicNotificationList();
 
             /// <summary>Gets a copy of the originally registered ANSpec</summary>
             IANSpec IANSourceBase.ANSpec { get { return this.ANSpec; } }
@@ -2503,7 +2512,7 @@ namespace MosaicLib.Semi.E041
                     bool beingSet = (isSignalingNow && !wasSignalingBefore);
                     bool beingCleared = (!isSignalingNow && wasSignalingBefore);
 
-                    Logging.IMesgEmitter emitter = Logging.NullEmitter;
+                    Logging.IMesgEmitter emitter;
                     if (beingSet)
                         emitter = SetSignalStateEmitter;
                     else if (isSignalingNow)
@@ -2561,7 +2570,7 @@ namespace MosaicLib.Semi.E041
             #endregion
         }
 
-        ActionLogging syncActionLogging = null;
+        private ActionLogging syncActionLogging = null;
 
         /// <summary>
         /// Method used by ANSourceImpl Sync methods to create (and then run) Sync actions.
@@ -2599,9 +2608,9 @@ namespace MosaicLib.Semi.E041
         #region PerformMainLoopService method
 
         /// <summary>Timer used to trigger re-evaluation of any autoAction triggering logic.  Triggers every 1 second.</summary>
-        QpcTimer autoActionServiceTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true, Started = true };
+        private QpcTimer autoActionServiceTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true, Started = true };
         /// <summary>Timer used to trigger age based pruning of the recently cleared set.  Triggers every 10 seconds.</summary>
-        QpcTimer setPruningServiceTimer = new QpcTimer() { TriggerIntervalInSec = 10.0, AutoReset = true, Started = true };
+        private QpcTimer setPruningServiceTimer = new QpcTimer() { TriggerIntervalInSec = 10.0, AutoReset = true, Started = true };
 
         /// <summary>
         /// Main service method.  
@@ -2674,11 +2683,11 @@ namespace MosaicLib.Semi.E041
             this.Notify();
         }
 
-        private Queue<ANState> anStateQueue = new Queue<ANState>();
+        private readonly Queue<ANState> anStateQueue = new Queue<ANState>();
         private volatile int anStateQueueCount;
         private readonly object anStateQueueMutex = new object();
 
-        List<ANState> anStateWorkingList = new List<ANState>();
+        private readonly List<ANState> anStateWorkingList = new List<ANState>();
 
         private ulong anSeqNumSource = 0;
 
@@ -2817,14 +2826,14 @@ namespace MosaicLib.Semi.E041
             }
         }
 
-        QpcTimer anStateHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
+        private QpcTimer anStateHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
 
         #endregion
 
         #region other PerformMainLoopServce support methods: ProcessAutoAcknowledgeSelections, PredicateIsANStateAckable
 
-        long anStateCurrentActiveSetSeqNum = 0;
-        int numAckableWaitingItems = 0;
+        private long anStateCurrentActiveSetSeqNum = 0;
+        private int numAckableWaitingItems = 0;
 
         /// <summary>
         /// Keeps track of the ANStates in the anStateCurrentActiveSet, tracking the group of them that are IsANStateAckable.
@@ -2998,10 +3007,10 @@ namespace MosaicLib.Semi.E041
             public bool IsStillWaiting { get { return waitingForEventDelivery; } }
         }
 
-        IListWithCachedArray<SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
-        bool syncItemsArWaitingForEventDelivery = false;
+        private readonly IListWithCachedArray<SyncTracker> pendingSyncTrackerList = new IListWithCachedArray<SyncTracker>();
+        private bool syncItemsArWaitingForEventDelivery = false;
 
-        void SyncTracking_NoteFailedEventDelivery(string resultCode)
+        private void SyncTracking_NoteFailedEventDelivery(string resultCode)
         {
             foreach (var pendingSyncTracker in pendingSyncTrackerList.Array)
             {
@@ -3015,7 +3024,7 @@ namespace MosaicLib.Semi.E041
         #region ANEventInfo scanning and delivery (ServiceEventDelivery, SetupANEventDelivery)
 
         /// <summary>Gives the last sequence number that was assigned to an ANSourceTracker's lastEventSeqNum value.</summary>
-        ulong lastStateSeqNum = 0;
+        private ulong lastStateSeqNum = 0;
 
         private void ServiceEventDelivery()
         {
@@ -3076,13 +3085,13 @@ namespace MosaicLib.Semi.E041
             anEventHandlerICF = (anEventListHandlerPart != null) ? anEventListHandlerPart.ProcessANEventList(pendingDeliveryEventList) : null;
         }
 
-        IANEventListHandlerPart anEventListHandlerPart;
-        IBaseState anEventListHandlerPartBaseState = MosaicLib.Modular.Part.BaseState.None;
-        IClientFacet anEventHandlerICF;
-        bool weAreWaiting = false;
-        ulong pendingDeliveryEventListSeqNum = 0;
-        List<ANEventInfo> pendingDeliveryEventList = new List<ANEventInfo>();
-        ulong lastDeliveredEventListSeqNum = 0;
+        private IANEventListHandlerPart anEventListHandlerPart;
+        private IBaseState anEventListHandlerPartBaseState = MosaicLib.Modular.Part.BaseState.None;
+        private IClientFacet anEventHandlerICF;
+        private bool weAreWaiting = false;
+        private ulong pendingDeliveryEventListSeqNum = 0;
+        private readonly List<ANEventInfo> pendingDeliveryEventList = new List<ANEventInfo>();
+        private ulong lastDeliveredEventListSeqNum = 0;
 
         #endregion
     }

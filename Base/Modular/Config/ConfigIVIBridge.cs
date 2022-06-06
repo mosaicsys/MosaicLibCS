@@ -21,15 +21,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
-using MosaicLib;
-using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
@@ -298,7 +293,7 @@ namespace MosaicLib.Modular.Config
         bool useNominalSyncHoldoffTimer = false;
         QpcTimer nominalSyncHoldoffTimer = new QpcTimer();
 
-        Dictionary<string, AttemptToAddSyncItemForIVAInfo> lookAtLaterDictionary = new Dictionary<string, AttemptToAddSyncItemForIVAInfo>();
+        IDictionaryWithCachedArrays<string, AttemptToAddSyncItemForIVAInfo> lookAtLaterDictionary = new IDictionaryWithCachedArrays<string, AttemptToAddSyncItemForIVAInfo>();
         bool useLookAtLaterTimer = false;
         QpcTimer lookAtLaterTimer = new QpcTimer();
 
@@ -368,7 +363,7 @@ namespace MosaicLib.Modular.Config
             // if we have lookAtLater items and the corresponding timer has triggered then 
             if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered || forSync))
             {
-                foreach (var item in lookAtLaterDictionary.Values.ToArray())
+                foreach (var item in lookAtLaterDictionary.ValueArray)
                 {
                     if (AttemptToAddSyncItemForIVA(item, requireUpdateNeeded: true))
                     {

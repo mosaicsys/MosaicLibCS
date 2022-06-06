@@ -82,7 +82,14 @@ namespace MosaicLib.Utils
             {
                 qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
 
-                return set.Sum(obj => obj.SafeService(qpcTimeStamp));
+                int deltaCount = 0;
+
+                foreach (var item in set)
+                {
+                    deltaCount += item.SafeService(qpcTimeStamp);
+                }
+
+                return deltaCount;
             }
             else
             {
@@ -992,8 +999,14 @@ namespace MosaicLib.Utils
         #region Internals
 
         /// <summary>
-        /// Protected mutex object used during object creation as required within the CreateEmptyObjectIfNeeded static method.
+        /// protected static, class wide, mutex object.  
+        /// Used to synchronize all changes to the contents of any basic notification list and used to synchronize the generation of the cached Action array.
         /// </summary>
+        /// <remarks>
+        /// The choice to use a single static mutex is based on the premise that list updates are both rare and are quick.  In addition the use of the
+        /// internal cached Action array allows individual Notify methods to be used without use of this mutex, provided that the list contents has not changed
+        /// since the last Notification for this instance.
+        /// </remarks>
         protected static readonly object mutex = new object();
 
         private List<Action> basicNotificationActionList = null;

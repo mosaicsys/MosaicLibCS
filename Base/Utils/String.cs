@@ -94,7 +94,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string MapNullTo(this string s, string mapNullTo)
         {
-            return ((s == null) ? mapNullTo : s);
+            return (s ?? mapNullTo);
         }
 
         /// <summary>
@@ -842,17 +842,15 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given list of ValueContainers in bytes</summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public static int EstimatedContentSizeInBytes(this IList<ValueContainer> vcList)
         {
-            return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes));
+            return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes) + 10);
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given array of ValueContainers in bytes</summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public static int EstimatedContentSizeInBytes(this ValueContainer[] vcArray)
         {
-            return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes));
+            return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes) + 10);
         }
 
         #endregion
@@ -1443,8 +1441,8 @@ namespace MosaicLib.Utils
             basicToStringResultFactoryDelegate = basicStringFactoryDelegate; 
         }
 
-        private Func<string, IFormatProvider, string> formatProviderToStringResultFactoryDelegate;
-        private Func<string> basicToStringResultFactoryDelegate;
+        private readonly Func<string, IFormatProvider, string> formatProviderToStringResultFactoryDelegate;
+        private readonly Func<string> basicToStringResultFactoryDelegate;
 
         /// <summary>Returns the result of calling either the format provider or the basic ToString factory delegate (depending on which this wrapper was constructed from)</summary>
         public override string ToString()

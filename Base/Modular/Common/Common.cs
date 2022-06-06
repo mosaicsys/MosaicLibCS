@@ -22,7 +22,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.ServiceModel;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization.Json;
@@ -1335,6 +1334,18 @@ namespace MosaicLib.Modular.Common
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateNVS(INamedValueSet value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NVS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
+        /// <summary>Creates a ValueContainer to contain a <see cref="NamedValueSet"/> constructed from the given <paramref name="kvpSet"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateNVS(IEnumerable<KeyValuePair<string, ValueContainer>> kvpSet, bool mapNullToEmpty = true) 
+        { 
+            return new ValueContainer() 
+            { 
+                cvt = ContainerStorageType.NVS, 
+                o = new NamedValueSet(kvpSet.Select(kvp => new NamedValue(kvp.Key, kvp.Value))).MakeReadOnly(), 
+                u = default(Union) 
+            }; 
+        }
+
+
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateNV(INamedValue value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NV, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
@@ -2235,34 +2246,33 @@ namespace MosaicLib.Modular.Common
         /// For string types this returns the l6 + the length of the string in bytes
         /// For string array and string list types, this returns 16 + the summed length of each of the strings in bytes + 16 bytes of overhead for each one.
         /// </summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes
         {
             get
             {
                 if (!cvt.IsReferenceType())
                 {
-                    return defaultBasePerItemSizeInBytes;      // we use a fixed estimate of 16 bytes for all non-object contents (including TimeStamp and DateTime)
+                    return defaultBaseEstimatedPerItemSizeInBytes;
                 }
                 else if (o is String)
                 {
-                    return defaultBasePerItemSizeInBytes + (o as String).EstimatedContentSizeInBytes();
+                    return defaultBaseEstimatedPerItemSizeInBytes + (o as String).EstimatedContentSizeInBytes();
                 }
                 else if (o is String[])
                 {
-                    return defaultBasePerItemSizeInBytes + (o as String[]).EstimatedContentSizeInBytes();
+                    return defaultBaseEstimatedPerItemSizeInBytes + (o as String[]).EstimatedContentSizeInBytes();
                 }
                 else if (o is IList<String>)
                 {
-                    return defaultBasePerItemSizeInBytes + (o as IList<String>).EstimatedContentSizeInBytes();
+                    return defaultBaseEstimatedPerItemSizeInBytes + (o as IList<String>).EstimatedContentSizeInBytes();
                 }
                 else if (o is IList<ValueContainer>)
                 {
-                    return defaultBasePerItemSizeInBytes + (o as IList<ValueContainer>).EstimatedContentSizeInBytes();
+                    return defaultBaseEstimatedPerItemSizeInBytes + (o as IList<ValueContainer>).EstimatedContentSizeInBytes();
                 }
                 else if (o is ValueContainer[])
                 {
-                    return defaultBasePerItemSizeInBytes + (o as ValueContainer []).EstimatedContentSizeInBytes();
+                    return defaultBaseEstimatedPerItemSizeInBytes + (o as ValueContainer []).EstimatedContentSizeInBytes();
                 }
                 else if (o is INamedValueSet)
                 {
@@ -2279,7 +2289,10 @@ namespace MosaicLib.Modular.Common
             }
         }
 
-        private const int defaultBasePerItemSizeInBytes = 16;
+        /// <summary>
+        /// Gives the default base estimated content size for all non-object contents (including TimeStamp and DateTime).
+        /// </summary>
+        private const int defaultBaseEstimatedPerItemSizeInBytes = 16;
 
         #endregion
 
@@ -2355,10 +2368,11 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override GetHashCode because Equals has been.</summary>
         public override int GetHashCode()
         {
-            if (o == null)
-                return (cvt.GetHashCode() ^ u.u64.GetHashCode());
-            else
-                return (cvt.GetHashCode() ^ u.u64.GetHashCode() ^ o.GetHashCode());
+            return default(HashCodeBuilder)
+                .Add(cvt.GetHashCode())
+                .Add(u.u64.GetHashCode())
+                .AddHashCodeForItem(o)
+                .Result;
         }
 
         #endregion
@@ -2956,7 +2970,7 @@ namespace MosaicLib.Modular.Common
         /// If the given itemParamArray is null or is empty then this method will return an Empty ValueContainer
         /// If only one value is given in the itemParamArray then the returned ValueContainer will simply be a ValueContainer containing that Item.
         /// </summary>
-        public static ValueContainer SetFromItems<ItemType>(this ValueContainer vc, params ItemType[] itemParamArray)
+        public static ValueContainer SetFromItems<ItemType>(this ValueContainer _, params ItemType[] itemParamArray)
         {
             return ValueContainer.CreateFromItems<ItemType>(itemParamArray);
         }
@@ -2966,7 +2980,7 @@ namespace MosaicLib.Modular.Common
         /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
         /// If the given itemSet is null then this method will return an Empty ValueContainer.
         /// </summary>
-        public static ValueContainer SetFromSet<ItemType>(this ValueContainer vc, IEnumerable<ItemType> itemSet)
+        public static ValueContainer SetFromSet<ItemType>(this ValueContainer _, IEnumerable<ItemType> itemSet)
         {
             return ValueContainer.CreateFromSet<ItemType>(itemSet);
         }
@@ -3396,6 +3410,7 @@ namespace MosaicLib.Modular.Common
     /// Please note the custom handling of the VC property allows this class to be used as the base class for DataContract objects where no class constructor is used when
     /// creating the deserialized version of an object and thus the fields are all set to the default(type) values without regard to any coded constructor behavior.
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace), Serializable]
     public class ValueContainerEnvelope : IEquatable<ValueContainerEnvelope>
     {
@@ -3606,7 +3621,7 @@ namespace MosaicLib.Modular.Common
         private string S { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "sl")]
-        private Details.SL SL { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.SL(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = new ReadOnlyIList<string>(value) }; } }
+        private Details.SL SL { get { return slGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = new ReadOnlyIList<string>(value) }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "tavc")]
         private CustomSerialization.TypeAndValueCarrier TAVC 
@@ -3685,6 +3700,7 @@ namespace MosaicLib.Modular.Common
     /// It prevents the VCE from having a lot more nullable properties that need to be traversed when serializing VCs where array serialization is relatively rare.
     /// </summary>
     [DataContract(Name = "VCEAH", Namespace = Constants.ModularNameSpace), Serializable]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     public class VCEArrayHelper
     {
         public VCEArrayHelper(System.Array array) 
@@ -3831,6 +3847,7 @@ namespace MosaicLib.Modular.Common
         /// appropriate CustomSerialization instance (usually the singleton).
         /// <para/>This class implements immutable behavior.
         /// </summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0044:Add readonly modifier", Justification = "This class contains properties and fields that are only used for serialzation and deserialization")]
         [DataContract(Namespace = Constants.ModularNameSpace)]
         public class TypeAndValueCarrier
         {
@@ -4019,7 +4036,7 @@ namespace MosaicLib.Modular.Common
             #region Singleton Instance (et. al.)
 
             public static ICustomSerialization Instance { get { return singletonInstanceHelper.Instance; } set { singletonInstanceHelper.Instance = value; } }
-            private static SingletonHelperBase<ICustomSerialization> singletonInstanceHelper = new SingletonHelperBase<ICustomSerialization>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new CustomSerialization());
+            private static readonly SingletonHelperBase<ICustomSerialization> singletonInstanceHelper = new SingletonHelperBase<ICustomSerialization>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new CustomSerialization());
 
             #endregion
 
@@ -4086,7 +4103,7 @@ namespace MosaicLib.Modular.Common
                 }
             }
 
-            Dictionary<string, Type> typeNameToTypeDictionary = new Dictionary<string, Type>();
+            private readonly  Dictionary<string, Type> typeNameToTypeDictionary = new Dictionary<string, Type>();
 
             ITypeSerializerItem ICustomSerialization.GetCustomTypeSerializerItemFor(string targetTypeStr, string assemblyFileName, string factoryName) 
             {
@@ -4165,15 +4182,15 @@ namespace MosaicLib.Modular.Common
 
             private readonly object mutex = new object();
 
-            private List<ITypeSerializerItemFactory> factoryItemList = new List<ITypeSerializerItemFactory>();
+            private readonly List<ITypeSerializerItemFactory> factoryItemList = new List<ITypeSerializerItemFactory>();
 
             private ITypeSerializerItemFactory[] useFactoryItemArray = null;
             private static readonly ITypeSerializerItemFactory jsonDCSerializerFactory = new JsonDataContractFallbackItemFactory() { FactoryName = "FallbackJsonDC" };
             private static readonly ITypeSerializerItemFactory binarySerializerFactory = new BinaryFormatterFallbackItemFactory() { FactoryName = "FallbackBinaryFormatter" };
 
-            private Dictionary<string, ITypeSerializerItemFactory> factoryNameToFactoryDictionary = new Dictionary<string, ITypeSerializerItemFactory>();
-            private Dictionary<string, ITypeSerializerItem> typeStrToSpecItemDictionary = new Dictionary<string, ITypeSerializerItem>();
-            private Dictionary<Type, ITypeSerializerItem> typeToSpecItemDictionary = new Dictionary<Type, ITypeSerializerItem>();
+            private readonly Dictionary<string, ITypeSerializerItemFactory> factoryNameToFactoryDictionary = new Dictionary<string, ITypeSerializerItemFactory>();
+            private readonly Dictionary<string, ITypeSerializerItem> typeStrToSpecItemDictionary = new Dictionary<string, ITypeSerializerItem>();
+            private readonly Dictionary<Type, ITypeSerializerItem> typeToSpecItemDictionary = new Dictionary<Type, ITypeSerializerItem>();
 
             private void UpdateFactoryItemArrayIfNeeded()
             {
@@ -4519,6 +4536,11 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>ToString variant that support SML like output format.</summary>
         string ToStringSML(string nvNodeName = "NV");
+
+        /// <summary>
+        /// Returns the <see cref="Name"/> and <see cref="VC"/> value of this <see cref="INamedValue"/> in a corresponding KeyValuePair instance.
+        /// </summary>
+        KeyValuePair<string, ValueContainer> KVP { get; }
     }
 
     #endregion
@@ -5248,13 +5270,15 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override GetHashCode because Equals has been.</summary>
         public override int GetHashCode()
         {
-            var hashCode = isReadOnly.GetHashCode();
+            var hcb = default(HashCodeBuilder)
+                .Add(isReadOnly.GetHashCode());
 
             var invs = (INamedValueSet) this;
 
-            hashCode = invs.Select((nv, index) => nv.GetHashCode() ^ index.GetHashCode()).Aggregate(hashCode, (a, b) => a ^ b);
+            foreach (var nv in invs)
+                hcb.Add(nv.GetHashCode());
 
-            return hashCode;
+            return hcb.Result;
         }
 
         #endregion
@@ -5418,7 +5442,7 @@ namespace MosaicLib.Modular.Common
         #region Underlying storage and indexing fields
 
         /// <summary>This is the actual list of NamedValue objects that are contained in this set.</summary>
-        List<NamedValue> list = new List<NamedValue>();
+        private readonly List<NamedValue> list = new List<NamedValue>();
 
         /// <summary>
         /// Return the NamedValue instance in the list who's Name matches the given sanitizedName, or null if there is none.
@@ -5505,6 +5529,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// This object defines a single named value.  A named value is a pairing of a name and a ValueContainer.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = Constants.ModularNameSpace), Serializable]
     public class NamedValue : INamedValue
     {
@@ -5677,11 +5702,11 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override GetHashCode because Equals has been.</summary>
         public override int GetHashCode()
         {
-            var hashCode = vc.GetHashCode() ^ isReadOnly.GetHashCode();
-            if (Name != null)
-                hashCode ^= Name.GetHashCode();
-
-            return hashCode;
+            return default(HashCodeBuilder)
+                    .AddHashCodeForItem(Name)
+                    .Add(vc.GetHashCode())
+                    .Add(IsReadOnly.GetHashCode())
+                    .Result;
         }
 
         #endregion
@@ -5771,11 +5796,17 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
         /// </summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes 
         {
             get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes + 10; }
         }
+
+        #endregion
+
+        #region KVP
+
+        /// <inheritdoc/>
+        public KeyValuePair<string, ValueContainer> KVP { get { return new KeyValuePair<string, ValueContainer>(Name, VC); } }
 
         #endregion
 
@@ -6009,7 +6040,29 @@ namespace MosaicLib.Modular.Common
         {
             var nvs = new NamedValueSet();
 
-            dictionary.DoForEach(kvp => nvs.SetValue(kvp.Key, ValueContainer.Create(kvp.Value)));
+            if (typeof(TValueType) != typeof(System.Object))
+            {
+                foreach (var kvp in dictionary)
+                    nvs.SetValue(kvp.Key, ValueContainer.Create(kvp.Value));
+            }
+            else
+            {
+                foreach (var kvp in dictionary)
+                    nvs.SetValue(kvp.Key, ValueContainer.CreateFromObject(kvp.Value));
+            }
+
+            return nvs;
+        }
+
+        /// <summary>
+        /// Converts the given <paramref name="kvcSet"/>'s contents to a NamedValueSet and returns it.
+        /// </summary>
+        public static NamedValueSet ConvertToNamedValueSet(this ICollection<KeyValuePair<string, ValueContainer>> kvcSet)
+        {
+            var nvs = new NamedValueSet();
+
+            foreach (var kvc in kvcSet)
+                nvs.SetValue(kvc.Key, kvc.Value);
 
             return nvs;
         }
@@ -6165,10 +6218,10 @@ namespace MosaicLib.Modular.Common
         /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.  Defaults to NamedValueMergeBehavior.AddAndUpdate</param>
         public static NamedValueSet MergeWith(this INamedValueSet lhs, INamedValueSet rhs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
-            NamedValueSet lhsRW = lhs.ConvertToWritable(mapNullToEmpty: false);
-
             if (((mergeBehavior & NamedValueMergeBehavior.Replace) != NamedValueMergeBehavior.None))
                 return rhs.ConvertToWritable(mapNullToEmpty: true);
+
+            NamedValueSet lhsRW = lhs.ConvertToWritable(mapNullToEmpty: false);
 
             return lhsRW.MergeWith(rhs as IEnumerable<INamedValue>, mergeBehavior: mergeBehavior);
         }
@@ -6879,9 +6932,10 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// Generates and returns an INamedValueSet with named values for each of the identified items in the adapter's ValueSet.
-        /// <para/>If requested using the optional asReadOnly parameter, the returned nvs will be set to be read-only.
+        /// <para/>If requested using the optional <paramref name="asReadOnly"/> parameter, the returned nvs will be set to be read-only.
+        /// <para/>If a non-IsReadOnly <paramref name="intoNVS"/> NamedValueSet instance is given then this method will add the transfered key/value pair contents to it.
         /// </summary>
-        INamedValueSet Get(bool asReadOnly = false);
+        INamedValueSet Get(bool asReadOnly = false, NamedValueSet intoNVS = null);
     }
 
     /// <summary>
@@ -6961,11 +7015,11 @@ namespace MosaicLib.Modular.Common
         public NamedValueSetAdapter(ItemSelection itemSelection = (ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems | ItemSelection.UseStrictAttributeTypeChecking))
         {
             valueSetItemInfoList = AnnotatedClassItemAccessHelper<TAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), itemSelection);
-            NumItems = valueSetItemInfoList.Count;
+            numItems = valueSetItemInfoList.Count;
 
             MustSupportGet = MustSupportSet = true;
 
-            itemAccessSetupInfoArray = new ItemAccessSetupInfo<TAttribute>[NumItems];
+            itemAccessSetupInfoArray = new ItemAccessSetupInfo<TAttribute>[numItems];
         }
 
         #endregion
@@ -7016,7 +7070,7 @@ namespace MosaicLib.Modular.Common
         {
             // setup all of the static information
 
-            for (int idx = 0; idx < NumItems; idx++)
+            for (int idx = 0; idx < numItems; idx++)
             {
                 ItemInfo<TAttribute> itemInfo = valueSetItemInfoList[idx];
                 Attributes.NamedValueSetItemAttribute itemAttribute = itemInfo.ItemAttribute;
@@ -7106,28 +7160,30 @@ namespace MosaicLib.Modular.Common
             return this;
         }
 
-        /// <summary>
-        /// Generates and returns an INamedValueSet with named values for each of the identified items in the adapter's ValueSet.
-        /// <para/>If requested using the optional asReadOnly parameter, the returned nvs will be set to be read-only.
-        /// </summary>
-        public INamedValueSet Get(bool asReadOnly = false)
+        /// <inheritdoc/>
+        public INamedValueSet Get(bool asReadOnly = false, NamedValueSet intoNVS = null)
         {
             if (ValueSet == null)
                 new System.NullReferenceException("ValueSet property must be non-null before Get can be called").Throw();
 
-            return Get(ValueSet, asReadOnly: asReadOnly);
+            return Get(ValueSet, asReadOnly: asReadOnly, intoNVS: intoNVS);
         }
 
         /// <summary>
         /// Generates and returns an INamedValueSet with named values for each of the identified items in the given <paramref name="valueSet"/>.
         /// <para/>If requested using the optional <paramref name="asReadOnly"/> parameter, the returned nvs will be set to be read-only.
         /// </summary>
-        public INamedValueSet Get(TValueSet valueSet, bool asReadOnly = false)
+        public INamedValueSet Get(TValueSet valueSet, bool asReadOnly = false, NamedValueSet intoNVS = null)
         {
             if (valueSet == null)
                 new System.ArgumentNullException("valueSet").Throw();
 
-            NamedValueSet nvs = new NamedValueSet();
+            NamedValueSet nvs;
+
+            if (intoNVS != null && !intoNVS.IsReadOnly)
+                nvs = intoNVS;
+            else
+                nvs = new NamedValueSet();
 
             foreach (var iasi in itemAccessSetupInfoArray)
             {
@@ -7145,11 +7201,11 @@ namespace MosaicLib.Modular.Common
 
         #region private fields, properties
 
-        readonly Type TValueSetType = typeof(TValueSet);
-        readonly string TValueSetTypeStr = typeof(TValueSet).Name;
+        private static readonly Type TValueSetType = typeof(TValueSet);
+        private static readonly string TValueSetTypeStr = TValueSetType.Name;
 
-        List<ItemInfo<TAttribute>> valueSetItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
-        int NumItems { get; set; }
+        private readonly List<ItemInfo<TAttribute>> valueSetItemInfoList;       // gets built by the AnnotatedClassItemAccessHelper.
+        private readonly int numItems;
 
         /// <summary>
         /// Internal class used to capture the key specific setup information for a given annotated property in the ValueSet.
@@ -7187,7 +7243,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
-        readonly ItemAccessSetupInfo<TAttribute>[] itemAccessSetupInfoArray = null;
+        private readonly ItemAccessSetupInfo<TAttribute>[] itemAccessSetupInfoArray;
 
         #endregion
 

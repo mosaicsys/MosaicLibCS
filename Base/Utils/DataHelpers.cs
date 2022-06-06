@@ -296,7 +296,7 @@ namespace MosaicLib.Utils
         {
             unchecked
             {
-                l = (l & 0xffffff);
+                l &= 0xffffff;
                 ulsb = (Byte)(l >> 16);
                 lmsb = (Byte)(l >> 8);
                 llsb = (Byte)(l >> 0);
@@ -614,7 +614,65 @@ namespace MosaicLib.Utils
         #endregion
     }
 
-	#endregion
+    #endregion
+
+    #region HashCodeHelpers
+
+    /// <summary>
+    /// This is a helper struct that is used to help build hashcode values, typically for use in overriden GetHashCode methods.
+    /// This method is based on the use of the concept of the "Cyclic Shift" hashcode.
+    /// This struct is designed to support use of call chaining.
+    /// </summary>
+    /// <remarks>
+    /// google "cyclic shift hash codes"
+    /// A reasonably good description of where the two specific shift values used here come from is 
+    /// "https://charlesreid1.com/wiki/Hash_Functions/Cyclic_Permutation"
+    /// </remarks>
+    public struct HashCodeBuilder
+    {
+        /// <summary>
+        /// Gives the current built hash code value.  Default (aka Initial) value is zero.
+        /// </summary>
+        public int Result { get; set; }
+
+        /// <summary>
+        /// "Adds" in the <paramref name="nextValue"/>:  
+        /// applies the 5/27 Cyclic Permutation to the current <see cref="Result"/>
+        /// and adds in the <paramref name="nextValue"/> to give the next value of <see cref="Result"/>.
+        /// Supports call chaining.
+        /// </summary>
+        public HashCodeBuilder Add(int nextValue)
+        {
+            uint uResult = (uint)Result;
+            uint cyclicShitedResult = (uResult << 5) | (uResult >> 27);
+
+            Result = (int)cyclicShitedResult + nextValue;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Calls Add(item.SafeGetHashCode(hashCodeForNull: hashCodeForNull));
+        /// Supports call chaining.
+        /// </summary>
+        public HashCodeBuilder AddHashCodeForItem<TItemType>(TItemType item, int hashCodeForNull = -1)
+        {
+            return Add(item.SafeGetHashCode(hashCodeForNull: hashCodeForNull));
+        }
+
+        public static int Combine(int hashCode1, int hashCode2)
+        {
+            HashCodeBuilder hcb = default(HashCodeBuilder);
+            return hcb.Add(hashCode1).Add(hashCode2).Result;
+        }
+        public static int Combine(int hashCode1, int hashCode2, int hashCode3)
+        {
+            HashCodeBuilder hcb = default(HashCodeBuilder);
+            return hcb.Add(hashCode1).Add(hashCode2).Add(hashCode3).Result;
+        }
+    }
+
+    #endregion
 
     #region Extension methods for marshaling between byte arrays and other objects
 
@@ -670,7 +728,6 @@ namespace MosaicLib.Utils
         public static byte[] MarshalStructToByteArray<TObjType>(this TObjType value, byte[] fallbackValue = null, bool rethrow = true)
         {
             GCHandle gch = default(GCHandle);
-            IntPtr gchP = default(IntPtr);
 
             try
             {
@@ -678,7 +735,7 @@ namespace MosaicLib.Utils
                 byte [] data = new byte [length];
 
                 gch = GCHandle.Alloc(data, GCHandleType.Pinned);
-                gchP = gch.AddrOfPinnedObject();
+                var gchP = gch.AddrOfPinnedObject();
 
                 Marshal.StructureToPtr(value, gchP, false);
 
@@ -693,8 +750,6 @@ namespace MosaicLib.Utils
             }
             finally
             {
-                gchP = default(IntPtr);
-
                 if (gch.IsAllocated)
                     gch.Free();
             }
@@ -710,7 +765,6 @@ namespace MosaicLib.Utils
         public static int MarshalStructIntoToByteArray<TObjType>(this TObjType value, byte[] byteArray, int startIdx = 0, bool rethrow = true)
         {
             GCHandle gch = default(GCHandle);
-            IntPtr gchP = default(IntPtr);
 
             try
             {
@@ -718,6 +772,8 @@ namespace MosaicLib.Utils
 
                 if (byteArray != null)
                     gch = GCHandle.Alloc(byteArray, GCHandleType.Pinned);
+
+                IntPtr gchP = default(IntPtr);
 
                 if (gch.IsAllocated && byteArray.IsSafeIndex(startIdx, length))
                 {
@@ -743,8 +799,6 @@ namespace MosaicLib.Utils
             }
             finally
             {
-                gchP = default(IntPtr);
-
                 if (gch.IsAllocated)
                     gch.Free();
             }
@@ -774,7 +828,6 @@ namespace MosaicLib.Utils
         public static int MarshalStructFromByteArray<TObjType>(this byte[] byteArray, out TObjType valueOut, int startIdx = 0, TObjType fallbackValue = default(TObjType), bool strictLength = true, bool rethrow = true, int? availableByteCountIn = null)
         {
             GCHandle gch = default(GCHandle);
-            IntPtr gchP = default(IntPtr);
 
             try
             {
@@ -788,6 +841,8 @@ namespace MosaicLib.Utils
                 int testLength = (strictLength ? length : 1);
 
                 bool lengthLessThanGivenAvailableByteCount = ((availableByteCountIn == null) || (testLength <= availableByteCountIn));
+
+                IntPtr gchP = default(IntPtr);
 
                 if (byteArray.IsSafeIndex(startIdx, length: testLength) && gch.IsAllocated && lengthLessThanGivenAvailableByteCount)
                 {
@@ -815,13 +870,10 @@ namespace MosaicLib.Utils
             }
             finally
             {
-                gchP = default(IntPtr);
-
                 if (gch.IsAllocated)
                     gch.Free();
             }
         }
-        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
     #endregion
@@ -852,10 +904,6 @@ namespace MosaicLib.Utils
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
         ValueType CompareExchange(ValueType value, ValueType comparand);
     }
-
-    // suppress "warning CS0420: 'xxxx': a reference to a volatile field will not be treated as volatile"
-    //	The following structs are designed to support use of atomic, interlocked operations on volatile values
-    #pragma warning disable 0420
 
 	/// <summary>
 	/// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int32 value.  This is done to allow us to suppress the warnings that are generated when passing a volatile by reference
@@ -1013,9 +1061,6 @@ namespace MosaicLib.Utils
         }
     }
 
-    // restore prior "warning CS0420: 'xxxx': a reference to a volatile field will not be treated as volatile" warning behavior
-    #pragma warning restore 0420
-
 	#endregion
 
     //-------------------------------------------------
@@ -1116,6 +1161,7 @@ namespace MosaicLib.Utils
 	{
         /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
 		bool IsUpdateNeeded { get; set; }
+
         /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
 		bool Update();
 
@@ -1306,8 +1352,10 @@ namespace MosaicLib.Utils
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
         public virtual bool HasBeenSet { get { return hasSequenceNumberBeenSet; } }
+
         /// <summary>get/set property that gives the caller interlocked access to the current value of the contained sequence number value.  Setter also flags that the sequence number has been set.</summary>
         public virtual ValueType SequenceNumber { get { return sequenceNumberGen.Value; } set { sequenceNumberGen.Value = value; InnerSequenceNumberHasBeenSet(); } }
+
         /// <summary>
         /// Gives the caller direct access to the sequence number storage without the use of interlocked instructions. 
         /// </summary>
@@ -1318,6 +1366,7 @@ namespace MosaicLib.Utils
         /// caveat.
         /// </remarks>
         public virtual ValueType VolatileSequenceNumber { get { return sequenceNumberGen.VolatileValue; } }
+
         /// <summary>Allows the caller to advance the contained sequence number to the next value.</summary>
         /// <returns>the value of the contained sequence number after being incremented.</returns>
         public virtual ValueType Increment() { return InnerIncrementNumber(); }
@@ -1341,9 +1390,11 @@ namespace MosaicLib.Utils
 		protected virtual void InnerSequenceNumberHasBeenSet() { hasSequenceNumberBeenSet = true;  }
 
         /// <summary>Container for the chosen IAtomicValue type that is used here to contain and generate sequence number values.</summary>
-		protected IAtomicValue<ValueType> sequenceNumberGen = null;
+		protected readonly IAtomicValue<ValueType> sequenceNumberGen;
+
         /// <summary>boolean flag used to determine if the sequence number generator contains the constructor default value or if its value has been explicitly defined.</summary>
 		private volatile bool hasSequenceNumberBeenSet = false;
+
         /// <summary>Internal storage field for the SkipZero property.</summary>
 		private bool skipZero = false;
     }
@@ -1379,7 +1430,7 @@ namespace MosaicLib.Utils
 
         /// <summary>replaces SequenceNumberBase{System.Int32}.SkipZero property implementation.  Any attempt to set this to true will throw an assert exception</summary>
         /// <exception cref="MosaicLib.Utils.AssertException">Thrown if property is set to true.</exception>
-		private new bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberInt.SkipZero must be false"); base.SkipZero = false; } }
+		public override bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberInt.SkipZero must be false"); base.SkipZero = false; } }
 
         /// <summary>Implemenation for INotifyable.Notify method.  Increments the contained sequence number value.</summary>
 		public virtual void Notify() { InnerIncrementNumber(); }
@@ -1425,7 +1476,7 @@ namespace MosaicLib.Utils
 
         /// <summary>replaces SequenceNumberBase{System.Int32}.SkipZero property implementation.  Any attempt to set this to true will throw an assert exception</summary>
         /// <exception cref="MosaicLib.Utils.AssertException">Thrown if property is set to true.</exception>
-        private new bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberUInt64.SkipZero must be false"); base.SkipZero = false; } }
+        public override bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberUInt64.SkipZero must be false"); base.SkipZero = false; } }
 
         /// <summary>Implemenation for INotifyable.Notify method.  Increments the contained sequence number value.</summary>
         public virtual void Notify() { InnerIncrementNumber(); }
@@ -1464,11 +1515,13 @@ namespace MosaicLib.Utils
             Update();
         }
 
-		private ISequenceNumberValue<SeqNumberType> sequenceNumberSource;
+		private readonly ISequenceNumberValue<SeqNumberType> sequenceNumberSource;
 		private SeqNumberType copyOfLastValue;
 		private bool hasBeenUpdated;
 
-		#region ISequenceNumberObserver<SeqNumberType> Members
+        private static readonly IEqualityComparer<SeqNumberType> equalityComparer = EqualityComparer<SeqNumberType>.Default;
+
+        #region ISequenceNumberObserver<SeqNumberType> Members
 
         /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public bool IsUpdateNeeded
@@ -1482,7 +1535,7 @@ namespace MosaicLib.Utils
 					return true;
 
 				// compare against the volatile value for testing if the update is needed (we might miss it and need to check later but this is much faster)
-				if (copyOfLastValue.Equals(sequenceNumberSource.VolatileSequenceNumber))
+				if (equalityComparer.Equals(copyOfLastValue, sequenceNumberSource.VolatileSequenceNumber))
 					return false;
 
 				return true;
@@ -1515,8 +1568,10 @@ namespace MosaicLib.Utils
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
         public bool HasBeenSet { get { return hasBeenUpdated; } }
+
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
         public SeqNumberType SequenceNumber { get { return copyOfLastValue; } }
+
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
         public SeqNumberType VolatileSequenceNumber { get { return copyOfLastValue; } }
 
@@ -1553,7 +1608,7 @@ namespace MosaicLib.Utils
         public virtual int Increment() { lock (mutex) { return seqNum.Increment(); } }
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
-		protected SequenceNumberInt seqNum = new SequenceNumberInt();
+		protected readonly SequenceNumberInt seqNum = new SequenceNumberInt();
 
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
@@ -1586,7 +1641,7 @@ namespace MosaicLib.Utils
         /// <returns>the incremented value of the sequence number</returns>
         public virtual int Increment() { return seqNum.Increment(); }
 
-		private InterlockedSequenceNumberInt seqNum  = new InterlockedSequenceNumberInt();
+		private readonly InterlockedSequenceNumberInt seqNum  = new InterlockedSequenceNumberInt();
     
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
@@ -1618,7 +1673,7 @@ namespace MosaicLib.Utils
         public virtual int Increment() { lock (mutex) { return seqNum.Increment(); } }
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
-        protected SequenceNumberInt seqNum = new SequenceNumberInt();
+        protected readonly SequenceNumberInt seqNum = new SequenceNumberInt();
 
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
@@ -1639,7 +1694,7 @@ namespace MosaicLib.Utils
 		where RefObjectType : class
 		where SeqNumberType : new()
 	{
-		private ISequencedObjectSource<RefObjectType, SeqNumberType> objSource;
+		private readonly ISequencedObjectSource<RefObjectType, SeqNumberType> objSource;
 		private SequenceNumberObserver<SeqNumberType> seqNumObserver;
 		private RefObjectType localObjCopy = null;
 
@@ -1711,7 +1766,7 @@ namespace MosaicLib.Utils
 		where ValueObjectType : struct
 		where SeqNumberType : new()
 	{
-		private ISequencedObjectSource<ValueObjectType, SeqNumberType> objSource;
+		private readonly ISequencedObjectSource<ValueObjectType, SeqNumberType> objSource;
 		private SequenceNumberObserver<SeqNumberType> seqNumObserver;
 		private ValueObjectType localObjCopy;
 
@@ -2131,7 +2186,7 @@ namespace MosaicLib.Utils
         protected System.Xml.XmlReaderSettings xrs;
 
         /// <summary>The DataContractSerializer instance that is used by this adapter.</summary>
-        DataContractSerializer dcs = new DataContractSerializer(typeof(TObjectType));
+        private readonly DataContractSerializer dcs = new DataContractSerializer(typeof(TObjectType));
 
         /// <summary>
         /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
@@ -2217,7 +2272,7 @@ namespace MosaicLib.Utils
         : DataContractAdapterBase<TObjectType>
     {
         /// <summary>The DataContractJsonSerializer instance that is used by this adapter.</summary>
-        DataContractJsonSerializer dcjs = new DataContractJsonSerializer(typeof(TObjectType));
+        private readonly DataContractJsonSerializer dcjs = new DataContractJsonSerializer(typeof(TObjectType));
 
         /// <summary>
         /// Attempts to use the contained DataContractJsonSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
@@ -2299,7 +2354,7 @@ namespace MosaicLib.Utils
 
     //-------------------------------------------------
 
-    #region ScopedLock
+    #region ScopedLock, ScopedLockStruct
 
     /// <summary>
     /// This class is intened to allow more fine grain control of the use of a mutex object than the native lock keyword and/or basic Monitor methods directly support.
@@ -2365,6 +2420,84 @@ namespace MosaicLib.Utils
             TryLock(mutexObject, maxWaitTimeLimit);
 
             return this;
+        }
+
+        /// <summary>
+        /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  Returns true if the lock was successfully acquired, or false otherwise.
+        /// </summary>
+        public bool TryLock(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
+        {
+            Release();
+
+            if (mutexObject != null)
+            {
+                bool gotLock = (maxWaitTimeLimit.IsZero()) ? System.Threading.Monitor.TryEnter(mutexObject) : System.Threading.Monitor.TryEnter(mutexObject, maxWaitTimeLimit);
+                if (gotLock)
+                {
+                    lockedMutexObject = mutexObject;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// This struct is intened to allow more fine grain control of the use of a mutex object than the native lock keyword and/or basic Monitor methods directly support.
+    /// This object is generally expected to be used in the context of a using statement (along with its implicit finally calling this object's Dispose method).
+    /// This object additional supports the concept of Locking (and Releasing) the null objects which converts this object's behavior into a thread synchroniziation no-op.
+    /// As such this object can be used to implement a stanardized Lock/Release pattern even in cases where the underlying object may, or may not, actually be using a mutex object.
+    /// </summary>
+    public struct ScopedLockStruct : IDisposable
+    {
+        /// <summary>
+        /// Non-default constructor: Supports optional locking.  
+        /// If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.
+        /// Dispose method will release the held mutexObject if one is held at that time.
+        /// </summary>
+        public ScopedLockStruct(object mutexObject, bool acquireLock = true) 
+            : this()
+        {
+            if (acquireLock && mutexObject != null)
+                Lock(mutexObject);
+        }
+
+        /// <summary>Calls Release in order to unlock any currently held lock.</summary>
+        public void Dispose()
+        {
+            Release();
+        }
+
+        /// <summary>field records the object (if any) that has been Locked (Entered) so that it may be Released(Exited) later.</summary>
+        private object lockedMutexObject;
+
+        /// <summary>Returns true if this object is currently holding a locked mutex object (and thus can be Released)</summary>
+        public bool HasLock { get { return (lockedMutexObject != null); } }
+
+        /// <summary>
+        /// This method is used to, optionally (if the given mutexObject is non-null), lock the given mutexObject by calling Monitor.Enter on it and then saving it to be the internally held locked mutexObject.
+        /// <para/>This method always calls Release inorder to Release any previoulsy held locked mutexObject before attempting to lock the given one.
+        /// </summary>
+        public void Lock(object mutexObject)
+        {
+            Release();
+
+            if (mutexObject != null)
+            {
+                System.Threading.Monitor.Enter(mutexObject);
+                lockedMutexObject = mutexObject;
+            }
+        }
+
+        /// <summary>If the object currently HasLock on a previously locked mutexObject then this method will Exit the monitor on it and clear the HasLock indication.</summary>
+        public void Release()
+        {
+            if (HasLock)
+            {
+                System.Threading.Monitor.Exit(lockedMutexObject);
+                lockedMutexObject = null;
+            }
         }
 
         /// <summary>

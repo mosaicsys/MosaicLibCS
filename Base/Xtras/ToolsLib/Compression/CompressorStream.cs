@@ -36,16 +36,16 @@ namespace Mosaic.ToolsLib.Compression
     /// <para/>None (0), LZ4, GZip
     /// </summary>
     /// <remarks>
-    /// None uses a passthrought engine that applies no compression, 
+    /// None uses a pass-throught engine that applies no compression, 
     /// LZ4 uses the K4os.Compression.LZ4 nuget package.
     /// GZip uses the ICSharpCode.SharpZipLib's GZip related compression.
     /// In general LZ4 is more performant but is not as widely supported on Windows machines (and with normal tooling).  
     /// GZip is widely supported and is reasonably performant here (speed and ratio) but is not generally as good as LZ4 compression.
-    /// Both support read while writing.
+    /// Both support read while writing when used throught a <see cref="CompressorStreamBase"/> derived class defined (or created using a factory method) here.
     /// </remarks>
     public enum CompressorSelect : int
     {
-        /// <summary>No compression - stream acts as a passthrough.  FileExtension is empty string</summary>
+        /// <summary>No compression - stream acts as a pass-through.  FileExtension is empty string</summary>
         None = 0,
 
         /// <summary>Compress using LZ4Compreessor (defaults to using Chaining).  FileExtension is Constants.LZ4FileExtension [.lz4]</summary>
@@ -87,6 +87,26 @@ namespace Mosaic.ToolsLib.Compression
     public static partial class ExtensionMethods
     {
         /// <summary>
+        /// Extension method adds support for the <paramref name="toDisk"/> property for use with 
+        /// locally known stream types that support the underlying <see cref="FileStream.Flush(bool)"/> method.
+        /// For other stream types this method simply calls the standard <see cref="Stream.Flush()"/> method.
+        /// </summary>
+        /// <remarks>
+        /// Supported class types: <see cref="FileStream"/>, <see cref="CompressorStreamBase"/>
+        /// </remarks>
+        public static Stream FlushEx(this Stream stream, bool toDisk)
+        {
+            switch (stream)
+            {
+                case FileStream fs: fs.Flush(toDisk); break;
+                case CompressorStreamBase csb: csb.Flush(toDisk); break;
+                default: stream.Flush(); break;
+            }
+
+            return stream;
+        }
+
+        /// <summary>
         /// Attempts to determine which compressor selection to use for the given <paramref name="filePath"/> by looking at the file's last few characters.
         /// <para/>.lz4 -> CompressorSelect.LZ4 and .gz -> CompressorSelect.GZip.
         /// </summary>
@@ -124,7 +144,7 @@ namespace Mosaic.ToolsLib.Compression
                 case CompressorSelect.None: return "";
                 case CompressorSelect.LZ4: return Constants.LZ4FileExtension;
                 case CompressorSelect.GZip: return Constants.GZipFileExtension;
-                default: new System.ArgumentException($"{compressorSelect} is not a valid value", "compressorSelect").Throw(); return null;
+                default: new System.ArgumentException($"{compressorSelect} is not a valid value", nameof(compressorSelect)).Throw(); return null;
             }
         }
 
@@ -140,7 +160,7 @@ namespace Mosaic.ToolsLib.Compression
                 case CompressorSelect.None: return (targetStream) => new PassThroughCompressor(targetStream, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
                 case CompressorSelect.LZ4: return (targetStream) => new LZ4.LZ4CompressorStream(targetStream, compressionLevel: compressionLevel, chaining: true, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
                 case CompressorSelect.GZip: return (targetStream) => new GZip.GZipCompressorStream(targetStream, compressionLevel: compressionLevel, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
-                default: new System.ArgumentException($"{compressorSelect} is not a valid value", "compressorSelect").Throw(); return null;
+                default: new System.ArgumentException($"{compressorSelect} is not a valid value", nameof(compressorSelect)).Throw(); return null;
             }
         }
 
@@ -166,7 +186,7 @@ namespace Mosaic.ToolsLib.Compression
                 case CompressorSelect.None: return (sourceStream) => new PassThroughDecompressor(sourceStream, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
                 case CompressorSelect.LZ4: return (sourceStream) => new LZ4.LZ4DecompressorStream(sourceStream, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
                 case CompressorSelect.GZip: return (sourceStream) => new GZip.GZipDecompressorStream(sourceStream, leaveStreamOpen: leaveStreamOpen, nvs: nvs);
-                default: new System.ArgumentException($"{compressorSelect} is not a valid value", "compressorSelect").Throw(); return null;
+                default: new System.ArgumentException($"{compressorSelect} is not a valid value", nameof(compressorSelect)).Throw(); return null;
             }
         }
 
@@ -285,7 +305,7 @@ namespace Mosaic.ToolsLib.Compression
         /// </summary>
         protected System.IO.Stream TargetStream { get; private set; }
 
-        private long initialTargetStreamPosition;
+        private readonly long initialTargetStreamPosition;
 
         /// <summary>
         /// Gives the file extension string that is (generally) used with this compressor.
@@ -384,11 +404,21 @@ namespace Mosaic.ToolsLib.Compression
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Flush()
         {
+            Flush(false);
+        }
+
+        /// <summary>
+        /// Allows caller to request that a Flush operation using the <paramref name="toDisk"/> parameter as supported by the
+        /// underlying <see cref="FileStream.Flush(bool)"/> method.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public virtual void Flush(bool toDisk)
+        {
             this.ThrowIfDisposed(mesg: "Flush cannot be used after Close or Dispose");
 
             FlushEngine();
 
-            TargetStream.Flush();
+            TargetStream.FlushEx(toDisk);
         }
 
         /// <summary>

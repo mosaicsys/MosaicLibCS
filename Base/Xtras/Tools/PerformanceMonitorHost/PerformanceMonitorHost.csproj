@@ -59,9 +59,9 @@
     <None Include="app.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">
+    <ProjectReference Include="..\..\..\MosaicLibCSBase.csproj">
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
-      <Name>MosaicLibCSBase2010</Name>
+      <Name>MosaicLibCSBase</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\PartsLib\MosaicLibCS_PartsLib\MosaicLibCS_PartsLibBase.csproj">
       <Project>{510022EC-7C35-4F8A-B1C7-2471E1DE8678}</Project>

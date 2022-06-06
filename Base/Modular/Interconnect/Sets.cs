@@ -180,7 +180,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             isi = isi ?? Sets.Instance;
 
-            ITrackableSet set = null;
+            ITrackableSet set;
 
             if (!setID.UUID.IsNullOrEmpty())
                 set = isi.FindSetByUUID(setID.UUID);
@@ -198,6 +198,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
     /// <summary>
     /// "namespace" class, with singleton Instance property, used to handle registration (and unregistration) of ITrackableSets.  
     /// Provides Find methods to allow a client to find registered sets by the set name or the set UUID.
+    /// <para/>This class is also the implementation class that implements the <see cref="ISetsInterconnection"/> interface.
     /// </summary>
     public class Sets : ISetsInterconnection
     {
@@ -206,8 +207,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>
         /// AutoConstruct singleton Instance of the Sets class that may be used when an explicit Sets instance is not provided.
         /// </summary>
-        public static ISetsInterconnection Instance { get { return singletonHelper.Instance; } }
-        private static SingletonHelperBase<ISetsInterconnection> singletonHelper = new SingletonHelperBase<ISetsInterconnection>(() => new Sets());
+        public static ISetsInterconnection Instance 
+        { 
+            get { return singletonHelper.Instance; } 
+            set { singletonHelper.Instance = value; } 
+        }
+
+        private static readonly SingletonHelperBase<ISetsInterconnection> singletonHelper = new SingletonHelperBase<ISetsInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new Sets());
 
         #endregion
 
@@ -328,11 +334,14 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         #region private fields and methods
 
+        /// <summary>
+        /// Constructor.
+        /// </summary>
         public Sets() { }
 
         private readonly object mutex = new object();
-        private Dictionary<string, ITrackableSet> uuidToSetDictionary = new Dictionary<string, ITrackableSet>();
-        private Dictionary<string, List<ITrackableSet>> nameToListOfSetsDictionary = new Dictionary<string, List<ITrackableSet>>();
+        private readonly Dictionary<string, ITrackableSet> uuidToSetDictionary = new Dictionary<string, ITrackableSet>();
+        private readonly Dictionary<string, List<ITrackableSet>> nameToListOfSetsDictionary = new Dictionary<string, List<ITrackableSet>>();
 
         #endregion
     }
@@ -879,7 +888,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             : this(rhs.SetID, rhs.SetType, SetChangeability.Fixed, UpdateState.Initial, false)
         {
             // our copy constructor automatically locks the mutex object, if any, from the rhs before making the copy.
-            using (ScopedLock sc = new ScopedLock(rhs.itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(rhs.itemContainerListMutex))
             {
                 UpdateState = rhs.UpdateState.MergeWith(UpdateState.InProgress);
 
@@ -1071,7 +1080,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         { 
             get 
             {
-                using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+                using (var sc = new ScopedLockStruct(itemContainerListMutex))
                 {
                     return itemListSeqNumRangeInfo;
                 }
@@ -1095,7 +1104,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{object} elements.</summary>
         ItemAndSeqNum<object>[] ISet.ToItemAndSeqNumArray()
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return itemContainerList.Select((itemContainer) => new ItemAndSeqNum<object>() { ItemSeqNum = itemContainer.SeqNum, Item = itemContainer.Item}).ToArray();
             }
@@ -1108,7 +1117,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         public void CopyTo(Array array, int arrayIndex)
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 int listCount = itemContainerList.Count;
                 int getIdx = 0, putIdx = arrayIndex;
@@ -1156,7 +1165,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         public bool Contains(TObjectType item)
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return itemContainerList.Any((itemContainer) => object.ReferenceEquals(itemContainer.Item, item));
             }
@@ -1167,7 +1176,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         public void CopyTo(TObjectType[] array, int arrayIndex)
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 int listCount = itemContainerList.Count;
                 int getIdx = 0, putIdx = arrayIndex;
@@ -1203,7 +1212,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 default: ThrowOnFixedOrDoesNotHaveAMutex(); break;
             }
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 InnerRemoveAll(null, true);
 
@@ -1221,7 +1230,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             get { return _capacity; } 
             set 
             {
-                using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+                using (var sc = new ScopedLockStruct(itemContainerListMutex))
                 {
                     ThrowOnFixed();
 
@@ -1261,7 +1270,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             ThrowOnFixedOrDoesNotHaveAMutex();
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 InnerAdd(item);
 
@@ -1277,7 +1286,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             ThrowOnFixedOrDoesNotHaveAMutex();
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 bool returnValue = InnerRemoveFirst((listItem) => Object.ReferenceEquals(listItem, item));
 
@@ -1296,7 +1305,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             get
             {
-                using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+                using (var sc = new ScopedLockStruct(itemContainerListMutex))
                 {
                     return itemContainerList[index].Item;
                 }
@@ -1306,7 +1315,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Generates and returns the contents of this set as an array of TObjectType items.</summary>
         public TObjectType[] ToArray()
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return itemContainerList.Select((itemContainer) => itemContainer.Item).ToArray();
             }
@@ -1315,7 +1324,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{TObjectType} elements.</summary>
         public ItemAndSeqNum<TObjectType>[] ToItemAndSeqNumArray()
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return itemContainerList.Select((itemContainer) => new ItemAndSeqNum<TObjectType>() { ItemSeqNum = itemContainer.SeqNum, Item = itemContainer.Item }).ToArray();
             }
@@ -1324,7 +1333,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Generates and returns a Copy type set derived from the current set.</summary>
         public SetBase<TObjectType> CreateCopy()
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return new SetBase<TObjectType>(this) { SetType = SetType.Copy };
             }
@@ -1337,7 +1346,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             get
             {
-                using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+                using (var sc = new ScopedLockStruct(itemContainerListMutex))
                 {
                     return itemListSeqNumRangeInfo.Count;
                 }
@@ -2288,7 +2297,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 if (lastSetCopySeqNum != trackingSourceSet.SeqNum)
                     return true;
 
-                using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+                using (var sc = new ScopedLockStruct(itemContainerListMutex))
                 {
                     return ((lastSetCopy == null) || !(itemListSeqNumRangeInfo.IsEqualTo(lastSetCopy.ItemListSeqNumRangeInfo)));
                 }
@@ -2301,7 +2310,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         public virtual ITrackingSet PerformUpdateIteration(int maxDeltaItemCount = 0)
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 InnerPerformUpdateIteration(maxDeltaItemCount, false);
             }
@@ -2323,7 +2332,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             SetDelta<TObjectType> setDelta = null;
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 setDelta = InnerPerformUpdateIteration(maxDeltaItemCount, createSetDelta: generateSetDelta);
             }
@@ -2643,7 +2652,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             bool allowRemove = applyDeltasConfig.AllowItemsToBeRemoved;
             Func<TObjectType, bool> addItemFilter = applyDeltasConfig.AddItemFilter;
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 addedItemContainerList = addedItemContainerList ?? new List<ItemContainer>();
                 removedItemContainerList = removedItemContainerList ?? new List<ItemContainer>();
@@ -2745,7 +2754,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Creates and returns a tracking set that can be used to track this tracking set set.</summary>
         public ITrackingSet<TObjectType> CreateTrackingSet()
         {
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 return new TrackingSet<TObjectType>(this);
             }
@@ -2779,7 +2788,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             ThrowIfDeltaSetIDDoesNotMatch(setDelta);
             ThrowIfTObjectTypeIsNotUsableWithDataContractSerialization();
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 if (setDelta is SetDelta<TObjectType>)
                     dca.WriteObject((SetDelta<TObjectType>)setDelta, intoStream);
@@ -2795,7 +2804,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             ThrowIfTObjectTypeIsNotUsableWithDataContractSerialization();
 
-            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            using (var sc = new ScopedLockStruct(itemContainerListMutex))
             {
                 SetDelta<TObjectType> setDelta = dca.ReadObject(fromStream);
                 return setDelta;

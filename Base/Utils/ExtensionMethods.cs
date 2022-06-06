@@ -612,6 +612,26 @@ namespace MosaicLib.Utils
             return list;
         }
 
+        /// <summary>Adds the given <paramref name="fromList"/> set of items to the given <paramref name="intoList"/> and returns it (to support call chaining)</summary>
+        public static List<TItemType> SafeAddItems<TItemType>(this List<TItemType> intoList, IList<TItemType> fromList, int startAtOffset = 0, int maxItemsToAdd = -1)
+        {
+            if (fromList != null && intoList != null)
+            {
+                var numAvailableItemsInFromList = fromList.Count - startAtOffset;
+                var numItemsToAdd = (maxItemsToAdd == -1) ? numAvailableItemsInFromList : Math.Min(maxItemsToAdd, numAvailableItemsInFromList);
+
+                var finalIntoListCount = intoList.Count + numItemsToAdd;
+                if (intoList.Capacity < finalIntoListCount)
+                    intoList.Capacity = finalIntoListCount;
+
+                var finalOffset = startAtOffset + numItemsToAdd;
+                for (var index = startAtOffset; index < finalOffset; index++)
+                    intoList.Add(fromList[index]);
+            }
+
+            return intoList;
+        }
+
         [Obsolete("This method is being replaced with similarly named SafeAddItems nomenclature now used with params itemsArray.  Please convert to using the new naming. (2017-11-01)")]
         public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, ItemType item, params ItemType[] itemSetArray)
         {
@@ -666,7 +686,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects
+        #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects, SetToString
 
         /// <summary>
         /// Non-generic IEnumerable centric method to allow IEnumerable contents to be injected into other LINQ expressions.
@@ -704,8 +724,17 @@ namespace MosaicLib.Utils
                 if (obj is TItemType || itemTypeIsObject)
                     yield return ((TItemType) obj);
             }
+        }
 
-            yield break;
+        /// <summary>
+        /// Iterative transform method that takes each item from the given <paramref name="set"/> and returns the item converted to a string using the SafeToString method.
+        /// </summary>
+        public static IEnumerable<string> SafeSetToString<TItemType>(this IEnumerable<TItemType> set, string mapNullItemTo = "", ExceptionFormat caughtExceptionToStringFormat = ExceptionFormat.TypeAndMessage)
+        {
+            foreach (var item in set ?? Collections.EmptyArrayFactory<TItemType>.Instance)
+            {
+                yield return item.SafeToString(mapNullTo: mapNullItemTo, caughtExceptionToStringFormat: caughtExceptionToStringFormat);
+            }
         }
 
         #endregion
@@ -721,7 +750,10 @@ namespace MosaicLib.Utils
                 collection.Add(firstItem);
 
                 if (!moreItemsArray.IsNullOrEmpty())
-                    moreItemsArray.DoForEach(item => collection.Add(item));
+                {
+                    foreach (var item in moreItemsArray)
+                        collection.Add(item);
+                }
             }
 
             return collection;
@@ -731,8 +763,11 @@ namespace MosaicLib.Utils
         public static TCollection SafeAddRange<TCollection, TItem>(this TCollection collection, IEnumerable<TItem> itemSet)
             where TCollection : ICollection<TItem>
         {
-            if (itemSet != null && collection != null)
-                itemSet.DoForEach(item => collection.Add(item));
+            if (collection != null)
+            {
+                foreach (var item in itemSet.MapNullToEmpty())
+                    collection.Add(item);
+            }
 
             return collection;
         }
@@ -1712,15 +1747,45 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
-        /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/> if the caller does not explicitly provide a non-default <paramref name="eqCmp"/> instance to use.
         /// </summary>
-        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp = null)
+        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set)
         {
-            eqCmp = eqCmp ?? EqualityComparer<TItemType>.Default;
+            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(WhereIsNotDefaultHelperClass<TItemType>.IsNotEqualToDefaultValueDelegate);
+        }
 
-            var defaultForTItemType = default(TItemType);
+        /// <summary>
+        /// Private helper class allows the static class constructor to pre-initialize a number of helper values and types for use in the WhereIsNotDefault EMs.
+        /// </summary>
+        /// <typeparam name="TItemType"></typeparam>
+        private static class WhereIsNotDefaultHelperClass<TItemType>
+        {
+            /// <summary>Gives the default value for {TItemType}</summary>
+            public static readonly TItemType DefaultValue = default(TItemType);
 
-            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, defaultForTItemType));
+            /// <summary>Gives the default equality comparer for {TItemType}</summary>
+            public static readonly IEqualityComparer<TItemType> DefaultEqualiyComparer = EqualityComparer<TItemType>.Default;
+
+            /// <summary>
+            /// Returns true if the given <paramref name="item"/> is equal to its default valueu using the default equality comparer
+            /// </summary>
+            public static bool DoesNotEqualDefaultValue(TItemType item)
+            {
+                return !DefaultEqualiyComparer.Equals(item, DefaultValue);
+            }
+
+            public static readonly Func<TItemType, bool> IsNotEqualToDefaultValueDelegate = DoesNotEqualDefaultValue;
+        }
+
+        /// <summary>
+        /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
+        /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/>.
+        /// </summary>
+        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp)
+        {
+            if (eqCmp == null)
+                return set.WhereIsNotDefault();
+            else
+                return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, WhereIsNotDefaultHelperClass<TItemType>.DefaultValue));
         }
 
         /// <summary>
@@ -1752,7 +1817,34 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Type related extension methods
+        #region Type related extension methods (SafeGetDeclaredExpressionType, TypeHelper, SafeGetInstanceType)
+
+        /// <summary>
+        /// Obtains and returns the declared type of given <paramref name="expression"/>.
+        /// <para/>returns <see cref="TypeHelper{TItemType}.Type"/> without regard to any actual target instance that the given <paramref name="expression"/> refers to.
+        /// </summary>
+        public static Type SafeGetDeclaredExpressionType<TItemType>(this TItemType expression)
+        {
+            return TypeHelper<TItemType>.Type;
+        }
+
+        /// <summary>
+        /// Type helper class.  Contains a single static <see cref="Type"/> field that is initialized to the typeof(<typeparamref name="TItemType"/>).
+        /// </summary>
+        public static class TypeHelper<TItemType>
+        {
+            /// <summary>Initialized to typeof(<typeparamref name="TItemType"/>)</summary>
+            public static readonly Type Type = typeof(TItemType);
+        }
+
+        /// <summary>
+        /// Attempts to obtain and return the <see cref="System.Type"/> from the given <paramref name="instance"/> using its GetType method.
+        /// If the given <paramref name="instance"/> is null then this method returns the given <paramref name="mapNullTo"/> value in its place.
+        /// </summary>
+        public static Type SafeGetInstanceType(this object instance, Type mapNullTo = null)
+        {
+            return (instance != null) ? instance.GetType() : mapNullTo;
+        }
 
         /// <summary>
         /// returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)
@@ -1772,7 +1864,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string GetTypeDigestName(this Type type, bool recursive = true)
         {
-            return type.ToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
+            return type.SafeToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
         }
 
         /// <summary>
@@ -1986,6 +2078,13 @@ namespace MosaicLib.Utils
 
                 StringBuilder sb = new StringBuilder("Exception");
 
+                var aex = ex as System.AggregateException;
+                if (aex != null && aex.InnerExceptions.Count == 1)
+                {
+                    sb.Append(" Aggregate.Only");
+                    ex = aex.InnerExceptions[0];
+                }
+
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeType))
                     sb.AppendFormat(" Type:{0}", ex.GetType());
 
@@ -2098,7 +2197,7 @@ namespace MosaicLib.Utils
         public static bool SafeEquals<TItemType>(this TItemType item, TItemType other) where TItemType : IEquatable<TItemType>
         {
             if (item != null)
-                return item.Equals(other);
+                return EqualityComparer<TItemType>.Default.Equals(item, other);
 
             return (other == null);
         }
@@ -2109,7 +2208,7 @@ namespace MosaicLib.Utils
         public static int SafeGetHashCode<TItemType>(this TItemType item, int hashCodeForNull = -1)
         {
             if (item != null)
-                return item.GetHashCode();
+                return EqualityComparer<TItemType>.Default.GetHashCode(item);
 
             return hashCodeForNull;
         }
@@ -2210,7 +2309,7 @@ namespace MosaicLib.Utils
     {
         #region general static [] comparison methods
 
-        /// <summary>Returns true if both arrays, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both arrays, a and b, have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
         {
             if (a == null && b == null)
@@ -2220,17 +2319,19 @@ namespace MosaicLib.Utils
             if (a.Length != b.Length)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Length;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 
             return true;
         }
 
-        /// <summary>Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both the array and the list have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -2240,17 +2341,19 @@ namespace MosaicLib.Utils
             if (a.Length != b.Count)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Length;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 
             return true;
         }
 
-        /// <summary>Returns true if both of the lists, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both of the lists, a and b, have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(IList<ItemType> a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -2260,10 +2363,12 @@ namespace MosaicLib.Utils
             if (a.Count != b.Count)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Count;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 

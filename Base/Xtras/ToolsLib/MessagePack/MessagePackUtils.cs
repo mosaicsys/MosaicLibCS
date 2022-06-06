@@ -102,7 +102,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     }
 
     /// <summary>
-    /// This class is responsible for converting between VC notation and MesgPack notation.
+    /// This class is responsible for converting between <see cref="ValueContainer"/> notation and MesgPack notation.
     /// </summary>
     public class VCFormatter : IMessagePackFormatter<ValueContainer>, IMessagePackFormatter
     {
@@ -324,7 +324,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                         if (mapItemCount == 1 && mapKeyMPType == MessagePackType.Extension)
                             return HandleDeserializeVCWithExtPrefix(ref mpReader, options);
                         else
-                            return HandleDeserialzeUnexpectedMapBodyToNVS(ref mpReader, mapItemCount, options);
+                            return HandleDeserializeUnexpectedMapBodyToNVS(ref mpReader, mapItemCount, options);
                     }
                 default:
                     if (mpHeaderFormat >= MPHeaderByteCode.PositiveFixInt_First && mpHeaderFormat <= MPHeaderByteCode.PositiveFixInt_Last)
@@ -353,7 +353,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     return ValueContainer.Create(mpReader.ReadBytes()?.First.ToArray());
 
                 case MessagePackType.Map:   // this is not the normal way to read an NVS as it is usually prefixed with an extension record.
-                    return HandleDeserialzeUnexpectedMapBodyToNVS(ref mpReader, mpReader.ReadMapHeader(), options);
+                    return HandleDeserializeUnexpectedMapBodyToNVS(ref mpReader, mpReader.ReadMapHeader(), options);
 
                 case MessagePackType.Extension:
                     // NOTE: this is not the normal way to encounter an ext block for VC decoding.  Normally the extension block is the key item in a FixMap1.
@@ -446,7 +446,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             return ValueContainer.CreateA($"MPDeserializeWithExtPrefix: Skipped unknown Extension MesgPack block [mpt:{mesgPackType}, mphf:{mpHeaderFormat}, et:{mpExtType}, len:{extHdr.Length}]");
         }
 
-        private ValueContainer HandleDeserialzeUnexpectedMapBodyToNVS(ref MessagePackReader mpReader, int mapItemCount, MessagePackSerializerOptions options)
+        private ValueContainer HandleDeserializeUnexpectedMapBodyToNVS(ref MessagePackReader mpReader, int mapItemCount, MessagePackSerializerOptions options)
         {
             var nvs = new NamedValueSet();
 
@@ -529,6 +529,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// <summary>
     /// This class is responsible for converting between NVS notation and MesgPack notation.
     /// <para/>contents are serialized using Map notation where the keys are the string nv.Names for each nv in the corresponding nvs and the map values use VCFormatter serialization.
+    /// <para/>Supports use with <see cref="NamedValueSet"/> and <see cref="INamedValueSet"/> types.
     /// </summary>
     public class NVSFormatter : IMessagePackFormatter<INamedValueSet>, IMessagePackFormatter<NamedValueSet>, IMessagePackFormatter
     {
@@ -581,6 +582,58 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
 
             return nvs.MakeReadOnly();
+        }
+    }
+
+    /// <summary>
+    /// This class is responsible for converting between KVCSet notation and MesgPack notation.
+    /// <para/>contents are serialized using Map notation where the keys are the string key names for each kvc instance in the set and the map values use VCFormatter serialization.
+    /// </summary>
+    /// <remarks>
+    /// Note: This formatter must use the same MP level object structure as the <see cref="NVSFormatter"/> does in order that emitted KVCSets can be read using
+    /// the <see cref="NVSFormatter"/>'s Deserialize method.
+    /// </remarks>
+    public class KVCSetFormatter : IMessagePackFormatter<ICollection<KeyValuePair<string, ValueContainer>>>, IMessagePackFormatter
+    {
+        public static readonly KVCSetFormatter Instance = new KVCSetFormatter();
+
+        public void Serialize(ref MessagePackWriter mpWriter, ICollection<KeyValuePair<string, ValueContainer>> kvcSet, MessagePackSerializerOptions options)
+        {
+            if (kvcSet != null)
+            {
+                var kvcCount = kvcSet.Count;
+                mpWriter.WriteMapHeader(kvcCount);
+
+                for (int idx = 0; idx < kvcCount; idx++)
+                {
+                    var kvc = kvcSet.ElementAt(idx);
+                    mpWriter.Write(kvc.Key);
+                    VCFormatter.Instance.Serialize(ref mpWriter, kvc.Value, options);
+                }
+            }
+            else
+            {
+                mpWriter.WriteNil();
+            }
+        }
+
+        public ICollection<KeyValuePair<string, ValueContainer>> Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
+        {
+            if (mpReader.TryReadNil())
+                return null;
+
+            int mapItemCount = mpReader.ReadMapHeader();
+
+            var setArray = new KeyValuePair<string, ValueContainer>[mapItemCount];
+
+            for (int idx = 0; idx < mapItemCount; idx++)
+            {
+                var name = mpReader.ReadString();
+                var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
+                setArray[idx] = KVP.Create(name, vc);
+            }
+
+            return setArray;
         }
     }
 
@@ -1000,6 +1053,60 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     }
 
     /// <summary>
+    /// Provides a MessagePack formatter that makes use of the <see cref="System.Runtime.Serialization.Json.DataContractJsonSerializer"/>
+    /// </summary>
+    /// <typeparam name="TItemType"></typeparam>
+    public class DataContractJsonSerializationFormatter<TItemType> : IMessagePackFormatter<TItemType>, IMessagePackFormatter
+    {
+        public static readonly DataContractJsonSerializationFormatter<TItemType> Instance = new DataContractJsonSerializationFormatter<TItemType>();
+
+        private static readonly Type itemType = typeof(TItemType);
+
+        public System.Runtime.Serialization.Json.DataContractJsonSerializerSettings Settings { get; set; }
+
+        private XmlObjectSerializer Serializer
+        {
+            get
+            {
+                return _Serializer ?? (_Serializer = new System.Runtime.Serialization.Json.DataContractJsonSerializer(itemType, Settings));
+            }
+        }
+        private XmlObjectSerializer _Serializer;
+
+
+        public void Serialize(ref MessagePackWriter mpWriter, TItemType item, MessagePackSerializerOptions options)
+        {
+            using (var ms = new System.IO.MemoryStream())
+            {
+                using (var xmlWriter = System.Runtime.Serialization.Json.JsonReaderWriterFactory.CreateJsonWriter(ms, System.Text.Encoding.UTF8, ownsStream: false, indent: false))
+                {
+                    Serializer.WriteObject(xmlWriter, item);
+
+                    xmlWriter.Flush();
+                    xmlWriter.Close();
+                }
+
+                mpWriter.Write(System.Text.UTF8Encoding.Default.GetString(ms.ToArray()));
+            }
+        }
+
+        private static readonly System.Xml.OnXmlDictionaryReaderClose ignoreOnClosed = _ => { };
+
+        public TItemType Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
+        {
+            var str = mpReader.ReadString();
+
+            using (var ms = new System.IO.MemoryStream(System.Text.UTF8Encoding.Default.GetBytes(str)))
+            {
+                using (var xmlReader = System.Runtime.Serialization.Json.JsonReaderWriterFactory.CreateJsonReader(ms, System.Text.Encoding.UTF8, System.Xml.XmlDictionaryReaderQuotas.Max, ignoreOnClosed))
+                {
+                    return (TItemType)Serializer.ReadObject(xmlReader);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Formatter Resolver used with ValueContainer serialization.
     /// <para/>ValueContainer => VCFormatter, 
     /// <para/>INVS => INVSFormatter, 
@@ -1119,8 +1226,8 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         }
 
         private IDictionary<Type, IMessagePackFormatter> roFormatterDictionary = ReadOnlyIDictionary<Type, IMessagePackFormatter>.Empty;
-        private object formatterDictionaryMutex = new object();
-        private Dictionary<Type, IMessagePackFormatter> formatterDictionary = new Dictionary<Type, IMessagePackFormatter>();
+        private readonly object formatterDictionaryMutex = new object();
+        private readonly Dictionary<Type, IMessagePackFormatter> formatterDictionary = new Dictionary<Type, IMessagePackFormatter>();
 
         protected static class LocalConstants
         {
@@ -1154,20 +1261,20 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// <para/>Values ArrayOfCSTBase to ArrayOfCSTBase + 29 are reserved for arrays of mapped versions of the ContainerStorageType (current max value is 21).  Only the CST values that are not known by context are used here.
     /// </summary>
     /// <remarks>
-    ///-1	DateTime MessagePack-spec reserved for timestamp
-    ///30	Vector2[]	for Unity, UnsafeBlitFormatter
-    ///31	Vector3[]	for Unity, UnsafeBlitFormatter
-    ///32	Vector4[]	for Unity, UnsafeBlitFormatter
-    ///33	Quaternion[]	for Unity, UnsafeBlitFormatter
-    ///34	Color[]	for Unity, UnsafeBlitFormatter
-    ///35	Bounds[]	for Unity, UnsafeBlitFormatter
-    ///36	Rect[]	for Unity, UnsafeBlitFormatter
-    ///37	Int[]	for Unity, UnsafeBlitFormatter
-    ///38	Float[]	for Unity, UnsafeBlitFormatter
-    ///39	Double[]	for Unity, UnsafeBlitFormatter
-    ///98	All MessagePackCompression.Lz4BlockArray
-    ///99	All MessagePackCompression.Lz4Block
-    ///100	object TypelessFormatter
+    ///<para/>-1	DateTime MessagePack-spec reserved for timestamp
+    ///<para/>30	Vector2[]	for Unity, UnsafeBlitFormatter
+    ///<para/>31	Vector3[]	for Unity, UnsafeBlitFormatter
+    ///<para/>32	Vector4[]	for Unity, UnsafeBlitFormatter
+    ///<para/>33	Quaternion[]	for Unity, UnsafeBlitFormatter
+    ///<para/>34	Color[]	for Unity, UnsafeBlitFormatter
+    ///<para/>35	Bounds[]	for Unity, UnsafeBlitFormatter
+    ///<para/>36	Rect[]	for Unity, UnsafeBlitFormatter
+    ///<para/>37	Int[]	for Unity, UnsafeBlitFormatter
+    ///<para/>38	Float[]	for Unity, UnsafeBlitFormatter
+    ///<para/>39	Double[]	for Unity, UnsafeBlitFormatter
+    ///<para/>98	All MessagePackCompression.Lz4BlockArray
+    ///<para/>99	All MessagePackCompression.Lz4Block
+    ///<para/>100	object TypelessFormatter
     /// </remarks>
     public enum MPExtensionType : sbyte
     {

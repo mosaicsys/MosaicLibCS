@@ -131,7 +131,8 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// This enumeration is used to define obtional behaviors for the overall part.
     /// <para/>None (0x00), PerformActionPublishesActionInfo (0x01), UseMainThreadFailedState (0x02), MainThreadStartSetsStateToOffline (0x04), MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline (0x08),
-    /// MainThreadStopSetsStateToStoppedIfOffline (0x10), PerformMainLoopServiceCallsServiceBusyConditionChangeDetection (0x20), DisableActionInfoRelatedIVAUsage (0x40)
+    /// MainThreadStopSetsStateToStoppedIfOffline (0x10), PerformMainLoopServiceCallsServiceBusyConditionChangeDetection (0x20), 
+    /// DisableActionInfoRelatedIVAUsage (0x40), EnableSharedActionStateMutexObjectUsage (0x80)
     /// </summary>
     [Flags]
     public enum SimpleActivePartBehaviorOptions
@@ -146,23 +147,45 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         PerformActionPublishesActionInfo = 0x01,
 
-        /// <summary>When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended. [0x02]</summary>
+        /// <summary>
+        /// When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended. [0x02]
+        /// </summary>
         UseMainThreadFailedState = 0x02,
 
-        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Offline when the part is started provided that the state is still in its Undefined or Initial state.  [0x04]</summary>
+        /// <summary>
+        /// When this behavior is selected, the MainThreadFcn will set the UseState to Offline when the part is started provided that the state is still in its Undefined or Initial state.  [0x04]
+        /// </summary>
         MainThreadStartSetsStateToOffline = 0x04,
 
-        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is in an IsOnlineOrAttemptOnline state.  [0x08]</summary>
+        /// <summary>
+        /// When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is in an IsOnlineOrAttemptOnline state.  [0x08]
+        /// </summary>
         MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline = 0x08,
 
-        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is Offline.  [0x10]</summary>
+        /// <summary>
+        /// When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is Offline.  [0x10]
+        /// </summary>
         MainThreadStopSetsStateToStoppedIfOffline = 0x10,
 
-        /// <summary>When this behavior is selected, the PerformMainLoopService will call ServiceBusyConditionChangeDetection.  When not selected, only the MainThreadFcn will call this method. [0x20]</summary>
+        /// <summary>
+        /// When this behavior is selected, the PerformMainLoopService will call ServiceBusyConditionChangeDetection.  
+        /// When not selected, only the MainThreadFcn will call this method. [0x20]
+        /// </summary>
         PerformMainLoopServiceCallsServiceBusyConditionChangeDetection = 0x20,
 
-        /// <summary>When this behavior is selected, the ActionInfo and LastActionInfo IVA's will not be used.  This allows more fine scale IVA usage controls than is available with the DisablePartBaseIVIUse option by itself. [0x40]</summary>
+        /// <summary>
+        /// When this behavior is selected, the ActionInfo and LastActionInfo IVA's will not be used.  
+        /// This allows more fine scale IVA usage controls than is available with the DisablePartBaseIVIUse option by itself. [0x40]
+        /// </summary>
         DisableActionInfoRelatedIVAUsage = 0x40,
+
+        /// <summary>
+        /// When this behavior is selected, the primary ActionQueue will have a non-null SharedActionStateMutex assigned and all Action Implementation instances
+        /// that are created from this ActionQueue will make use of that object instance as their actionStateMutex instance.
+        /// When this behavior is not selected, Action Implementation objects created using this part will continue to use the prior mutex instance per action implemntation instance as was used previously.
+        /// [0x80] 
+        /// </summary>
+        EnableSharedActionStateMutexObjectUsage = 0x80,
     }
 
     /// <summary>
@@ -194,6 +217,7 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// Implementation object for IActionInfo.  This class is immutable.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Namespace = Constants.ModularNameSpace), Serializable]
     public class ActionInfo : IActionInfo
     {
@@ -321,7 +345,6 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Support for DataContract serialization of this object</summary>
         [DataMember(Order = 300, Name = "ActionState")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This property is used for DataContract serialization")]
         private ActionStateCopy ActionStateCopy
         {
             get { return new ActionStateCopy(ActionState); }
@@ -686,7 +709,7 @@ namespace MosaicLib.Modular.Part
         #endregion
 
         //-----------------------------------------------------------------
-        #region CTOR and DTOR (et. al.)
+        #region Constructor and Dispose pattern methods (et. al.)
 
         /// <summary>
         /// Constructor variant: caller provides PartID.
@@ -755,6 +778,9 @@ namespace MosaicLib.Modular.Part
 
 			actionQ = new ActionQueue(partID + ".q", enableQueue, queueSize);
 
+            if (settings.CheckFlag(SimpleActivePartBehaviorOptions.EnableSharedActionStateMutexObjectUsage))
+                actionQ.SharedActionStateMutex = new object();
+
             IBasicNotificationList notificiationList = actionQ.NotifyOnEnqueue;
             notificiationList.AddItem(threadWakeupNotifier);
             AddExplicitDisposeAction(() => 
@@ -770,7 +796,7 @@ namespace MosaicLib.Modular.Part
             else if (settings.registerPartWith != null)
                 settings.registerPartWith.RegisterPart(this);
 
-            disableActionInfoRelatedIVAUsage = settings.SimpleActivePartBehaviorOptions.IsSet(SimpleActivePartBehaviorOptions.DisableActionInfoRelatedIVAUsage) || settings.simplePartBaseSettings.DisablePartBaseIVIUse;
+            disableActionInfoRelatedIVAUsage = settings.CheckFlag(SimpleActivePartBehaviorOptions.DisableActionInfoRelatedIVAUsage) || settings.simplePartBaseSettings.DisablePartBaseIVIUse;
         }
 
         /// <summary>
@@ -781,6 +807,12 @@ namespace MosaicLib.Modular.Part
         /// explicitDiposeAction to the list thereof by calling the PartBaseBase.AddExplicitDisposeAction to add such an action to the PartBaseBase's
         /// list of such actions that it will invoke (in LIFO order) when it is being disposed.
         /// </summary>
+        /// <remarks>
+        /// Once a part has been started, it cannot be removed using the GC/Finalizer pattern as the thread that is "running" the part
+        /// will hold a reference to the part on its stack.  As such only unstarted and/or fully stopped parts are subject to removal/disposal
+        /// triggered by the GC/Finalization of the part.  In addition, because part threads normally use foreground threads, the hosting process may be
+        /// unable to fully close if any started part is not stopped or disposed prior to attempting to close the hosting process in the normal manner.
+        /// </remarks>
 		protected sealed override void Dispose(DisposeType disposeType)
 		{
 			if (disposeType == DisposeType.CalledExplicitly)
@@ -825,7 +857,7 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         protected new SimpleActivePartBaseSettings settings = new SimpleActivePartBaseSettings();
 
-        private bool disableActionInfoRelatedIVAUsage = false;
+        private readonly bool disableActionInfoRelatedIVAUsage;
 
         [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
         public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke  { get { return settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke; } protected set { settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke = value; } }
@@ -854,11 +886,15 @@ namespace MosaicLib.Modular.Part
         [Obsolete("Please replace the use of this property with use of the corresponding one in the part's Settings (2017-01-20)")]
         protected TimeSpan WaitTimeLimit { get { return settings.WaitTimeLimit; } set { settings.WaitTimeLimit = value; } }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
         [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
         protected TimeSpan waitTimeLimit { get { return settings.WaitTimeLimit; } set { settings.WaitTimeLimit = value; } }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
         [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
         protected static TimeSpan maxWaitTimeLimit { get { return SimpleActivePartBaseSettings.maxWaitTimeLimit; } }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
         [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
         protected static TimeSpan minWaitTimeLimit { get { return SimpleActivePartBaseSettings.minWaitTimeLimit; } }
 
@@ -1049,8 +1085,7 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         public virtual IStringParamAction CreateServiceAction(string serviceName) 
 		{
-            IStringParamAction action = new StringActionImpl(actionQ, serviceName, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
-			return action;
+            return CreateServiceAction(serviceName, null);
 		}
 
         /// <summary>
@@ -1058,23 +1093,27 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         public virtual IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues)
         {
-            IStringParamAction action = new StringActionImpl(actionQ, serviceName, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
+            return CreateServiceAction(serviceName, namedParamValues, ActionLoggingReference);
+        }
+
+        /// <summary>
+        /// Method creates a Service Action using the <paramref name="serviceName"/> and <paramref name="namedParamValues"/> as the param value and NamedParamValues.
+        /// </summary>
+        protected IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues, ActionLogging actionLoggingReference)
+        {
+            IStringParamAction action = new StringActionImpl(actionQ, serviceName, PerformServiceAction, "Service", actionLoggingReference) as IStringParamAction;
             action.NamedParamValues = namedParamValues;
 
             return action;
         }
 
-        // provide default CreateServiceAction method that creates one that will fail
-        //	when it is run.  Sub-class may override the given DoRunServiceAction method
-        //	to implement the ability to run services
+        #endregion
 
-		#endregion
-
-		//-----------------------------------------------------------------
-		#region INotifyable Members
+        //-----------------------------------------------------------------
+        #region INotifyable Members
 
         /// <summary>Implementation method for the INotifyable interface.  Requests that the Part's thread wakeup if it is waiting on the threadWakeupNotifier.</summary>
-		public virtual void Notify()
+        public virtual void Notify()
 		{
 			threadWakeupNotifier.Notify();
 		}
@@ -1411,8 +1450,8 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-        private List<System.Action> mainThreadStartingActionList = new List<System.Action>();
-        private List<System.Action> mainThreadStoppingActionList = new List<System.Action>();
+        private readonly List<System.Action> mainThreadStartingActionList = new List<System.Action>();
+        private readonly List<System.Action> mainThreadStoppingActionList = new List<System.Action>();
 
         /// <summary>
         /// Adds the given <paramref name="action"/> to the list of actions that will be performed by the MainThreadFcn just before it enters its main spin loop.
@@ -1640,7 +1679,7 @@ namespace MosaicLib.Modular.Part
         private System.Threading.Thread mainThread = null;
 
         /// <summary>Protected field used to define the default ActionLogging instance that is cloned when creating new actions.</summary>
-        private ActionLogging actionLoggingReference = null;
+        private readonly ActionLogging actionLoggingReference;
 
         /// <summary>
         /// Protected get only access to the property that is used by the Part to reference its underlying default ActionQueue instance.  
@@ -1648,10 +1687,11 @@ namespace MosaicLib.Modular.Part
         protected ActionQueue ActionQueue { get { return actionQ; } }
 
         /// <summary>
+        /// This get/private set property
         /// Protected get only access to the property that is used by the Part to reference its underlying default ActionQueue instance.  
         /// This property is using the symbol name of a prior field to permit get-only access in derived classes.
         /// </summary>
-        protected ActionQueue actionQ { get; private set; }
+        protected readonly ActionQueue actionQ;
 
         /// <summary>Returns true if all ActionQueues are empty.</summary>
         protected override bool AreAllActionQueuesEmpty { get { return ActionQueue.IsEmpty; } }

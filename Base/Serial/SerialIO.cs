@@ -56,11 +56,11 @@ namespace MosaicLib.SerialIO
         Custom,
 	};
 
-	//-----------------------------------------------------------------
+    //-----------------------------------------------------------------
 
-	/// <summary>
+    /// <summary>
     /// This struct contains all of the information that is used to define the type and behavior of a SerialIO.Port.  
-	/// Valid SpecStr values:
+    /// Valid SpecStr values:
     ///	<para/>	&lt;ComPort port='com1' uartConfig='9600,n,8,1'/&gt;
     ///	<para/>	&lt;ComPort port='com200'&gt;&lt;UartConfig baud='9600' DataBits='8' Mode='rs232-3wire' Parity='none' StopBits='1'/&gt;&lt;/ComPort&gt;
     ///	<para/>	&lt;TcpClient addr='127.0.0.1' port='5002'/&gt;
@@ -77,8 +77,9 @@ namespace MosaicLib.SerialIO
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
         /// <param name="lineTerm">Sets both the RxLineTerm and TxLineTerm properties from this value.</param>
-        public PortConfig(string name, string specStr, LineTerm lineTerm) 
-            : this(name, specStr, lineTerm, lineTerm) 
+        /// <param name="disablePartBaseIVIUsage">When this passed as false then the <see cref="PartBaseIVI"/> property is set to <see cref="Values.Instance"/>.  Whn this is passed as true then the <see cref="PartBaseIVI"/> is set to null.</param>
+        public PortConfig(string name, string specStr, LineTerm lineTerm, bool disablePartBaseIVIUsage = false)
+            : this(name, specStr, lineTerm, lineTerm, disablePartBaseIVIUsage: disablePartBaseIVIUsage)
         { }
 
         /// <summary>Constructor for packetized communication using one or more packet end strings to deliniate packets</summary>
@@ -89,10 +90,11 @@ namespace MosaicLib.SerialIO
         /// Selects packetized reception if this value is a non-empty array
         /// </param>
         /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
-        public PortConfig(string name, string specStr, string[] rxPacketEndStrArray, LineTerm txLineTerm) 
-            : this(name, specStr, LineTerm.Custom, txLineTerm) 
-        { 
-            RxPacketEndStrArray = rxPacketEndStrArray; 
+        /// <param name="disablePartBaseIVIUsage">When this passed as false then the <see cref="PartBaseIVI"/> property is set to <see cref="Values.Instance"/>.  Whn this is passed as true then the <see cref="PartBaseIVI"/> is set to null.</param>
+        public PortConfig(string name, string specStr, string[] rxPacketEndStrArray, LineTerm txLineTerm, bool disablePartBaseIVIUsage = false)
+            : this(name, specStr, LineTerm.Custom, txLineTerm, disablePartBaseIVIUsage: disablePartBaseIVIUsage)
+        {
+            RxPacketEndStrArray = rxPacketEndStrArray;
         }
 
         /// <summary>Constructor for packetized communication using client provided custom PacketEndScannerDelegate</summary>
@@ -100,8 +102,9 @@ namespace MosaicLib.SerialIO
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
         /// <param name="rxPacketEndScannerDelegate">Selects that the client will use packetized reception using this custom delegate to to detect packet boundaries.</param>
         /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
-        public PortConfig(string name, string specStr, PacketEndScannerDelegate rxPacketEndScannerDelegate, LineTerm txLineTerm)
-            : this(name, specStr, LineTerm.Custom, txLineTerm)
+        /// <param name="disablePartBaseIVIUsage">When this passed as false then the <see cref="PartBaseIVI"/> property is set to <see cref="Values.Instance"/>.  Whn this is passed as true then the <see cref="PartBaseIVI"/> is set to null.</param>
+        public PortConfig(string name, string specStr, PacketEndScannerDelegate rxPacketEndScannerDelegate, LineTerm txLineTerm, bool disablePartBaseIVIUsage = false)
+            : this(name, specStr, LineTerm.Custom, txLineTerm, disablePartBaseIVIUsage: disablePartBaseIVIUsage)
         {
             RxPacketEndScannerDelegate = rxPacketEndScannerDelegate;
         }
@@ -114,9 +117,10 @@ namespace MosaicLib.SerialIO
         /// Also sets TrimWhitespaceOnRx (and thus requires use of packetized reception) if LineTerm is neither None nor Custom.
         /// </param>
         /// <param name="txLineTerm">Sets the TxLineTerm property from this value.</param>
-        public PortConfig(string name, string specStr, LineTerm rxLineTerm, LineTerm txLineTerm)
-			: this(name, specStr)
-		{ 
+        /// <param name="disablePartBaseIVIUsage">When this passed as false then the <see cref="PartBaseIVI"/> property is set to <see cref="Values.Instance"/>.  Whn this is passed as true then the <see cref="PartBaseIVI"/> is set to null.</param>
+        public PortConfig(string name, string specStr, LineTerm rxLineTerm, LineTerm txLineTerm, bool disablePartBaseIVIUsage = false)
+            : this(name, specStr, disablePartBaseIVIUsage: disablePartBaseIVIUsage)
+        {
             TrimWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
             DetectWhitespace |= TrimWhitespaceOnRx;
 
@@ -125,17 +129,18 @@ namespace MosaicLib.SerialIO
         }
 
         /// <summary>
-        /// Standard basic constructor - requires name and specStr.  Sets many properties to their default values.
+        /// Standard basic constructor - requires <paramref name="name"/> and <paramref name="specStr"/>.  Sets many properties to their default values.
         /// </summary>
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
-        public PortConfig(string name, string specStr)
+        /// <param name="disablePartBaseIVIUsage">When this passed as false then the <see cref="PartBaseIVI"/> property is set to <see cref="Values.Instance"/>.  Whn this is passed as true then the <see cref="PartBaseIVI"/> is set to null.</param>
+        public PortConfig(string name, string specStr, bool disablePartBaseIVIUsage = false)
             : this()
         {
             Name = name;
             SpecStr = specStr;
 
-            PartBaseIVI = Values.Instance;
+            PartBaseIVI = !disablePartBaseIVIUsage ? Values.Instance : null;
             IConfig = Config.Instance;
 
             EnableAutoReconnect = false;
@@ -163,7 +168,7 @@ namespace MosaicLib.SerialIO
             TxBufferSize = 4096;
         }
 
-        /// <summary>Returns a new PortConfig instance derived from the given cloneFrom copy but with a new name and specStr value.</summary>
+        /// <summary>Returns a new PortConfig instance derived from the given <paramref name="cloneFrom"/> copy but with a new <paramref name="name"/> and <paramref name="specStr"/> value.</summary>
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
         /// <param name="cloneFrom">Gives the instance from which to copy all fields/Properties except the Name and SpecStr from.</param>

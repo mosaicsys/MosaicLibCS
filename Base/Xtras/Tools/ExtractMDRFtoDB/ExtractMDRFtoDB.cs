@@ -295,7 +295,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
         }
 
         private static string appName = "AppNameNotFound";
-        private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+        private static readonly System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
 
         public class ErrorMessageException : System.Exception
         {
@@ -761,8 +761,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public List<IMDRF2QueryRecord<string>> MessageList { get; private set; } = new List<IMDRF2QueryRecord<string>>();
             public List<IMDRF2QueryRecord<string>> ErrorList { get; private set; } = new List<IMDRF2QueryRecord<string>>();
             public List<IMDRF2QueryRecord> ObjectList { get; private set; } = new List<IMDRF2QueryRecord>();
-
-            VCEHelper vceHelper = new VCEHelper();
         }
 
         public class VCEHelper
@@ -1359,9 +1357,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            object mutex = new object();
+            private readonly object  mutex = new object();
 
-            SQLiteConnection dbConn;
+            private SQLiteConnection dbConn;
         }
 
         public class CSVDataWriter : DisposableBase, IDataWriter
@@ -1378,8 +1376,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     });
             }
 
-            ExtractMDRFtoDB.Settings Settings { get; set; }
-            string baseFileName, extensionToUse;
+            private ExtractMDRFtoDB.Settings Settings { get; set; }
+            private readonly string baseFileName;
+            private readonly string extensionToUse;
 
             public void WriteContent(ExtractMDRFtoDB.MDRFContent mdrfContent)
             {
@@ -1504,13 +1503,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            object mutex = new object();
+            private readonly object mutex = new object();
 
-            DisposableList<System.IO.StreamWriter> fileStreamDisposableList = new DisposableList<StreamWriter>();
+            private DisposableList<System.IO.StreamWriter> fileStreamDisposableList = new DisposableList<StreamWriter>();
 
             System.IO.StreamWriter occurrenceFileStream;
 
-            Dictionary<string, GroupWriteHelper> groupWriteHelperDictionary = new Dictionary<string, GroupWriteHelper>();
+            private readonly Dictionary<string, GroupWriteHelper> groupWriteHelperDictionary = new Dictionary<string, GroupWriteHelper>();
          
             private class GroupWriteHelper
             {

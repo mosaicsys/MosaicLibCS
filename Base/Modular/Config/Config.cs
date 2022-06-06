@@ -21,15 +21,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.ServiceModel;
 using System.Runtime.Serialization;
-using System.Collections.Specialized;
-using System.Configuration;
 using System.Linq;
 using System.Text;
 using System.Collections;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Time;
 using MosaicLib.Utils;
@@ -377,8 +373,9 @@ namespace MosaicLib.Modular.Config
         /// This method attempts to add this given provider to the set that are used by this instance.
         /// <para/>Recommended practice is that each provider use a unique Name and that they provide non-overlapping sets of keys.  
         /// However no logic enforces, nor strictly requires, that either condition be true.
+        /// <para/>Supports call chaining.
         /// </summary>
-        void AddProvider(IConfigKeyProvider provider);
+        IConfig AddProvider(IConfigKeyProvider provider);
 
         /// <summary>
         /// This property generates and returns an array of information about the currently registered providers.
@@ -865,6 +862,25 @@ namespace MosaicLib.Modular.Config
     /// </summary>
     public static class Config
     {
+        #region Logger and Trace default log gates - if these are updated before accessing the Config.Instance then they allow the singleton's log gates to be correspondingly changed.
+
+        /// <summary>
+        /// This static property is used to initialize the internal Logger gating used for all ConfigBase instances (if they do not override the default at construction time).
+        /// <para/>Defaults to <see cref="Logging.LogGate.All"/>
+        /// </summary>
+        public static Logging.LogGate DefaultLoggerLogGate { get { return defaultLoggerLogGate; } set { defaultLoggerLogGate = value; } }
+
+        /// <summary>
+        /// This static property is used to initialize the internal Trace logger gating used for all ConfigBase instances (if they do not override the default at construction time).
+        /// <para/>Defaults to <see cref="Logging.LogGate.All"/>
+        /// </summary>
+        public static Logging.LogGate DefaultTraceLogGate { get { return defaultTraceLogGate; } set { defaultTraceLogGate = value; } }
+
+        private static Logging.LogGate defaultLoggerLogGate = Logging.LogGate.All;
+        private static Logging.LogGate defaultTraceLogGate = Logging.LogGate.All;
+
+        #endregion
+
         #region Singleton instance
 
         /// <summary>Gives the caller get and set access to the singleton Configuration instance that is used to access application wide configuration information.</summary>
@@ -1018,18 +1034,20 @@ namespace MosaicLib.Modular.Config
     /// Base class which may be used as the base for IConfig implementation classes.  
     /// This class is used directly as the default IConfig implementation class.
 	/// </summary>
-	public class ConfigBase : IConfig, IConfigInternal, IEnumerable, IServiceable
+	public class ConfigBase : IConfig, IConfigInternal, IEnumerable, IServiceable, IEnumerable<IConfigKeyAccess>
     {
         #region Construction and loggers
 
         /// <summary>
-        /// Named constructor.  Creates Logger and Trace from given name.
+        /// Named constructor.  Creates Logger and Trace from given <paramref name="name"/>.
+        /// <paramref name="loggerLogGate"/> and <paramref name="traceLogGate"/> can be used to specify the initial Logger and Trace log gates.
+        /// <para/>When either is missing, the corresponding DefaultLoggerLogGate/DefaultTraceLogGate value.
         /// </summary>
-        public ConfigBase(string name)
+        public ConfigBase(string name, Logging.LogGate? loggerLogGate = null, Logging.LogGate ? traceLogGate = null)
         {
             Name = name;
-            Logger = new Logging.ConfigLogger(name, Logging.LookupDistributionGroupName, Logging.LogGate.All);
-            Trace = new Logging.ConfigLogger(name + ".Trace", Logging.LookupDistributionGroupName, Logging.LogGate.All);
+            Logger = new Logging.ConfigLogger(name, Logging.LookupDistributionGroupName, loggerLogGate ?? Config.DefaultLoggerLogGate);
+            Trace = new Logging.ConfigLogger(name + ".Trace", Logging.LookupDistributionGroupName, traceLogGate ?? Config.DefaultTraceLogGate);
         }
 
         /// <summary>
@@ -1047,12 +1065,17 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected Logging.ILogger Trace { get; private set; }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        IEnumerator<IConfigKeyAccess> IEnumerable<IConfigKeyAccess>.GetEnumerator()
         {
             lock (mutex)
             {
-                return allKnownKeysDictionary.Values.ToArray().GetEnumerator();
+                return allKnownKeysDictionary.Values.ToList().GetEnumerator();
             }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return ((IEnumerable<IConfigKeyAccess>)this).GetEnumerator();
         }
 
         /// <summary>This get/set property allows client code to obtain and modify the instance log gate that this IConfig instance is using with its main logger.</summary>
@@ -1065,12 +1088,8 @@ namespace MosaicLib.Modular.Config
 
         #region IConfig (Providers, Logging)
 
-        /// <summary>
-        /// This method attempts to add this given provider to the set that are used by this instance.
-        /// <para/>Recommended practice is that each provider use a unique Name and that they provide non-overlapping sets of keys.  
-        /// However no logic enforces, nor strictly requires, that either condition be true.
-        /// </summary>
-        public void AddProvider(IConfigKeyProvider provider)
+        /// <inheritdoc/>
+        public IConfig AddProvider(IConfigKeyProvider provider)
         {
             lock (mutex)
             {
@@ -1078,6 +1097,8 @@ namespace MosaicLib.Modular.Config
 
                 Logger.Debug.Emit("Added provider:'{0}' base flags:{1}", provider.Name, provider.BaseFlags);
             }
+
+            return this;
         }
 
         /// <summary>
@@ -1392,7 +1413,7 @@ namespace MosaicLib.Modular.Config
             methodName = methodName + " [TryGetCKA]";
 
             keyAccessSpec = keyAccessSpec ?? emptyKeyAccessSpec;
-            ConfigKeyAccessFlags flags = keyAccessSpec.Flags;
+            ConfigKeyAccessFlags callerKeyAccessFlags = keyAccessSpec.Flags;
 
             string mappedKey = InnerMapSanitizedName(keyAccessSpec.Key);
             IConfigKeyAccessSpec mappedKeyAccessSpec = ((mappedKey == keyAccessSpec.Key) ? keyAccessSpec : new ConfigKeyAccessSpec(keyAccessSpec) { Key = mappedKey });
@@ -1409,12 +1430,12 @@ namespace MosaicLib.Modular.Config
                 lock (mutex)
                 {
                     // if the client is asking for a ReadOnlyOnce key and we have already seen this key as a read only once key then return a clone of the previously seen version.
-                    if (flags.ReadOnlyOnce && readOnlyOnceKeyDictionary.TryGetValue(mappedKey ?? String.Empty, out ckaiRoot) && ckaiRoot != null)
+                    if (callerKeyAccessFlags.ReadOnlyOnce && readOnlyOnceKeyDictionary.TryGetValue(mappedKey ?? String.Empty, out ckaiRoot) && ckaiRoot != null)
                     {
                         // if the client provided any meta data then merge it into the root ROO key.
-                        MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec.MetaData, keyAccessSpec.MergeBehavior, notifyClients: true);
+                        MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec, notifyClients: true);
 
-                        if (!flags.SilenceLogging)
+                        if (!callerKeyAccessFlags.SilenceLogging)
                             Trace.Trace.Emit("{0}: Using clone of prior instance:{1} [ROO]", methodName, ckaiRoot.ToString(ToStringDetailLevel.Full));
                     }
 
@@ -1422,9 +1443,9 @@ namespace MosaicLib.Modular.Config
                     if (ckaiRoot == null && allKnownKeysDictionary.TryGetValue(mappedKey ?? String.Empty, out ckaiRoot) && ckaiRoot != null && !ckaiRoot.ProviderFlags.KeyWasNotFound)
                     {
                         // if the client provided any meta data then merge it into the root normal key
-                        MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec.MetaData, keyAccessSpec.MergeBehavior, notifyClients: true);
+                        MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec, notifyClients: true);
 
-                        if (!flags.SilenceLogging)
+                        if (!callerKeyAccessFlags.SilenceLogging)
                             Trace.Trace.Emit("{0}: Starting with clone of prior instance:{1}", methodName, ckaiRoot.ToString(ToStringDetailLevel.Full));
 
                         tryUpdate = !ckaiRoot.ValueIsFixed;     // if we find an old key that does not have a fixed value then attempt to update the new key in case the persisted value has changed since the key was first seen.
@@ -1436,7 +1457,7 @@ namespace MosaicLib.Modular.Config
                     {
                         // no existing IConfigKeyAccess was found (ckaiRoot).  Search through the providers to see which one (if any) can provide an accessor for this (mapped) key.
 
-                        IConfigKeyProvider defaultProvider = defaultProvider = (!defaultProviderName.IsNullOrEmpty() ? providerList.Array.FirstOrDefault(p => p.Name == defaultProviderName) : null);
+                        IConfigKeyProvider defaultProvider = (!defaultProviderName.IsNullOrEmpty() ? providerList.Array.FirstOrDefault(p => p.Name == defaultProviderName) : null);
                         IConfigKeyAccess ickaFromProvider = ((defaultProvider != null) ? defaultProvider.GetConfigKeyAccess(mappedKeyAccessSpec) : null);
 
                         if (ickaFromProvider != null)
@@ -1454,14 +1475,14 @@ namespace MosaicLib.Modular.Config
                             }
                         }
 
-                        if (ickaFromProvider != null && !flags.SilenceLogging && ickaFromProvider.ResultCode.IsNullOrEmpty() && ickaFromProvider.ProviderInfo != null)
+                        if (ickaFromProvider != null && !callerKeyAccessFlags.SilenceLogging && ickaFromProvider.ResultCode.IsNullOrEmpty() && ickaFromProvider.ProviderInfo != null)
                         {
                             Trace.Trace.Emit("{0}: Found provider: {1}", methodName, ickaFromProvider.ProviderInfo.Name);
                         }
 
                         if (ickaFromProvider == null && ensureExists)
                         {
-                            IConfigKeyProvider provider = defaultProvider ?? providerList.Array.FirstOrDefault(p => p.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption);
+                            IConfigKeyProvider provider = ((defaultProvider != null && defaultProvider.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption) ? defaultProvider : null) ?? providerList.Array.FirstOrDefault(p => p.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption);
                             ValueContainer defaultValue = defaultValueIn ?? ValueContainer.Empty;
 
                             // NOTE: historically (unit test code) you can use EE for items with a Null default value, but not for items with a None default value.
@@ -1473,7 +1494,7 @@ namespace MosaicLib.Modular.Config
 
                                 if (ickaFromProvider != null)
                                 {
-                                    if (!flags.SilenceLogging)
+                                    if (!callerKeyAccessFlags.SilenceLogging)
                                         Trace.Trace.Emit("{0}: created key '{1}' using provider '{2}'", methodName, mappedKeyAccessSpec.Key, provider.Name);
 
                                     NoteClientVisibleChange(ensureExists: true);
@@ -1490,13 +1511,13 @@ namespace MosaicLib.Modular.Config
                                 ckaiRoot.ConfigInternal = this;
 
                                 // when adding a new ckai to the known set, merge any MetaData from the client provided keyAccessSpec into the root instance.
-                                MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec.MetaData, keyAccessSpec.MergeBehavior, notifyClients: false);
+                                var keyMDChanged = MergeMetaDataIfNeeded(ckaiRoot, keyAccessSpec, notifyClients: false);
 
                                 allKnownKeysDictionary[mappedKey] = ckaiRoot;
                                 if (ickaFromProvider.Flags.ReadOnlyOnce)
                                     readOnlyOnceKeyDictionary[mappedKey] = ckaiRoot;
 
-                                NoteClientVisibleChange(keyAdded: true, keyMetaDataChange: !keyAccessSpec.MetaData.IsNullOrEmpty());
+                                NoteClientVisibleChange(keyAdded: true, keyMetaDataChange: keyMDChanged);
                             }
                             else
                             {
@@ -1511,18 +1532,23 @@ namespace MosaicLib.Modular.Config
 
                 if (ckaiRoot != null)
                 {
-                    ickaReturn = new ConfigKeyAccessImpl(ckaiRoot) { Flags = flags };
+                    ickaReturn = new ConfigKeyAccessImpl(ckaiRoot) { Flags = callerKeyAccessFlags };
                 }
                 else
                 {
                     // we did not find or create an ckaiRoot (from which to clone an accessor to give back to the caller).  As such the key was not found, nor created, by any provider.
-                    var ckai = new ConfigKeyAccessImpl(mappedKey, flags, keyAccessSpec.MetaData, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
+
+                    var adjustedMD = keyAccessSpec.MetaData;
+                    if (callerKeyAccessFlags.ReadOnlyOnce && !adjustedMD.Contains(Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword))
+                        adjustedMD = adjustedMD.ConvertToWritable().SetKeyword(Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword);
+
+                    var ckai = new ConfigKeyAccessImpl(mappedKey, callerKeyAccessFlags, adjustedMD, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
                     if (defaultValueIn != null)
                         ckai.VC = defaultValueIn ?? ValueContainer.Empty; 
 
                     ickaReturn = ckai;
 
-                    if (!flags.SilenceIssues && !flags.IsOptional)
+                    if (!callerKeyAccessFlags.SilenceIssues && !callerKeyAccessFlags.IsOptional)
                         Trace.Trace.Emit("{0}: {1}", methodName, ickaReturn.ResultCode);
                 }
 
@@ -1542,19 +1568,27 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// If required, merges the given <paramref name="keyMetaDataToMergeIn"/> into the current KeyMetaData in the given <paramref name="ckaiRoot"/> instance using the given <paramref name="mergeBehavior"/>.
+        /// If required, merges the given <paramref name="keyAccessSpec"/>.MetaData into the current KeyMetaData in the given <paramref name="ckaiRoot"/> instance.
         /// Also increments the CurrentMetaDataSeqNum in the ConfigKeyAccessImpl instance on which the merge is performed.
         /// </summary>
-        private bool MergeMetaDataIfNeeded(ConfigKeyAccessImpl ckaiRoot, INamedValueSet keyMetaDataToMergeIn, NamedValueMergeBehavior mergeBehavior, bool notifyClients = true)
+        private bool MergeMetaDataIfNeeded(ConfigKeyAccessImpl ckaiRoot, IConfigKeyAccessSpec keyAccessSpec, bool notifyClients = true)
         {
-            if (!keyMetaDataToMergeIn.IsNullOrEmpty() && ckaiRoot != null)
+            INamedValueSet metaDataToMergeIn = keyAccessSpec.MetaData;
+            NamedValueMergeBehavior mergeBehavior = keyAccessSpec.MergeBehavior;
+
+            var rooKeyword = Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword;
+
+            if (keyAccessSpec.Flags.ReadOnlyOnce && !metaDataToMergeIn.Contains(rooKeyword))
+                metaDataToMergeIn = metaDataToMergeIn.ConvertToWritable().SetKeyword(rooKeyword);
+
+            if (!metaDataToMergeIn.IsNullOrEmpty() && ckaiRoot != null)
             {
                 INamedValueSet entryKeyMetaData = ckaiRoot.KeyMetaData;
 
                 if (ckaiRoot.KeyMetaData.IsNullOrEmpty() || mergeBehavior == NamedValueMergeBehavior.Replace)
-                    ckaiRoot.KeyMetaData = keyMetaDataToMergeIn.ConvertToReadOnly().MapEmptyToNull();
+                    ckaiRoot.KeyMetaData = metaDataToMergeIn.ConvertToReadOnly().MapEmptyToNull();
                 else
-                    ckaiRoot.KeyMetaData = ckaiRoot.KeyMetaData.MergeWith(keyMetaDataToMergeIn, mergeBehavior);
+                    ckaiRoot.KeyMetaData = ckaiRoot.KeyMetaData.MergeWith(metaDataToMergeIn, mergeBehavior).ConvertToReadOnly();
 
                 ckaiRoot.IncrementMetaDataSeqNum();
                 ckaiRoot.MetaDataSeqNum = ckaiRoot.CurrentMetaDataSeqNum;       // merging is only done on the ckaiRoot so its MetaDataSeqNum (for cloaning) is always current.
@@ -1563,9 +1597,9 @@ namespace MosaicLib.Modular.Config
                     NoteClientVisibleChange(keyMetaDataChange: true);
 
                 if (entryKeyMetaData.IsNullOrEmpty())
-                    TraceEmitter.Emit("key '{0}' root instance MetaData is been initialized from '{1}'", ckaiRoot.Key, keyMetaDataToMergeIn.ToStringSML(traversalType: TraversalType.Flatten));
+                    TraceEmitter.Emit("key '{0}' root instance MetaData is been initialized from '{1}'", ckaiRoot.Key, metaDataToMergeIn.ToStringSML(traversalType: TraversalType.Flatten));
                 else
-                    TraceEmitter.Emit("key '{0}' root instance MetaData has been merged with '{1}' [{2}]", ckaiRoot.Key, keyMetaDataToMergeIn.ToStringSML(traversalType: TraversalType.Flatten), mergeBehavior);
+                    TraceEmitter.Emit("key '{0}' root instance MetaData has been merged with '{1}' [{2}]", ckaiRoot.Key, metaDataToMergeIn.ToStringSML(traversalType: TraversalType.Flatten), mergeBehavior);
 
                 return true;
             }
