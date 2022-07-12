@@ -55,9 +55,6 @@ namespace MosaicLib.Modular.Action
 	{
 		#region private class and instance fields
 
-		private const bool ActionQueueEnableDefault = false;
-        private const int ActionQueueSizeDefault = 10;
-
         /// <summary>Gives the name of this ActionQueue</summary>
         public string Name { get; private set; }
 
@@ -65,17 +62,28 @@ namespace MosaicLib.Modular.Action
 
         private readonly object queueMutex = new object();
 
-        private BasicNotificationList notifyOnEnqueueList = new BasicNotificationList();
+        private readonly BasicNotificationList notifyOnEnqueueList = new BasicNotificationList();
 
-        private int queueSize;
+        private readonly int queueSize;
         private volatile int volatileQueueCount = 0;
-        private LinkedList<IProviderFacet> queueLinkedList = new LinkedList<IProviderFacet>();
-        private LinkedList<IProviderFacet> freeNodeList = new LinkedList<IProviderFacet>();
+        private readonly LinkedList<IProviderFacet> queueLinkedList = new LinkedList<IProviderFacet>();
+        private readonly LinkedList<IProviderFacet> freeNodeList = new LinkedList<IProviderFacet>();
 
         private AtomicInt32 cancelRequestCount = new AtomicInt32(0);
         private int lastServicedCancelRequestCount = 0;
 
-		#endregion
+        #endregion
+
+        #region Support for use of the ActionQueue to hold a shared ActionStateMutex that action implementation objects can share.
+
+        /// <summary>
+        /// When this property is non-null all ActionImplBase objects that are created with this action queue instance will make use of this object
+        /// as their actionStateMutex object.  Normally this is set to be non-null in the SimpleActivePartBase constructor based on the given set of 
+        /// configuration options.
+        /// </summary>
+        public object SharedActionStateMutex { get; internal set; }
+
+        #endregion
 
         /// <summary>
         /// Constructor.  Requires a name, enabled flag and queueSize value.
@@ -83,7 +91,7 @@ namespace MosaicLib.Modular.Action
         /// <param name="name">Gives the name of this queue (typically derived from the Part's Name to which the Queue belongs)</param>
         /// <param name="enabled">Used to initialize the mQueueEnabled field.  Indicates if the Queue shall be enabled immediately.</param>
         /// <param name="queueSize">Defines the maximum number of actions that can be contained at any one time.</param>
-		public ActionQueue(string name, bool enabled, int queueSize) 
+        public ActionQueue(string name, bool enabled, int queueSize) 
 		{
 			Name = name;
             this.queueSize = queueSize;
@@ -287,7 +295,7 @@ namespace MosaicLib.Modular.Action
 					// The Queue has just been disabled
 					// Iterate using GetNextAction and complete each operation that it returns until the queue is empty
 
-					IProviderFacet ipf = null;
+					IProviderFacet ipf;
 
                     while ((ipf = GetNextAction()) != null)
                     {

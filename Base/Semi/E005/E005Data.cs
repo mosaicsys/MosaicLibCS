@@ -29,6 +29,7 @@ using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using System.Collections;
 
 namespace MosaicLib.Semi.E005.Data
 {
@@ -106,16 +107,47 @@ namespace MosaicLib.Semi.E005.Data
         Null = -3,
     }
 
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
     public static partial class ExtensionMethods
     {
         #region predicate helpers
 
-        /// <summary>
-        /// Returns true if the given ifc is equal to ItemFormatCode.L
-        /// </summary>
+        /// <summary>Returns true if the given <paramref name="ifc"/> is equal to ItemFormatCode.L</summary>
         public static bool IsList(this ItemFormatCode ifc)
         {
             return (ifc == ItemFormatCode.L);
+        }
+
+        /// <summary>Returns true if the given <paramref name="ifc"/> is equal to ItemFormatCode.None</summary>
+        public static bool IsNone(this ItemFormatCode ifc)
+        {
+            return (ifc == ItemFormatCode.None);
+        }
+
+        /// <summary>Returns true if the given <paramref name="ifc"/> is equal to ItemFormatCode.Null</summary>
+        public static bool IsNull(this ItemFormatCode ifc)
+        {
+            return (ifc == ItemFormatCode.Null);
+        }
+
+        /// <summary>Returns true if the given <paramref name="ifc"/> is equal to ItemFormatCode.Invalid</summary>
+        public static bool IsInvalid(this ItemFormatCode ifc)
+        {
+            return (ifc == ItemFormatCode.Invalid);
+        }
+
+        /// <summary>Returns true if the given <paramref name="ifc"/> is neither ItemFormatCode.None nor ItemFormatCode.Invalid</summary>
+        public static bool IsValid(this ItemFormatCode ifc)
+        {
+            return (ifc != ItemFormatCode.None && ifc != ItemFormatCode.Invalid);
+        }
+
+        /// <summary>Returns true if the given <paramref name="ifc"/> can be placed in an IH, false if not (ie value outside of range from 0 to 63)</summary>
+        public static bool IsUsableWithE005(this ItemFormatCode ifc) 
+        { 
+            return (((int)ifc >= 0 && (int)ifc <= 63) || ifc.IsNone()); 
         }
 
         #endregion
@@ -183,7 +215,7 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.String: ifc = ItemFormatCode.A; return true;      // this can actually be either A or W
                 case ContainerStorageType.Boolean: ifc = ItemFormatCode.Bo; return true;
                 case ContainerStorageType.Binary: ifc = ItemFormatCode.Bi; return true;
-                case ContainerStorageType.Object: ifc = ItemFormatCode.L; return true;
+                case ContainerStorageType.Object: ifc = ItemFormatCode.L; return true;  // this is not a great choice
                 case ContainerStorageType.SByte: ifc = ItemFormatCode.I1; return true;
                 case ContainerStorageType.Int16: ifc = ItemFormatCode.I2; return true;
                 case ContainerStorageType.Int32: ifc = ItemFormatCode.I4; return true;
@@ -211,7 +243,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public static partial class ExtensionMethods
     {
-        #region ValueContainer ConvertFrom/To methods
+        #region ValueContainer ConvertFrom/To methods (ConvertToE005Data, ConvertFromE005Data)
 
         public static byte[] ConvertToE005Data(this ValueContainer vc, bool throwOnException)
         {
@@ -226,7 +258,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex).Throw();
 
                 return emptyByteArray;
             }
@@ -243,7 +275,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex).Throw();
 
                 return ValueContainer.Empty;
             }
@@ -251,7 +283,7 @@ namespace MosaicLib.Semi.E005.Data
 
         #endregion
 
-        #region NamedValueSet ConvertFrom/To methods
+        #region NamedValueSet ConvertFrom/To methods (ConvertToE005Data, ConvertFromE005Data)
 
         public static byte[] ConvertToE005Data(this INamedValueSet nvs, bool throwOnException)
         {
@@ -266,7 +298,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nvs), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nvs), ex).Throw();
 
                 return emptyByteArray;
             }
@@ -283,7 +315,7 @@ namespace MosaicLib.Semi.E005.Data
                 int startIndex = 0;
                 string ec = string.Empty;
 
-                nvs =  nvs.ConvertFromE005Data(byteArray, ref startIndex, ref ec);
+                nvs = nvs.ConvertFromE005Data(byteArray, ref startIndex, ref ec);
 
                 if (!ec.IsNullOrEmpty())
                 {
@@ -301,7 +333,7 @@ namespace MosaicLib.Semi.E005.Data
             }
 
             if (exToThrow != null && throwOnException)
-                throw exToThrow;
+                exToThrow.Throw();
 
             return nvs;
         }
@@ -333,7 +365,7 @@ namespace MosaicLib.Semi.E005.Data
                     {
                         vcName = DecodeE005Data(byteArray, ref startIndex, ref ec);
 
-                        name = vcName.GetValue<string>(false);
+                        name = vcName.GetValueA(false);
                     }
 
                     if (ec.IsNullOrEmpty() && name.IsNullOrEmpty())
@@ -353,8 +385,103 @@ namespace MosaicLib.Semi.E005.Data
 
         #endregion
 
-        #region Append support methods (AppendWithIH variants, AppendIH, AppendContentBytes, AppendRaw variants)
+        #region NamedValue ConvertFrom/To methods(ConvertToE005Data, ConvertFromE005Data)
 
+
+        public static byte[] ConvertToE005Data(this INamedValue nv, bool throwOnException)
+        {
+            try
+            {
+                List<byte> byteArrayBuilder = new List<byte>();
+
+                byteArrayBuilder.AppendWithIH(nv);
+
+                return (byteArrayBuilder.ToArray());
+            }
+            catch (System.Exception ex)
+            {
+                if (throwOnException)
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nv), ex).Throw();
+
+                return emptyByteArray;
+            }
+        }
+
+        public static NamedValue ConvertFromE005Data(this NamedValue nv, byte[] byteArray, bool throwOnException)
+        {
+            System.Exception exToThrow = null;
+
+            try
+            {
+                int startIndex = 0;
+                string ec = string.Empty;
+
+                nv = nv.ConvertFromE005Data(byteArray, ref startIndex, ref ec);
+
+                if (!ec.IsNullOrEmpty())
+                {
+                    string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
+                    exToThrow = new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec), null);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                if (throwOnException)
+                {
+                    string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
+                    exToThrow = new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex), ex);
+                }
+            }
+
+            if (exToThrow != null && throwOnException)
+                exToThrow.Throw();
+
+            return nv;
+        }
+
+        public static NamedValue ConvertFromE005Data(this NamedValue nv, byte[] byteArray, ref int startIndex, ref string ec)
+        {
+            nv = nv.ConvertToWritable(mapNullToEmpty: true);
+
+            {
+                int nvListNumElements;
+
+                ItemFormatCode nvIFC = DecodeE005ItemHeader(byteArray, ref startIndex, ref ec, out nvListNumElements);
+
+                if ((!nvIFC.IsList() || (nvListNumElements != 2 && nvListNumElements != 1)) && ec.IsNullOrEmpty())
+                    ec = "nv root IFC.{0}/{1} must be a 1 or 2 element list".CheckedFormat(nvIFC, nvListNumElements);
+
+                ValueContainer vcName = ValueContainer.Empty, vcValue = ValueContainer.Empty;
+
+                if (ec.IsNullOrEmpty())
+                {
+                    vcName = DecodeE005Data(byteArray, ref startIndex, ref ec);
+
+                    nv.Name = vcName.GetValueA(false);
+                }
+
+                if (ec.IsNullOrEmpty() && nv.Name.IsNullOrEmpty())
+                    ec = "nv could not obtain non-empty name from {1}".CheckedFormat(vcName);
+
+                // leave the vcValue empty for 1 element lists.
+                if (ec.IsNullOrEmpty() && (nvListNumElements == 2))
+                    vcValue = DecodeE005Data(byteArray, ref startIndex, ref ec);
+
+                if (ec.IsNullOrEmpty())
+                    nv.VC = vcValue;
+            }
+
+            return nv;
+        }
+        #endregion
+
+        #region Append support methods (AppendWithIH variants, AppendListHeader, AppendIH, AppendContentBytes, AppendRaw variants)
+
+        /// <summary>
+        /// Appends the given object <paramref name="o"/> to the given <paramref name="byteArrayBuilder"/>.
+        /// Directly supports INamedValueSet, INamedValue, string [], and IList{string}.  
+        /// In all other cases it creates a ValueContainer for the given value and calls AppendWithIH on that.
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, object o)
         {
             if (o == null)
@@ -371,6 +498,11 @@ namespace MosaicLib.Semi.E005.Data
                 byteArrayBuilder.AppendWithIH(ValueContainer.CreateFromObject(o));
         }
 
+        /// <summary>
+        /// Appends the contents of the given <paramref name="vc"/> to the given <paramref name="byteArrayBuilder"/>.
+        /// Supported content (ContainerStorageType) types include: Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, A, IListOfString, INamedValueSet, INamedValue, arrays of supported value types, and IListOfVC for supported VC content types.
+        /// When given an unsupported type, this method simply appends the ToStringSML contents of the given <paramref name="vc"/> to the <paramref name="byteArrayBuilder"/> as a string.
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, ValueContainer vc)
         {
             // first take care of known value types and object types
@@ -389,8 +521,8 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.Single: byteArrayBuilder.AppendIH(ItemFormatCode.F4, 4); byteArrayBuilder.AppendRaw(vc.u.f32); return;
                 case ContainerStorageType.Double: byteArrayBuilder.AppendIH(ItemFormatCode.F8, 8); byteArrayBuilder.AppendRaw(vc.u.f64); return;
                 case ContainerStorageType.String: byteArrayBuilder.AppendWithIH(vc.o as string); return;
-                case ContainerStorageType.IListOfString: byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return;
-                case ContainerStorageType.IListOfVC: byteArrayBuilder.AppendWithIH(vc.GetValue<IList<ValueContainer>>(true)); return;
+                case ContainerStorageType.IListOfString: byteArrayBuilder.AppendWithIH(vc.GetValueLS(true)); return;
+                case ContainerStorageType.IListOfVC: byteArrayBuilder.AppendWithIH(vc.GetValueL(true)); return;
                 case ContainerStorageType.INamedValueSet: byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return;
                 case ContainerStorageType.INamedValue: byteArrayBuilder.AppendWithIH(vc.o as INamedValue); return;
                 case ContainerStorageType.Object:
@@ -402,18 +534,18 @@ namespace MosaicLib.Semi.E005.Data
                         else if (vc.o is INamedValueSet) { byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return; }
                         else if (vc.o is ValueContainer[]) { byteArrayBuilder.AppendWithIH(new List<ValueContainer>(vc.o as ValueContainer[] ?? emptyVCArray)); return; }
                         else if (vc.o is string[]) { byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return; }
-                        else if (oType == typeof(bool[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.Bo, 1, vc.o as bool[]); return; }
-                        else if (oType == typeof(sbyte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I1, 1, vc.o as sbyte[]); return; }
-                        else if (oType == typeof(short[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I2, 2, vc.o as short[]); return; }
-                        else if (oType == typeof(int[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I4, 4, vc.o as int[]); return; }
-                        else if (oType == typeof(long[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I8, 8, vc.o as long[]); return; }
-                        else if (oType == typeof(byte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U1, 1, vc.o as byte[]); return; }
-                        else if (oType == typeof(ushort[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U2, 2, vc.o as ushort[]); return; }
-                        else if (oType == typeof(uint[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U4, 4, vc.o as uint[]); return; }
-                        else if (oType == typeof(ulong[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, 8, vc.o as ulong[]); return; }
-                        else if (oType == typeof(float[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, 4, vc.o as float[]); return; }
-                        else if (oType == typeof(double[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, 8, vc.o as double[]); return; }
-                        else if (oType == typeof(BiArray)) {  byteArrayBuilder.AppendWithIH(ItemFormatCode.Bi, 1, (vc.o as BiArray).SafeToArray()) ; return; }
+                        else if (oType == typeof(bool[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.Bo, vc.o as bool[]); return; }
+                        else if (oType == typeof(sbyte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I1, vc.o as sbyte[]); return; }
+                        else if (oType == typeof(short[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I2, vc.o as short[]); return; }
+                        else if (oType == typeof(int[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I4, vc.o as int[]); return; }
+                        else if (oType == typeof(long[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I8, vc.o as long[]); return; }
+                        else if (oType == typeof(byte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U1, vc.o as byte[]); return; }
+                        else if (oType == typeof(ushort[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U2, vc.o as ushort[]); return; }
+                        else if (oType == typeof(uint[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U4, vc.o as uint[]); return; }
+                        else if (oType == typeof(ulong[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, vc.o as ulong[]); return; }
+                        else if (oType == typeof(float[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, vc.o as float[]); return; }
+                        else if (oType == typeof(double[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, vc.o as double[]); return; }
+                        else if (oType == typeof(BiArray)) {  byteArrayBuilder.AppendWithIH(ItemFormatCode.Bi, (vc.o as BiArray).SafeToArray()) ; return; }
                     }
 
                     break;
@@ -424,13 +556,20 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.AppendWithIH(vc.ToStringSML());     // fallback is always to handle it like a string
         }
 
+        /// <summary>
+        /// Gives an empty array of ValueContainer elements.
+        /// </summary>
         public static readonly ValueContainer[] emptyVCArray = EmptyArrayFactory<ValueContainer>.Instance;
 
+        /// <summary>
+        /// Appends the given <paramref name="nvs"/> to the given <paramref name="byteArrayBuilder"/>.
+        /// This consists of a list of the individual NamedValues from the given <paramref name="nvs"/> which are appending using the corresonding AppendWithIH variant.
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValueSet nvs)
         {
             nvs = nvs ?? NamedValueSet.Empty;
 
-            byteArrayBuilder.AppendIH(ItemFormatCode.L, nvs.Count);
+            byteArrayBuilder.AppendListHeader(nvs.Count);
 
             foreach (INamedValue nv in nvs)
             {
@@ -438,20 +577,25 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
+        /// <summary>
+        /// Appends the given <paramref name="nv"/> to the given <paramref name="byteArrayBuilder"/>.
+        /// If the <paramref name="nv"/> is not empty then this will consist of a two element list with the <paramref name="nv"/>.Name followed by the <paramref name="nv"/>.VC.
+        /// Otherwise if the <paramref name="nv"/> is empty it will consist of a one element list with just the <paramref name="nv"/>'s Name.
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValue nv)
         {
             nv = nv ?? NamedValue.Empty;
 
             if (!nv.VC.IsEmpty)
             {
-                byteArrayBuilder.AppendIH(ItemFormatCode.L, 2);
+                byteArrayBuilder.AppendListHeader(2);
 
                 byteArrayBuilder.AppendWithIH(nv.Name);
                 byteArrayBuilder.AppendWithIH(nv.VC);
             }
             else
             {
-                byteArrayBuilder.AppendIH(ItemFormatCode.L, 1);
+                byteArrayBuilder.AppendListHeader(1);
 
                 byteArrayBuilder.AppendWithIH(nv.Name);
 
@@ -459,6 +603,9 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
+        /// <summary>
+        /// Appends the given string <paramref name="s"/> to the given <paramref name="byteArrayBuilder"/> using either A or W representation as appropriate, depending on the contents of the given string.
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, string s)
         {
             s = s ?? string.Empty;
@@ -482,61 +629,143 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
+        /// <summary>
+        /// Appends the given <paramref name="stringList"/> list of strings to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, IList<string> stringList)
         {
             stringList = stringList ?? ReadOnlyIList<string>.Empty;
             int stringListCount = stringList.Count;
 
-            byteArrayBuilder.AppendIH(ItemFormatCode.L, stringListCount);
+            byteArrayBuilder.AppendListHeader(stringListCount);
 
             for (int idx = 0; idx < stringListCount; idx++)
                 byteArrayBuilder.AppendWithIH(stringList[idx]);
         }
 
+        /// <summary>
+        /// Appends the given <paramref name="stringArray"/> set of strings to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, string[] stringArray)
         {
             stringArray = stringArray ?? emptyStringArray;
 
-            byteArrayBuilder.AppendIH(ItemFormatCode.L, stringArray.Length);
+            byteArrayBuilder.AppendListHeader(stringArray.Length);
 
             foreach (string s in stringArray)
                 byteArrayBuilder.AppendWithIH(s);
         }
 
+        /// <summary>
+        /// Gives an empty array of strings.
+        /// </summary>
         public static readonly string [] emptyStringArray = EmptyArrayFactory<string>.Instance;
 
+        /// <summary>
+        /// Appends the given <paramref name="vcList"/> list of ValueContainer items to the given <paramref name="byteArrayBuilder"/>
+        /// </summary>
         public static void AppendWithIH(this List<byte> byteArrayBuilder, IList<ValueContainer> vcList)
         {
             vcList = vcList ?? emptyVCList;
 
-            byteArrayBuilder.AppendIH(ItemFormatCode.L, vcList.Count);
+            byteArrayBuilder.AppendListHeader(vcList.Count);
 
             int count = vcList.Count;
             for (int idx = 0; idx < count; idx++)
                 byteArrayBuilder.AppendWithIH(vcList[idx]);
         }
 
+        /// <summary>
+        /// Contains an Empty ReadOnlyIList{ValueContainer}
+        /// </summary>
         public static readonly IList<ValueContainer> emptyVCList = ReadOnlyIList<ValueContainer>.Empty;
 
-        internal static void AppendWithIH<TItemType>(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int itemSizeInBytes, TItemType[] itemArray) where TItemType : struct
+        /// <summary>
+        /// Appends an array of the given <typeparamref name="TItemType"/> to the given <paramref name="byteArrayBuilder"/>.  Caller must provide the matching <paramref name="ifc"/>.
+        /// <para/>Note the given itemSizeInBytes is ignored.
+        /// </summary>
+        public static void AppendWithIH<TItemType>(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int itemSizeInBytes, TItemType[] itemArray) where TItemType : struct
         {
+            byteArrayBuilder.AppendWithIH(ifc, itemArray);
+        }
+
+        /// <summary>
+        /// Appends an array of the given <typeparamref name="TItemType"/> to the given <paramref name="byteArrayBuilder"/>.  Caller must provide the <paramref name="ifc"/> that matches the given <typeparamref name="TItemType"/>.
+        /// <para/>Supports ItemFormatCodes: Bo, Bi, U1, U2, U4, U8, I1, I2, I4, I8, F4, F8
+        /// </summary>
+        /// <exception cref="UnsupportedTypeException">is thrown if the given <paramref name="ifc"/> is not one of the supported content types (listed above)</exception>
+        public static void AppendWithIH<TItemType>(this List<byte> byteArrayBuilder, ItemFormatCode ifc, TItemType[] itemArray) where TItemType : struct
+        {
+            itemArray = itemArray.MapNullToEmpty();
             int itemArrayLength = itemArray.SafeLength();
 
-            byteArrayBuilder.AppendIH(ifc, itemArrayLength * itemSizeInBytes);
-
-            ContainerStorageType itemCST = ContainerStorageType.None;
-            bool isNullable = false;
-            ValueContainer.DecodeType(typeof(TItemType), out itemCST, out isNullable);
-            ValueContainer vc = ValueContainer.Empty;
-
-            for (int idx = 0; idx < itemArrayLength; idx++)
+            switch (ifc)
             {
-                vc.SetValue(itemArray[idx], itemCST, isNullable);
-                byteArrayBuilder.AppendContentBytes(vc);
+                case ItemFormatCode.Bo:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 1);
+                    foreach (var item in (itemArray as bool[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.Bi:
+                case ItemFormatCode.U1:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 1);
+                    foreach (var item in (itemArray as byte[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.U2:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 2);
+                    foreach (var item in (itemArray as ushort[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.U4:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 4);
+                    foreach (var item in (itemArray as uint[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.U8:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 8);
+                    foreach (var item in (itemArray as ulong[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.I1:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 1);
+                    foreach (var item in (itemArray as sbyte[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.I2:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 2);
+                    foreach (var item in (itemArray as short[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.I4:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 4);
+                    foreach (var item in (itemArray as int[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.I8:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 8);
+                    foreach (var item in (itemArray as long[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.F4:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 4);
+                    foreach (var item in (itemArray as float[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                case ItemFormatCode.F8:
+                    byteArrayBuilder.AppendIH(ifc, itemArrayLength * 8);
+                    foreach (var item in (itemArray as double[])) { byteArrayBuilder.AppendRaw(item); }
+                    break;
+                default:
+                    new UnsupportedTypeException("{0} does not support use with ItemFormatCode.{1}".CheckedFormat(Fcns.CurrentMethodName, ifc)).Throw();
+                    break;
             }
         }
 
-        internal static void AppendIH(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int numItems)
+        /// <summary>
+        /// Appends a list header for a list with the given <paramref name="numItems"/> number of items to the given <paramref name="byteArrayBuilder"/>
+        /// <para/>Calls AppendIH(ItemFormatCode.L, <paramref name="numItems"/>)
+        /// </summary>
+        public static void AppendListHeader(this List<byte> byteArrayBuilder, int numItems)
+        {
+            byteArrayBuilder.AppendIH(ItemFormatCode.L, numItems);
+        }
+
+        /// <summary>
+        /// Appends an IH header for the given <paramref name="ifc"/> ItemFormatCode and <paramref name="numItems"/>.
+        /// <para/>The E005 IH header consists of a mixed type and <paramref name="numItems"/> count byte followed by between 1 and 3 bytes of the actual content byte count.
+        /// </summary>
+        public static void AppendIH(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int numItems)
         {
             byte umsb, ulsb, lmsb, llsb;
             Utils.Data.Unpack(unchecked((UInt32) Math.Max(0, numItems)), out umsb, out ulsb, out lmsb, out llsb);
@@ -567,6 +796,11 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
+        /// <summary>
+        /// Appends the raw contents of the given <paramref name="vc"/> to the given <paramref name="byteArrayBuilder"/>.
+        /// <para/>Supports ContainerStorageTypes: Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, and F8
+        /// </summary>
+        /// <exception cref="UnsupportedTypeException">is thrown if the given <paramref name="vc"/>'s value is not one of the supported content types (listed above)</exception>
         public static void AppendContentBytes(this List<byte> byteArrayBuilder, ValueContainer vc)
         {
             switch (vc.cvt)
@@ -583,26 +817,34 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.UInt64: byteArrayBuilder.AppendRaw(vc.u.u64); return;
                 case ContainerStorageType.Single: byteArrayBuilder.AppendRaw(vc.u.f32); return;
                 case ContainerStorageType.Double: byteArrayBuilder.AppendRaw(vc.u.f64); return;
-                default: throw new ConvertValueException("{0} cannot be used directly with {1}".CheckedFormat(Fcns.CurrentMethodName, vc), null);
+                default:
+                    new UnsupportedTypeException("{0} cannot be used directly with {1}".CheckedFormat(Fcns.CurrentMethodName, vc)).Throw();
+                    return;
             }
         }
 
+
+
+        /// <summary>Appends the raw contents of the given <paramref name="bo"/> to the given <paramref name="byteArrayBuilder"/></summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, bool bo)
         {
             byteArrayBuilder.Add(unchecked((byte)(bo ? 1 : 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="i8"/> to the given <paramref name="byteArrayBuilder"/></summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, sbyte i8)
         {
             byteArrayBuilder.Add(unchecked((byte)(i8 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="i16"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, short i16)
         {
             byteArrayBuilder.Add(unchecked((byte)(i16 >> 8)));
             byteArrayBuilder.Add(unchecked((byte)(i16 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="i32"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, int i32)
         {
             byteArrayBuilder.Add(unchecked((byte)(i32 >> 24)));
@@ -611,6 +853,7 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.Add(unchecked((byte)(i32 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="i64"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, long i64)
         {
             byteArrayBuilder.Add(unchecked((byte)(i64 >> 56)));
@@ -623,17 +866,20 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.Add(unchecked((byte)(i64 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="u8"/> to the given <paramref name="byteArrayBuilder"/></summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, byte u8)
         {
             byteArrayBuilder.Add(unchecked((byte)(u8 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="u16"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, ushort u16)
         {
             byteArrayBuilder.Add(unchecked((byte)(u16 >> 8)));
             byteArrayBuilder.Add(unchecked((byte)(u16 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="u32"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, uint u32)
         {
             byteArrayBuilder.Add(unchecked((byte)(u32 >> 24)));
@@ -642,6 +888,7 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.Add(unchecked((byte)(u32 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="u64"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, ulong u64)
         {
             byteArrayBuilder.Add(unchecked((byte)(u64 >> 56)));
@@ -654,12 +901,14 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.Add(unchecked((byte)(u64 >> 0)));
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="f32"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, float f32)
         {
             ValueContainer.Union u = new ValueContainer.Union() { f32 = f32 };
             byteArrayBuilder.AppendRaw(u.u32);
         }
 
+        /// <summary>Appends the raw contents of the given <paramref name="f64"/> to the given <paramref name="byteArrayBuilder"/> in big-endian order</summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, double f64)
         {
             ValueContainer.Union u = new ValueContainer.Union() { f64 = f64 };
@@ -709,7 +958,7 @@ namespace MosaicLib.Semi.E005.Data
             {
                 string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
 
-                throw new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec), null);
+                new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec)).Throw();
             }
 
             return vc;
@@ -761,7 +1010,8 @@ namespace MosaicLib.Semi.E005.Data
                         // skip over the string type bytes
                         startIndex += 2;
 
-                        ibNumElements = (ibNumBytes - 2) >> 1;
+                        ibNumBytes -= 2;
+                        ibNumElements = ibNumBytes >> 1;
                     }
                     else
                     {
@@ -804,6 +1054,8 @@ namespace MosaicLib.Semi.E005.Data
 
         public static ValueContainer DecodeE005Data(this byte[] byteArray, ref int startIndex, ref string ec)
         {
+            int entryStartIndex = startIndex;
+
             int ibNumBytes, ibNumElements, ibIndexOffsetShift;
             ItemFormatCode ifc = DecodeE005ItemHeader(byteArray, ref startIndex, ref ec, out ibNumBytes, out ibNumElements, out ibIndexOffsetShift);
 
@@ -846,7 +1098,7 @@ namespace MosaicLib.Semi.E005.Data
 
                 case ItemFormatCode.A:
                 case ItemFormatCode.J:
-                    vc.SetValue<string>(ByteArrayTranscoders.ByteStringTranscoder.Encode(byteArray, localStartIndex, ibNumElements));
+                    vc.SetValueA(ByteArrayTranscoders.ByteStringTranscoder.Encode(byteArray, localStartIndex, ibNumElements));
                     break;
 
                 case ItemFormatCode.W:
@@ -1014,13 +1266,31 @@ namespace MosaicLib.Semi.E005.Data
     /// <summary>
     /// This interface defines the internally usable method that any IValueContainerBuilder object provides to allow the given ValueContainer object tree to be incrementally
     /// constructed to contain the desired content.
+    /// <para/>This interface now also implements (requires the implementation of) the IE005DataContentBuilder interface which supports construction of the built object in its
+    /// E005 data byte sequence representation.
     /// </summary>
-    public interface IValueContainerBuilder
+    public interface IValueContainerBuilder : IE005DataContentBuilder
     {
         /// <summary>
         /// Generates and returns a ValueContainer that contains the built contents of this entity.
         /// </summary>
         ValueContainer BuildContents();
+    }
+
+    /// <summary>
+    /// This interface defines the internally usable method that any IE005DataContentBuilder object provides to allow the given builder tree to be incrementally appended to a byte array builder list
+    /// </summary>
+    public interface IE005DataContentBuilder
+    {
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        void BuildAndAppendContents(List<byte> byteArrayBuilder);
+
+        /// <summary>
+        /// Generates and returns a byte array contains the E005 content version of the given builder tree.
+        /// </summary>
+        byte[] BuildByteArray();
     }
 
     /// <summary>
@@ -1034,6 +1304,47 @@ namespace MosaicLib.Semi.E005.Data
     }
 
     /// <summary>
+    /// Base class for most IValueContainerBuilder derived classes.
+    /// </summary>
+    public abstract class ValueContainerBuilderBase : IValueContainerBuilder
+    {
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public abstract ValueContainer BuildContents();
+
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        public virtual void BuildAndAppendContents(List<byte> byteArrayBuilder)
+        {
+            var vc = BuildContents();
+
+            byteArrayBuilder.AppendWithIH(vc);
+        }
+
+        /// <summary>
+        /// Generates and returns a byte array contains the E005 content version of the given builder tree.
+        /// </summary>
+        public byte[] BuildByteArray()
+        {
+            var byteArrayBuilder = new List<byte>();
+
+            BuildAndAppendContents(byteArrayBuilder);
+
+            return byteArrayBuilder.ToArray();
+        }
+
+        /// <summary>
+        /// Generates and returns the current built contents formatted using the SML representation.
+        /// </summary>
+        public override string ToString()
+        {
+            return BuildContents().ToStringSML();
+        }
+    }
+
+    /// <summary>
     /// This class is derived from System.Collections.Generic.List{IValueContainerBuilder} and implements the IValueContainerBuilder interface.
     /// This class overrides the Add and AddRange methods to return this object so as to support call chaining.
     /// Whenever the BuildContents method is invoked this object will generate and return a ValueContainer containing an array of ValueContainers generated by the subordinate IValueContainerBuilders BuildContents methods.
@@ -1043,12 +1354,23 @@ namespace MosaicLib.Semi.E005.Data
         /// <summary>
         /// Default constructor.  Produces an empty list.
         /// </summary>
-        public ListValueBuilder() : base() { }
+        public ListValueBuilder()
+            : base()
+        { }
 
         /// <summary>
-        /// Enumarable based constructor.  Adds each of the ICxValueBuilder objects from the given enumerable collection.
+        /// Enumarable based constructor.  Adds each of the IValueContainerBuilder objects from the given enumerable collection.
         /// </summary>
-        public ListValueBuilder(IEnumerable<IValueContainerBuilder> collection) : base(collection) { }
+        public ListValueBuilder(IEnumerable<IValueContainerBuilder> collection) 
+            : base(collection)
+        { }
+
+        /// <summary>
+        /// params based constructor.
+        /// </summary>
+        public ListValueBuilder(params IValueContainerBuilder[] itemParamsArray)
+            : base(itemParamsArray)
+        { }
 
         /// <summary>
         /// Adds the given object to the end of this list.  Return value supports call chaining.
@@ -1068,12 +1390,13 @@ namespace MosaicLib.Semi.E005.Data
             return this;
         }
 
-        #region IValueContainerBuilder Members
-
         ValueContainer[] vcArray = null;
         int vcArrayLength = 0;
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public ValueContainer BuildContents()
         {
             if (vcArray == null || vcArray.Length != this.Count)
             {
@@ -1090,13 +1413,41 @@ namespace MosaicLib.Semi.E005.Data
             return new ValueContainer(vcArray);
         }
 
-        #endregion
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        public void BuildAndAppendContents(List<byte> byteArrayBuilder)
+        {
+            byteArrayBuilder.AppendIH(ItemFormatCode.L, Count);
+            foreach (IE005DataContentBuilder dcb in this)
+                dcb.BuildAndAppendContents(byteArrayBuilder);
+        }
+
+        /// <summary>
+        /// Generates and returns a byte array contains the E005 content version of the given builder tree.
+        /// </summary>
+        public byte[] BuildByteArray()
+        {
+            var byteArrayBuilder = new List<byte>();
+
+            BuildAndAppendContents(byteArrayBuilder);
+
+            return byteArrayBuilder.ToArray();
+        }
+
+        /// <summary>
+        /// Generates and returns the current built contents formatted using the SML representation.
+        /// </summary>
+        public override string ToString()
+        {
+            return BuildContents().ToStringSML();
+        }
     }
 
     /// <summary>
     /// Helper class for building list with a pair of BasicValueBuilder built values in it.
     /// </summary>
-    public class TwoValueListBuilder<ValueType1, ValueType2> : IValueContainerBuilder
+    public class TwoValueListBuilder<ValueType1, ValueType2> : ValueContainerBuilderBase
     {
         public TwoValueListBuilder()
         {
@@ -1111,35 +1462,169 @@ namespace MosaicLib.Semi.E005.Data
         public ValueType1 Value1 { get { return valueBuilder1.Value; } set { valueBuilder1.Value = value; } }
         public ValueType2 Value2 { get { return valueBuilder2.Value; } set { valueBuilder2.Value = value; } }
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
         {
             return ((IValueContainerBuilder)listBuilder).BuildContents();
         }
-    }
 
-    /// <summary>
-    /// Helper class for generating a list representation of a NamedValueSet.
-    /// </summary>
-    public class NamedValueSetBuilder : IValueContainerBuilder
-    {
-        public INamedValueSet NamedValueSet { get; set; }
-
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        public override void BuildAndAppendContents(List<byte> byteArrayBuilder)
         {
-            return new ValueContainer(NamedValueSet);
+            listBuilder.BuildAndAppendContents(byteArrayBuilder);
         }
     }
 
-    /// <summary>
-    /// Helper class for generating a list representation of a single NamedValue object
-    /// </summary>
-    public class NamedValueBuilder : IValueContainerBuilder
+    /// <summary>Helper class for generating a list representation of a NamedValueSet.</summary>
+    public class NamedValueSetBuilder : ValueContainerBuilderBase, System.Collections.IEnumerable
     {
+        /// <summary>
+        /// Gives the INamedValueSet instance that the contents will be built from.
+        /// </summary>
+        public INamedValueSet NamedValueSet { get; set; }
+
+        /// <summary>
+        /// Support inline construction
+        /// </summary>
+        public NamedValueSetBuilder Add(string name, IValueContainerBuilder vcb)
+        {
+            nvsBuilderDictionary = nvsBuilderDictionary ?? new Dictionary<string, IValueContainerBuilder>();
+
+            nvsBuilderDictionary[name] = vcb;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Support inline construction
+        /// </summary>
+        public NamedValueSetBuilder Add(string name, ValueContainer vc)
+        {
+            var nvs = (NamedValueSet as NamedValueSet);
+            if (nvs == null || nvs.IsReadOnly)
+            {
+                NamedValueSet = (nvs = NamedValueSet.ConvertToWritable());
+            }
+
+            nvs.SetValue(name, vc);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Support inline construction
+        /// </summary>
+        public NamedValueSetBuilder Add(string name, object o)
+        {
+            Add(name, ValueContainer.CreateFromObject(o));
+
+            return this;
+        }
+
+        /// <summary>
+        /// Required for use of Add method(s) in initializers
+        /// </summary>
+        /// <returns></returns>
+        public IEnumerator GetEnumerator()
+        {
+            var set = EmptyArrayFactory<object>.Instance
+                    .ConditionalConcatItems(!NamedValueSet.IsNullOrEmpty(), NamedValueSet)
+                    .ConditionalConcatItems(!nvsBuilderDictionary.IsNullOrEmpty(), nvsBuilderDictionary)
+                    .ToArray();
+
+            return ((IEnumerable)set).GetEnumerator();
+        }
+
+        private Dictionary<string, IValueContainerBuilder> nvsBuilderDictionary = null;
+
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
+        {
+            if (nvsBuilderDictionary == null)
+                return new ValueContainer(NamedValueSet.ConvertToReadOnly());
+
+            var nvs = new NamedValueSet(NamedValueSet.MapNullToEmpty());
+
+            foreach (var kvp in nvsBuilderDictionary)
+                nvs.SetValue(kvp.Key, kvp.Value.BuildContents());
+
+            return new ValueContainer(nvs);
+        }
+
+        public override void BuildAndAppendContents(List<byte> byteArrayBuilder)
+        {
+            var nvs = NamedValueSet.MapNullToEmpty();
+
+            if (nvsBuilderDictionary != null && nvsBuilderDictionary.Count > 0)
+            {
+                var nonOverlappingNVSetArray = nvs.Where(nv => !nvsBuilderDictionary.ContainsKey(nv.Name)).ToArray();
+                var combinedItemCount = nvsBuilderDictionary.Count + nonOverlappingNVSetArray.Length;
+
+                byteArrayBuilder.AppendIH(ItemFormatCode.L, combinedItemCount);
+
+                foreach (var nv in nonOverlappingNVSetArray)
+                {
+                    byteArrayBuilder.AppendWithIH(nv);
+                }
+
+                foreach (var vcb in nvsBuilderDictionary)
+                {
+                    byteArrayBuilder.AppendIH(ItemFormatCode.L, 2);
+                    byteArrayBuilder.AppendWithIH(vcb.Key);
+                    vcb.Value.BuildAndAppendContents(byteArrayBuilder);
+                }
+            }
+            else
+            {
+                byteArrayBuilder.AppendIH(ItemFormatCode.L, nvs.Count);
+
+                foreach (var nv in nvs)
+                {
+                    byteArrayBuilder.AppendWithIH(nv);
+                }
+            }
+        }
+    }
+
+    /// <summary>Helper class for generating a list representation of a single NamedValue object</summary>
+    public class NamedValueBuilder : ValueContainerBuilderBase
+    {
+        /// <summary>Default Constructor</summary>
+        public NamedValueBuilder() { }
+
+        /// <summary>Content builder variant</summary>
+        public NamedValueBuilder(string name, ValueContainer vc) { NamedValue = new NamedValue(name, vc); }
+
+        /// <summary>Content builder variant</summary>
+        public NamedValueBuilder(string name, object value) { NamedValue = new NamedValue(name, value); }
+
+        /// <summary>
+        /// Gives the INamedValue instance that the contents will be built from.
+        /// </summary>
         public INamedValue NamedValue { get; set; }
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
         {
-            return new ValueContainer(NamedValue);
+            return new ValueContainer(NamedValue.MapNullToEmpty());
+        }
+
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        public override void BuildAndAppendContents(List<byte> byteArrayBuilder)
+        {
+            var nv = NamedValue.MapNullToEmpty();
+
+            byteArrayBuilder.AppendWithIH(nv);
         }
     }
 
@@ -1149,7 +1634,7 @@ namespace MosaicLib.Semi.E005.Data
     public class AttributeListValueBuilder : ListValueBuilder, IValueContainerBuilder
     {
         /// <summary>
-        /// Default constructor.  Produces a list of two elements: An attribute name and a ICxValueBuilder for the value.
+        /// Default constructor.  Produces a list of two elements: An attribute name and a IValueContainerBuilder for the value.
         /// </summary>
         public AttributeListValueBuilder()
         {
@@ -1164,7 +1649,7 @@ namespace MosaicLib.Semi.E005.Data
         private BasicValueBuilder<string> attributeNameBuilder = new BasicValueBuilder<string>() { Value = String.Empty };
 
         /// <summary>
-        /// Get/Set property gives access to the ICxValueBuilder that will be used to generte the value element in the attribute/value two element list that is generated by this object.
+        /// Get/Set property gives access to the IValueContainerBuilder that will be used to generte the value element in the attribute/value two element list that is generated by this object.
         /// </summary>
         public IValueContainerBuilder ValueBuilder { get { return this[1]; } set { this[1] = value; } }
     }
@@ -1193,7 +1678,7 @@ namespace MosaicLib.Semi.E005.Data
     /// Use of any other native type will cause the class constructor to throw a SetValueException.
     /// </summary>
     /// <typeparam name="ElementType">Defines the type of element for the Array object.  Will be converted to the corresponding SECS-II data type</typeparam>
-    public class ArrayValueBuilder<ElementType> : IValueContainerBuilder where ElementType : struct
+    public class ArrayValueBuilder<ElementType> : ValueContainerBuilderBase where ElementType : struct
     {
         /// <summary>
         /// Get/Set property gives the caller access to the array that will be generated by the BuildContents method.  Defaults to null.  null will be treated as an empty list
@@ -1222,7 +1707,10 @@ namespace MosaicLib.Semi.E005.Data
             TypeConversionSettings = typeConversionSettings;
         }
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
         {
             ElementType[] array = Array ?? EmptyArrayFactory<ElementType>.Instance;
 
@@ -1247,13 +1735,32 @@ namespace MosaicLib.Semi.E005.Data
     /// This class is a very simple placeholder class that supports injecting the contents of the contained ValueContainer object into an object tree.
     /// The BuildContents methods simply returns the current value of the ValueContainer property.
     /// </summary>
-    public class ValueContainerBuilder : IValueContainerBuilder
+    public class ValueContainerBuilder : ValueContainerBuilderBase
     {
-        public ValueContainer ValueContainer { get; set; }
+        /// <summary>
+        /// Gives the ValueContainer instance that the contents will be built from.
+        /// </summary>
+        public ValueContainer ValueContainer { get { return VC; } set { VC = value; } }
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Gives the ValueContainer instance that the contents will be built from.
+        /// </summary>
+        public ValueContainer VC { get; set; }
+
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
         {
-            return ValueContainer;
+            return VC;
+        }
+
+        /// <summary>
+        /// Generates and appends the contents of this builder as E005 data to the given <paramref name="byteArrayBuilder"/> list.
+        /// </summary>
+        public override void BuildAndAppendContents(List<byte> byteArrayBuilder)
+        {
+            byteArrayBuilder.AppendWithIH(VC);
         }
     }
 
@@ -1264,10 +1771,10 @@ namespace MosaicLib.Semi.E005.Data
     /// Use of any other native type will cause the class constructor to throw a SetValueException.
     /// </summary>
     /// <typeparam name="ElementType">Defines the type of element for the Array object.  Will be converted to the corresponding SECS-II data type</typeparam>
-    public class BasicValueBuilder<ElementType> : IValueContainerBuilder
+    public class BasicValueBuilder<ElementType> : ValueContainerBuilderBase
     {
         /// <summary>
-        /// Get/Set property gives the caller access to the Value that will be appended when the AppendToCxValue method is used.
+        /// Get/Set property gives the caller access to the Value that will be appended when the BuildContents method is used.
         /// </summary>
         public ElementType Value { get; set; }
 
@@ -1294,14 +1801,17 @@ namespace MosaicLib.Semi.E005.Data
             TypeConversionSettings = typeConversionSettings;
         }
 
-        ValueContainer IValueContainerBuilder.BuildContents()
+        /// <summary>
+        /// Generates and returns a ValueContainer that contains the built contents of this entity.
+        /// </summary>
+        public override ValueContainer BuildContents()
         {
             if (typeof(ElementType) != typeof(byte))
                 return new ValueContainer(Value);
             else if (TypeConversionSettings.ByteIsBinary)
-                return ValueContainer.Empty.SetValue(Value, ContainerStorageType.Binary, false);
+                return ValueContainer.Create(Value, ContainerStorageType.Binary, false);
             else
-                return ValueContainer.Empty.SetValue(Value, ContainerStorageType.Byte, false);
+                return ValueContainer.Create(Value, ContainerStorageType.Byte, false);
         }
     }
 
@@ -1314,7 +1824,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class ConvertValueException : System.Exception
     {
-        public ConvertValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public ConvertValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     /// <summary>
@@ -1322,7 +1832,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class GetValueException : System.Exception
     {
-        public GetValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public GetValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     /// <summary>
@@ -1330,7 +1840,290 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class SetValueException : System.Exception
     {
-        public SetValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public SetValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
+    }
+
+    /// <summary>
+    /// Exception type used when a given type or ValueContainer content type is not supported by the current method.
+    /// </summary>
+    public class UnsupportedTypeException : System.Exception
+    {
+        public UnsupportedTypeException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
+    }
+
+    #endregion
+
+    #region Shorthand types (L, VCB, A, W, Bi, Bo, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, ShorthandValueBuilderBase<>, NV, NVS)
+
+    /// <summary>
+    /// Shorthand for simplified version of ListValueBuilder
+    /// </summary>
+    public class L : ListValueBuilder
+    {
+        /// <summary>
+        /// constructs an empty list builder.
+        /// <para/>Items may be added explicitly seperately as desired.
+        /// </summary>
+        public L()
+            : base()
+        { }
+
+        /// <summary>
+        /// nested list constructor.
+        /// </summary>
+        public L(ListValueBuilder nestedListBuilder)
+            : base(nestedListBuilder as IValueContainerBuilder)
+        { }
+
+        /// <summary>
+        /// params based constructor.
+        /// </summary>
+        public L(params IValueContainerBuilder[] itemParamsArray) 
+            : base(itemParamsArray)
+        { }
+
+        /// <summary>
+        /// enumerator based constructor.
+        /// </summary>
+        public L(IEnumerable<IValueContainerBuilder> builderSet) 
+            : base(builderSet)
+        { }
+    }
+
+    /// <summary>
+    /// Shorthand for simplified version of ValueContainerBuilder
+    /// </summary>
+    public class VCB : ValueContainerBuilder
+    {
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public VCB() { }
+
+        /// <summary>
+        /// Content initialization constructor
+        /// </summary>
+        public VCB(ValueContainer vc) { VC = vc; }
+    }
+
+    /// <summary>
+    /// Shorthand for ValueContainerBuilder that builds a string value.
+    /// </summary>
+    public class A : ValueContainerBuilder
+    {
+        /// <summary>Base constructor</summary>
+        public A(string s = null)
+        {
+            Value = s;
+        }
+
+        /// <summary>This property can be used to get or set the contained value.  Setting the value to null is the same as setting it to the empty string.</summary>
+        public string Value
+        {
+            get { return _value; }
+            set { ValueContainer = ValueContainer.Create(_value = value.MapNullToEmpty()); }
+        }
+
+        private string _value = null;
+    }
+
+    /// <summary>
+    /// Shorthand for ValueContainerBuilder that builds a string value.
+    /// </summary>
+    public class W : A
+    {
+        /// <summary>Base constructor</summary>
+        public W(string s = null) : base(s) {}
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a Bi value</summary>
+    public class Bi : ValueContainerBuilder
+    {
+        /// <summary>Base constructor</summary>
+        public Bi(byte value = default(byte)) 
+        {
+            Value = value; 
+        }
+
+        /// <summary>This property can be used to get or set the contained value.</summary>
+        public byte Value
+        {
+            get { return _value; }
+            set { ValueContainer = ValueContainer.Create(_value = value, ContainerStorageType.Bi); }
+        }
+
+        private byte _value = default(byte);
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a Bo value</summary>
+    public class Bo : ShorthandValueBuilderBase<bool>
+    {
+        /// <summary>Base constructor</summary>
+        public Bo(bool value = default(bool)) : base(value) {}
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a I1 value</summary>
+    public class I1 : ShorthandValueBuilderBase<sbyte>
+    {
+        /// <summary>Base constructor</summary>
+        public I1(sbyte value = default(sbyte)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a I2 value</summary>
+    public class I2 : ShorthandValueBuilderBase<short>
+    {
+        /// <summary>Base constructor</summary>
+        public I2(short value = default(short)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a I4 value</summary>
+    public class I4 : ShorthandValueBuilderBase<int>
+    {
+        /// <summary>Base constructor</summary>
+        public I4(int value = default(int)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a I8 value</summary>
+    public class I8 : ShorthandValueBuilderBase<long>
+    {
+        /// <summary>Base constructor</summary>
+        public I8(long value = default(long)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a U1 value</summary>
+    public class U1 : ShorthandValueBuilderBase<byte>
+    {
+        /// <summary>Base constructor</summary>
+        public U1(byte value = default(byte)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a U2 value</summary>
+    public class U2 : ShorthandValueBuilderBase<ushort>
+    {
+        /// <summary>Base constructor</summary>
+        public U2(ushort value = default(ushort)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a U4 value</summary>
+    public class U4 : ShorthandValueBuilderBase<uint>
+    {
+        /// <summary>Base constructor</summary>
+        public U4(uint value = default(uint)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a U8 value</summary>
+    public class U8 : ShorthandValueBuilderBase<ulong>
+    {
+        /// <summary>Base constructor</summary>
+        public U8(ulong value = default(ulong)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a F4 value</summary>
+    public class F4 : ShorthandValueBuilderBase<float>
+    {
+        /// <summary>Base constructor</summary>
+        public F4(float value = default(float)) : base(value) { }
+    }
+
+    /// <summary>Shorthand ValueContainerBuilder that builds a F8 value</summary>
+    public class F8 : ShorthandValueBuilderBase<double>
+    {
+        /// <summary>Base constructor</summary>
+        public F8(double value = default(double)) : base(value) { }
+    }
+
+    /// <summary>Base class for some of the value builder shorthand classes.</summary>
+    public class ShorthandValueBuilderBase<TValueType> : ValueContainerBuilder where TValueType : struct
+    {
+        /// <summary>Protected base constructor</summary>
+        protected ShorthandValueBuilderBase(TValueType value)
+        {
+            Value = value;
+        }
+
+        /// <summary>This property can be used to get or set the contained value.</summary>
+        public TValueType Value
+        {
+            get { return _value; }
+            set { ValueContainer = ValueContainer.Create(_value = value); }
+        }
+
+        private TValueType _value = default(TValueType);
+    }
+
+    /// <summary>Shorthand name version of helper class for generating a list representation of a single NamedValue object</summary>
+    public class NVB : NamedValueBuilder
+    {
+        /// <summary>Default Constructor</summary>
+        public NVB() : base() { }
+
+        /// <summary>Content builder variant</summary>
+        public NVB(string name, ValueContainer vc) : base(name, vc) { }
+
+        /// <summary>Content builder variant</summary>
+        public NVB(string name, object value) : base(name, value) { }
+    }
+
+    /// <summary>Shorthand name version of helper class for generating a list representation of a NamedValueSet.</summary>
+    public class NVSB : NamedValueSetBuilder
+    { }
+
+    #endregion
+
+    #region ExtensionMethods (IValueContainerBuilder related)
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Creates, and returns, an IValueContainerBuilder for the given <paramref name="vc"/> value.
+        /// </summary>
+        public static IValueContainerBuilder MakeVCBuilder(this ValueContainer vc)
+        {
+            return new ValueContainerBuilder() { VC = vc };
+        }
+
+        /// <summary>
+        /// Creates, and returns, a ListValueBuilder IValueContainerBuilder for the given <paramref name="vcArray"/> array of ValueContainers. 
+        /// </summary>
+        public static IValueContainerBuilder MakeListBuilder(this ValueContainer[] vcArray)
+        {
+            return new L(vcArray.Select(vc => vc.MakeVCBuilder()));
+        }
+
+        /// <summary>
+        /// Creates, and returns, a ListValueBuilder IValueContainerBuilder for the given <paramref name="vcSet"/> array of ValueContainers. 
+        /// </summary>
+        public static IValueContainerBuilder MakeListBuilder(this IEnumerable<ValueContainer> vcSet)
+        {
+            return new L(vcSet.Select(vc => vc.MakeVCBuilder()));
+        }
+
+        /// <summary>
+        /// Creates, and returns, a NamedValueSetBuilder IValudContainerBuilder for the given <paramref name="nvs"/>.
+        /// </summary>
+        public static IValueContainerBuilder MakeListBuilder(this INamedValueSet nvs)
+        {
+            return new NamedValueSetBuilder() { NamedValueSet = nvs.MapNullToEmpty() };
+        }
+
+        /// <summary>
+        /// Returns a new list type ValueContainerBuilder that, when built, will produce a list of the given set of strings.
+        /// </summary>
+        public static IValueContainerBuilder MakeListBuilder(this IEnumerable<string> strSet)
+        {
+            return new VCB(ValueContainer.Create(strSet));
+        }
+
+        /// <summary>
+        /// Returns a new list type ValueContainerBuilder that, when built, will produce a list of the given set of value items.
+        /// </summary>
+        public static IValueContainerBuilder MakeListBuilder<TItemType>(this IEnumerable<TItemType> itemSet) where TItemType : struct
+        {
+            return new VCB(ValueContainer.Create(itemSet.Select(item => ValueContainer.Create(item))));
+        }
     }
 
     #endregion

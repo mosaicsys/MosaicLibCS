@@ -107,7 +107,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             sampleIntervalTimer = new QpcTimer() { TriggerInterval = config.SampleInterval, AutoReset = true }.Start();
 
-            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, new NamedValueSet() { { "noMDRF" } });
+            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, Defaults.PerfLoggerDefaultNVS);
 
             ProcessDeltaOccurrenceInfo = new MDRF.Writer.OccurrenceInfo()
             {
@@ -354,26 +354,26 @@ namespace MosaicLib.PartsLib.Tools.Performance
             {
                 ProcessTracker.TrackedValues trackedValues = (ProcessTracker != null) ? ProcessTracker.TrackedValuesSinceActivation : default(ProcessTracker.TrackedValues);
 
-                pidGPI.VC = ValueContainer.Empty.SetValue<int>(ProcessTracker.pid, pidGPI.ValueCST, false);
-                cpuPerEstGPI.VC = ValueContainer.Empty.SetValue<float>(trackedValues.cpuPerEst, cpuPerEstGPI.ValueCST, false);
-                userCpuPerEstGPI.VC = ValueContainer.Empty.SetValue<float>(trackedValues.userCpuPerEst, userCpuPerEstGPI.ValueCST, false);
-                cpuTicksGPI.VC = ValueContainer.Empty.SetValue<long>(trackedValues.cpuTime.Ticks, cpuTicksGPI.ValueCST, false);
-                userCpuTicksGPI.VC = ValueContainer.Empty.SetValue<long>(trackedValues.userCpuTime.Ticks, userCpuTicksGPI.ValueCST, false);
-                vmSizeGPI.VC = ValueContainer.Empty.SetValue<ulong>(trackedValues.virtualMemorySize, vmSizeGPI.ValueCST, false);
-                wsSizeGPI.VC = ValueContainer.Empty.SetValue<ulong>(trackedValues.workingSetSize, wsSizeGPI.ValueCST, false);
-                handlesGPI.VC = ValueContainer.Empty.SetValue<int>(trackedValues.handleCount, handlesGPI.ValueCST, false);
+                pidGPI.VC = ValueContainer.CreateI4(ProcessTracker.pid);
+                cpuPerEstGPI.VC = ValueContainer.CreateF4(trackedValues.cpuPerEst);
+                userCpuPerEstGPI.VC = ValueContainer.CreateF4(trackedValues.userCpuPerEst);
+                cpuTicksGPI.VC = ValueContainer.CreateI8(trackedValues.cpuTime.Ticks);
+                userCpuTicksGPI.VC = ValueContainer.CreateI8(trackedValues.userCpuTime.Ticks);
+                vmSizeGPI.VC = ValueContainer.CreateU8(trackedValues.virtualMemorySize);
+                wsSizeGPI.VC = ValueContainer.CreateU8(trackedValues.workingSetSize);
+                handlesGPI.VC = ValueContainer.CreateI4(trackedValues.handleCount);
             }
 
             public MDRF.Writer.GroupInfo GroupInfo { get; private set; }
 
-            public MDRF.Writer.GroupPointInfo pidGPI = new MDRF.Writer.GroupPointInfo() { Name = "pid", Comment = "process id", ValueCST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
-            public MDRF.Writer.GroupPointInfo cpuPerEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "cpuPerEst", Comment = "cpu percent used estimate for last sample period (system + user)", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo userCpuPerEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "userCpuPerEst", Comment = "user cpu percent used estimate for last sample period", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo cpuTicksGPI = new MDRF.Writer.GroupPointInfo() { Name = "cpuTicks", Comment = "cpu usage in ticks since entered active set (system + user)", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo userCpuTicksGPI = new MDRF.Writer.GroupPointInfo() { Name = "userCpuTicks", Comment = "user cpu usage in ticks since entered active set", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo vmSizeGPI = new MDRF.Writer.GroupPointInfo() { Name = "vmSize", Comment = "virtual memory size", ValueCST = ContainerStorageType.UInt64, VC = new ValueContainer(0ul) };
-            public MDRF.Writer.GroupPointInfo wsSizeGPI = new MDRF.Writer.GroupPointInfo() { Name = "wsSize", Comment = "working set size", ValueCST = ContainerStorageType.UInt64, VC = new ValueContainer(0ul) };
-            public MDRF.Writer.GroupPointInfo handlesGPI = new MDRF.Writer.GroupPointInfo() { Name = "handles", Comment = "number of handles", ValueCST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
+            public MDRF.Writer.GroupPointInfo pidGPI = new MDRF.Writer.GroupPointInfo() { Name = "pid", Comment = "process id", CST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
+            public MDRF.Writer.GroupPointInfo cpuPerEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "cpuPerEst", Comment = "cpu percent used estimate for last sample period (system + user)", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo userCpuPerEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "userCpuPerEst", Comment = "user cpu percent used estimate for last sample period", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo cpuTicksGPI = new MDRF.Writer.GroupPointInfo() { Name = "cpuTicks", Comment = "cpu usage in ticks since entered active set (system + user)", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo userCpuTicksGPI = new MDRF.Writer.GroupPointInfo() { Name = "userCpuTicks", Comment = "user cpu usage in ticks since entered active set", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo vmSizeGPI = new MDRF.Writer.GroupPointInfo() { Name = "vmSize", Comment = "virtual memory size", CST = ContainerStorageType.UInt64, VC = new ValueContainer(0ul) };
+            public MDRF.Writer.GroupPointInfo wsSizeGPI = new MDRF.Writer.GroupPointInfo() { Name = "wsSize", Comment = "working set size", CST = ContainerStorageType.UInt64, VC = new ValueContainer(0ul) };
+            public MDRF.Writer.GroupPointInfo handlesGPI = new MDRF.Writer.GroupPointInfo() { Name = "handles", Comment = "number of handles", CST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
 
             public override string ToString()
             {
@@ -405,8 +405,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
             {
                 public GPIPair(int setNum)
                 {
-                    pidGPI = new MDRF.Writer.GroupPointInfo() { Name = "Set.{0:d2}.pid".CheckedFormat(setNum), Comment = "Gives the process ID of the process in set {0}".CheckedFormat(setNum), ValueCST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
-                    nameGPI = new MDRF.Writer.GroupPointInfo() { Name = "Set.{0:d2}.name".CheckedFormat(setNum), Comment = "Gives the process name of the process in set {0}".CheckedFormat(setNum), ValueCST = ContainerStorageType.String, VC = new ValueContainer("") };
+                    pidGPI = new MDRF.Writer.GroupPointInfo() { Name = "Set.{0:d2}.pid".CheckedFormat(setNum), Comment = "Gives the process ID of the process in set {0}".CheckedFormat(setNum), CST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
+                    nameGPI = new MDRF.Writer.GroupPointInfo() { Name = "Set.{0:d2}.name".CheckedFormat(setNum), Comment = "Gives the process name of the process in set {0}".CheckedFormat(setNum), CST = ContainerStorageType.String, VC = new ValueContainer("") };
                 }
 
                 public MDRF.Writer.GroupPointInfo pidGPI;
@@ -420,8 +420,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 GPIPair gpiPair = gpiPairArray.SafeAccess(setIdx);
                 if (gpiPair != null)
                 {
-                    ValueContainer pidVC = ValueContainer.Empty.SetValue<int>(pid, gpiPair.pidGPI.ValueCST, false);
-                    ValueContainer nameVC = ValueContainer.Empty.SetValue<string>(name, gpiPair.nameGPI.ValueCST, false);
+                    ValueContainer pidVC = ValueContainer.CreateI4(pid);
+                    ValueContainer nameVC = ValueContainer.CreateA(name);
 
                     if (!gpiPair.pidGPI.VC.Equals(pidVC) || !gpiPair.nameGPI.VC.Equals(nameVC))
                     {
@@ -433,6 +433,13 @@ namespace MosaicLib.PartsLib.Tools.Performance
         }
 
         bool firstTime = true;
+
+        protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
+        {
+            InnerServiceProcessTracking();
+
+            return string.Empty;
+        }
 
         protected override void PerformMainLoopService()
         {
@@ -446,20 +453,25 @@ namespace MosaicLib.PartsLib.Tools.Performance
             
             if (BaseState.IsOnline && (sampleIntervalTimer.IsTriggered || firstTime))
             {
-                QpcTimeStamp getStartTime = QpcTimeStamp.Now;
-                
-                processes = Process.GetProcesses();
-
-                getElpased = QpcTimeStamp.Now - getStartTime;
-
-                TrackProcesss(processes, getStartTime);
-
+                InnerServiceProcessTracking();
                 firstTime = false;
             }
         }
 
+        private void InnerServiceProcessTracking()
+        {
+            QpcTimeStamp getStartTime = QpcTimeStamp.Now;
+
+            processes = Process.GetProcesses();
+
+            getElpased = QpcTimeStamp.Now - getStartTime;
+
+            TrackProcesss(processes, getStartTime);
+        }
+
         System.Diagnostics.Process[] processes;
-        TimeSpan getElpased;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "debugging support")]
+        private TimeSpan getElpased;
 
         Dictionary<int, ProcessTracker> trackedProcessDictionary = new Dictionary<int, ProcessTracker>();
 
@@ -473,7 +485,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
         {
             foreach (var p in processes)
             {
-                ProcessTracker pt = null;
+                ProcessTracker pt;
 
                 if (trackedProcessDictionary.TryGetValue(p.Id, out pt) && pt != null)
                 {
@@ -651,7 +663,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
         private void Activate(ProcessTracker pt, int activeSetIdx)
         {
-            MDRF.Common.DateTimeStampPair dtPair = MDRF.Common.DateTimeStampPair.Now;
+            MDRF.Common.DateTimeStampPair dtPair = MDRF.Common.DateTimeStampPair.NowQpcOnly;
 
             // if needed - deactivate the previous pt in the given index
             ActiveSetItemTracker activeSetItemTracker = activeSetItemTrackerArray[activeSetIdx];

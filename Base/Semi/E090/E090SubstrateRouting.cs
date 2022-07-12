@@ -33,9 +33,31 @@ using MosaicLib.Modular.Part;
 using MosaicLib.Semi.E039;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Time;
 
 namespace MosaicLib.Semi.E090.SubstrateRouting
 {
+    /*
+     * The classes and defintions here are generally used as part of the Scheduler related addition to the E090 namespace concepts.
+     * 
+     * SubstrateRouting covers the concept of compositional parts and objects that can be used to assist in, and to help simplify and normalize,
+     * The work required to move substrates, typically using one or more robot instances (devices that support moving material from place to place).
+     * 
+     * The basic concepts used here are embodied in the ISubstrateRoutingManager interface, the various types of SubstrateRoutingItemBase derived types such as
+     * MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem and ApproachLocationItem, the the various ITransferPermission related interfaces and types.
+     * 
+     * The SRM (ISubstrateRoutingManager) concept starts by given the client scheudling and service action code an E090 centric use model for directing typical material movement
+     * activities.  It also acts as a common point of implementation for robot related interlocks as embodied in the ITransferPermissionRequest interface by supporting a
+     * location to ITPR instance map that is used automatically to verify and interlock access to a given location while the robot is performing the physical material movement
+     * operations that generally needs to be interlocked to avoid interfearance with other hardware at that location.
+     * 
+     * In addition it is envisioned that the SRM will also be used to embody the first level of common E041 Annunciator usage to support giving the qualified user/decision tree 
+     * authority the ability to give informed and considered path selection for specific robot and location fault conditions that are not well described and managed at the scheduler level.
+     * 
+     * The SRMBase class can be used to provide some/most of the common code implementation of a given SRM instance.  It is used as the base for the TestSRM found under the 
+     * MosaicLib.Semi.E090.SubstrateTestingTools namespace.
+     */
+
     #region ISubstrateRoutingManager
 
     /// <summary>
@@ -54,54 +76,37 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     /// </remarks>
     public interface ISubstrateRoutingManager : IActivePartBase
     {
-        INotificationObject<INamedValueSet> DetailsNVSPublisher { get; }
+        /// <summary>Action factory method:  When run, the resulting action will attempt to retract all robot arms and will then release all held ITPR interfaces that this instance knows about.</summary>
+        IClientFacet RetractArmsAndReleaseAll(bool optimizeReleasing = true);
 
+        /// <summary>Action factory method:  When run, the resulting action will attempt to execute each of the items in the given sequence of items.</summary>
         IClientFacet Sequence(params SubstrateRoutingItemBase[] itemParamsArray);
-    }
-
-    [Obsolete("Warning: this class is not currently in use. (2018-06-20)")]
-    public class SubstrateRoutingManagerDetails
-    {
-        public SubstrateRoutingManagerDetails(INamedValueSet detailsNVS)
-        {
-            var nvs = detailsNVS.MapNullToEmpty();
-
-            KnownSubstLocNameList = nvs["KnownSubstLocNameList"].VC.GetValue<ReadOnlyIList<string>>(rethrow: false).MapNullToEmpty();
-            KnownProxySubstLocNameList = nvs["KnownProxySubstLocNameList"].VC.GetValue<ReadOnlyIList<string>>(rethrow: false).MapNullToEmpty();
-            SupportsSwapAtSubstLocNameList = nvs["SupportsSwapAtSubstLocNameList"].VC.GetValue<ReadOnlyIList<string>>(rethrow: false).MapNullToEmpty();
-            SupportsSwapAtAllLocations = nvs["SupportsSwapAtAllLocations"].VC.GetValue<bool>(rethrow: false);
-        }
-
-        public void AddDetailsTo(NamedValueSet nvs)
-        {
-            nvs.ConditionalSetValue("KnownSubstLocNameList", !KnownSubstLocNameList.IsNullOrEmpty(), KnownSubstLocNameList);
-            nvs.ConditionalSetValue("KnownProxySubstLocNameList", !KnownProxySubstLocNameList.IsNullOrEmpty(), KnownProxySubstLocNameList);
-            nvs.ConditionalSetValue("SupportsSwapAtSubstLocNameList", !SupportsSwapAtSubstLocNameList.IsNullOrEmpty(), SupportsSwapAtSubstLocNameList);
-            nvs.ConditionalSetValue("SupportsSwapAtAllLocations", SupportsSwapAtAllLocations, SupportsSwapAtAllLocations);
-        }
-
-        public IList<string> KnownSubstLocNameList { get; set; }
-        public IList<string> KnownProxySubstLocNameList { get; set; }
-
-        public IList<string> SupportsSwapAtSubstLocNameList { get; set; }
-        public bool SupportsSwapAtAllLocations { get; set; }
     }
 
     #endregion
 
-    #region SubstrateRoutingItemBase, ApproachLocationItem, MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem, RunActionItem
+    #region SubstrateRoutingItemBase
 
     /// <summary>
     /// This is the required base class for all Subsrate Routing Items that can be Run using a <seealso cref="ISubstrateRoutingManager"/>
     /// </summary>
     public class SubstrateRoutingItemBase
-    { }
+    {
+        /// <summary>
+        /// This property is included for client purposes.  It is generally used to help identify the source of this routing item for logging purposes.
+        /// </summary>
+        public string Comment { get; set; }
+    }
+
+    #endregion
+
+    #region ApproachLocationItem, MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem, RunActionItem
 
     /// <summary>
     /// This item has two forms.  In the first it is given a Substrate ID, and in the second it is given the location name of a robot or of a robot arm.
     /// When executed, this item will first determine which robot arm shall be used for the approach, either from the current location of the given substrate, or from the given robot or robot arm location name.
     /// Then it will determine if the arm is occupied and then it will either move to the pre-pick or the pre-place position for that arm and occupation status.
-    /// If MustSucceed is true any issue or failure was encountered with this item then the sequence it is being run within will fail, otherwise an any such issue will be logged but the seuqence will not fail due to this item.
+    /// If MustSucceed is true any issue or failure was encountered with this item then the sequence it is being run within will fail, otherwise an any such issue will be logged but the sequence will not fail due to this item.
     /// </summary>
     public class ApproachLocationItem : SubstrateRoutingItemBase
     {
@@ -131,11 +136,12 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         {
             string waitUntilDoneStr = WaitUntilDone ? "" : " [WaitUntilDone]";
             string mustSucceedStr = MustSucceed ? "" : " [MustSucceed]";
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
 
             if (!SubstID.IsNullOrEmpty())
-                return "{0} {1} toLocName:{2}{3}{4}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName, waitUntilDoneStr, mustSucceedStr);
+                return "{0} {1} toLocName:{2}{3}{4}{5}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName, waitUntilDoneStr, mustSucceedStr, commentStr);
             else
-                return "{0} {1} toLocName:{2}{3}{4}".CheckedFormat(Fcns.CurrentClassLeafName, RobotOrRobotArmLocName ?? "[NoLocGiven]", ToSubstLocName, waitUntilDoneStr, mustSucceedStr);
+                return "{0} {1} toLocName:{2}{3}{4}{5}".CheckedFormat(Fcns.CurrentClassLeafName, RobotOrRobotArmLocName ?? "[NoLocGiven]", ToSubstLocName, waitUntilDoneStr, mustSucceedStr, commentStr);
         }
     }
 
@@ -156,7 +162,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
         public override string ToString()
         {
-            return "{0} {1} toLocName:{2}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName);
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+
+            return "{0} {1} toLocName:{2}{3}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName, commentStr);
         }
     }
 
@@ -176,7 +184,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
         public override string ToString()
         {
-            return "{0} {1} swapWith:{2}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, SwapWithSubstID.FullName);
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+
+            return "{0} {1} swapWith:{2}{3}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, SwapWithSubstID.FullName, commentStr);
         }
     }
 
@@ -198,7 +208,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
         public override string ToString()
         {
-            return "{0} {1} toLocName:{2}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName);
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+
+            return "{0} {1} toLocName:{2}{3}".CheckedFormat(Fcns.CurrentClassLeafName, SubstID.FullName, ToSubstLocName, commentStr);
         }
     }
 
@@ -241,6 +253,18 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
             return ICF;
         }
+
+        public override string ToString()
+        {
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+
+            if (ICF != null)
+                return "{0} {1} {2}{3}".CheckedFormat(Fcns.CurrentClassLeafName, Behavior, ICF, commentStr);
+            else if (ICFFactoryDelegate != null)
+                return "{0} {1} waiting to create ICF{2}".CheckedFormat(Fcns.CurrentClassLeafName, Behavior, commentStr);
+            else
+                return "{0} {1} [NoICF,NoFactory]{2}".CheckedFormat(Fcns.CurrentClassLeafName, Behavior, commentStr);
+        }
     }
 
     /// <summary>
@@ -268,17 +292,13 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     /// Public interface to be supported by parts that can be used with TransferPermissionRequestItems above.  
     /// This interface allows an SRM to determine what locations the SRM already has transfer permission for and allows it to acquire and release permissions on a per location name basis.
     /// </summary>
-    /// <remarks>
-    /// NOTE: this interface is being extended/refactored in 0.1.6.2 to support publication of a TransferPermissionSummaryStateCode value in addition to the GrantedTokenSet which is currently published here.
-    /// As such client provided parts that implement and/or use this interface will need to be similarly refactored when switching to the use of 0.1.6.2
-    /// </remarks>
     public interface ITransferPermissionRequest
     {
         /// <summary>Action factory method.  When run the resulting action will attempt to perform the given <paramref name="requestType"/> on the part for the given <paramref name="locName"/> (which defaults to the empty string)</summary>
         IClientFacet TransferPermission(TransferPermissionRequestType requestType, string locName = "");
 
-        /// <summary>Returns the notification object and publisher used to obtain and track publication of changes to the ITokenSet{string} that represents the set of location names (or empty string for parts that support it) for which the part has granted transfer permission.</summary>
-        INotificationObject<ITokenSet<string>> TransferPermissionStatePublisher { get; }
+        /// <summary>Returns the notification object and publisher used to obtain and track publication of changes to the ITransferPermissionState that represents a part's transfer permission state (it may have more than one such state at a time if it has multiple ports of access).</summary>
+        INotificationObject<ITransferPermissionState> TransferPermissionStatePublisher { get; }
     }
 
     /// <summary>
@@ -303,35 +323,460 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         ReleaseAll,
     }
 
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        [Obsolete("Use of this method is no longer supported.  Change to the use of the related ITransferPermissionState EMs.  (2018-12-15)")]
+        public static bool GetIsTransferPermitted(this ITokenSet<string> transferPermissionTokenSet, string key)
+        {
+            throw new System.NotImplementedException();
+        }
+    }
+
+    #endregion
+
+    #region ITransferPermissionState, TransferPermissionSummaryStateCode, TransferPermissionStateBase, EMs
+
+    /// <summary>
+    /// This interface defines the set of inforamation that makes up the "TransferPermissionState" of some part that supports the ITransferPermissionRequest interface.
+    /// <para/>Primarily this includes a SummaryStateCode and a GrantedTokenSet.
+    /// </summary>
+    public interface ITransferPermissionState
+    {
+        /// <summary>
+        /// Gives the name of the specific ITransferPermissionRequest interface that this state relates to.  May be empty if the source only has one such interface.
+        /// </summary>
+        string InterfaceName { get; }
+
+        /// <summary>
+        /// Gives the summary of the current transfer permission state. 
+        /// </summary>
+        TransferPermissionSummaryStateCode SummaryStateCode { get; }
+
+        /// <summary>
+        /// Gives the time stamp of the last change in the SummaryStateCode
+        /// </summary>
+        QpcTimeStamp SummaryStateTimeStamp { get; }
+
+        /// <summary>
+        /// Gives a description of the current summary state code, if relevant.  
+        /// <para/>This is normally used for the NotAvailable state to describe why the state of this part is not available to grant transfer permission.
+        /// However it may also be used for other states
+        /// </summary>
+        string Reason { get; }
+
+        /// <summary>
+        /// Gives the estimated time period after which this part expects to be available to grant transfer permission requests.  
+        /// It is expected that it will be given a non-zero value when in the AlmostAvailable state, and zero otherwise.
+        /// </summary>
+        TimeSpan EstimatedAvailableAfterPeriod { get; }
+
+        /// <summary>
+        /// This token set gives the set of location names for which the part has granted permission for a transfer.  
+        /// This interface expects (requires) that the part only grant such permission when it can internally attempt to enforce that no other action it takes will be likely to interfear with any related externally triggered transfer activities.
+        /// It is up to the part granting transfer permission to internally enforce these conditions.
+        /// </summary>
+        ITokenSet<string> GrantedTokenSet { get; }
+    }
+
+    /// <summary>
+    /// This is enumeration represents a summary of the transfer permissions state for a part that supports this interface.
+    /// <para/>None (0), Available, Busy, AlmostAvailable, NotAvailable, Blocked
+    /// </summary>
+    [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
+    public enum TransferPermissionSummaryStateCode : int
+    {
+        /// <summary>
+        /// Placeholder default value. [0]
+        /// </summary>
+        [EnumMember]
+        None = 0,
+
+        /// <summary>
+        /// The part currently believes that the corresponding ITPR interface is available to grant transfer permission requests.  
+        /// Transfer permission may (or may not) have been granted in this state.
+        /// </summary>
+        [EnumMember]
+        Available,
+
+        /// <summary>
+        /// The part is indicating that it is busy performing some action (such a processing step) and that it will not be available until it has finished being busy.
+        /// <para/>Generally this state is followed by Available or AlmostAvailable depending on the part internal details.
+        /// <para/>The expected behavior of ITPR Acquire requests in this state is that they will complete successfully after the part is no longer Busy.  
+        /// However the client is generally expected to wait until the part is Available or almost available before making ITPR Acquire requests.
+        /// </summary>
+        [EnumMember]
+        Busy,
+
+        /// <summary>
+        /// The part believes that it has almost finished some activity and that it will be available after it has finished that activity.  
+        /// Generally the part provides a non-zero EstimatedAvailableAfterPeriod value while in this state.  
+        /// This value can be used with the SummaryStateTimeStamp to estimate the time at which the interface is next expected to become available.
+        /// <para/>The expected behavior of ITPR Acquire requests in this state is that they will complete successfully after the part is reached the Available state.  However the client is generally expected to wait until the part is actually Available before doing this.
+        /// </summary>
+        [EnumMember]
+        AlmostAvailable,
+
+        /// <summary>
+        /// Some unexpected condition is active that means that the interface is not available and that it will not automatically become available after some period of time without external intervention.
+        /// <para/>Generally the part will indicate the current reason why it is in this state using the Reason property.
+        /// <para/>The expected behavior of ITPR Acquire requests in this state is that they will be immediately rejected.
+        /// </summary>
+        [EnumMember]
+        NotAvailable,
+
+        /// <summary>
+        /// This state is typically used when the part has granted ITPR access on another physical port (another ITPR interface) and this ITPR interface will not be avilable until the other one has released its access.
+        /// <para/>The expected behavior of ITPR Acquire requests in this state is that they will complete successfully after the part is no longer Blocked.  However the client is generally expected to wait until the part is Available before doing this.
+        /// </summary>
+        [EnumMember]
+        Blocked,
+    }
+
+    /// <summary>
+    /// This class is usable as the implementation class for supporting ITransferPermissionState publication, and/or (possibly) as the base class for derived types that extend this capability.
+    /// </summary>
+    public class TransferPermissionState : ITransferPermissionState, IEquatable<ITransferPermissionState>, ICopyable<ITransferPermissionState>
+    {
+        /// <summary>
+        /// Default constructor.  optionally constructs a new r/w instance with an empty, writeable GrantedTokenSet.
+        /// </summary>
+        public TransferPermissionState(bool createRWTokenSet = true) 
+        {
+            if (createRWTokenSet)
+                _grantedTokenSet = new TokenSet<string>();
+        }
+
+        /// <summary>
+        /// Gives the name of the specific ITransferPermissionRequest interface that this state relates to.  May be empty if the source only has one such interface.
+        /// </summary>
+        public string InterfaceName { get { return _interfaceName.MapNullToEmpty(); } set { _interfaceName = value; } }
+        private string _interfaceName;
+
+        /// <summary>
+        /// Gives the summary of the current transfer permission state. 
+        /// </summary>
+        public TransferPermissionSummaryStateCode SummaryStateCode { get; set; }
+
+        /// <summary>
+        /// Gives the time stamp of the last change in the SummaryStateCode
+        /// </summary>
+        public QpcTimeStamp SummaryStateTimeStamp { get; set; }
+
+        /// <summary>
+        /// Gives a description of the current summary state code, if relevant.  
+        /// <para/>This is normally used for the NotAvailable state to describe why the state of this part is not available to grant transfer permission.
+        /// However it may also be used for other states.
+        /// </summary>
+        public string Reason { get { return _reason.MapNullToEmpty(); } set { _reason = value; } }
+        private string _reason;
+
+        /// <summary>
+        /// Gives the estimated time period after which this part expects to be available to grant transfer permission requests.  
+        /// It is expected that it will be given a non-zero value when in the AlmostAvailable state.
+        /// </summary>
+        public TimeSpan EstimatedAvailableAfterPeriod  { get; set; }
+
+        /// <summary>
+        /// This token set gives the set of location names for which the part has granted permission for a transfer.  
+        /// This interface expects (requires) that the part only grant such permission when it can internally attempt to enforce that no other action it takes will be likely to interfear with any related externally triggered transfer activities.
+        /// It is up to the part granting transfer permission to internally enforce these conditions.
+        /// </summary>
+        public ITokenSet<string> GrantedTokenSet 
+        { 
+            get { return _grantedTokenSet.MapNullToEmpty(); }
+            set { _grantedTokenSet = value; } 
+        }
+
+        private ITokenSet<string> _grantedTokenSet;
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given <paramref name="other"/> object.
+        /// </summary>
+        public virtual bool Equals(ITransferPermissionState other, bool compareTimeStamps = true)
+        {
+            return (other != null
+                    && InterfaceName == other.InterfaceName
+                    && SummaryStateCode == other.SummaryStateCode
+                    && (!compareTimeStamps || (SummaryStateTimeStamp == other.SummaryStateTimeStamp))
+                    && Reason == other.Reason
+                    && EstimatedAvailableAfterPeriod == other.EstimatedAvailableAfterPeriod
+                    && GrantedTokenSet.Equals(other.GrantedTokenSet, compareReadOnly: false)
+                    );
+        }
+
+        bool IEquatable<ITransferPermissionState>.Equals(ITransferPermissionState other)
+        {
+            return this.Equals(other, compareTimeStamps: true);
+        }
+
+        public virtual ITransferPermissionState MakeCopyOfThis(bool deepCopy = true)
+        {
+            return new TransferPermissionState(createRWTokenSet: false)
+            {
+                InterfaceName = InterfaceName.MapNullToEmpty(),
+                SummaryStateCode = SummaryStateCode,
+                SummaryStateTimeStamp = SummaryStateTimeStamp,
+                Reason = Reason.MapNullToEmpty(),
+                EstimatedAvailableAfterPeriod = EstimatedAvailableAfterPeriod,
+
+                GrantedTokenSet = GrantedTokenSet.ConvertToReadOnly(mapNullToEmpty: true),
+            };
+        }
+
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            string interfaceName = InterfaceName;
+            string interfaceNameStr = (interfaceName.IsNullOrEmpty() ? "" : " " + interfaceName);
+
+            if (EstimatedAvailableAfterPeriod.IsZero())
+                return "TPS{0} State:{1} Reason:'{2}' {3}".CheckedFormat(interfaceNameStr, SummaryStateCode, Reason, GrantedTokenSet);
+            else
+                return "TPS{0} State:{1} Reason:'{2}' {3} EstAvailDelay:{4:f3} sec".CheckedFormat(interfaceNameStr, SummaryStateCode, Reason, GrantedTokenSet, EstimatedAvailableAfterPeriod.TotalSeconds);
+        }
+    }
+
+    /// <summary>
+    /// This class is intended to be used to support publication of an ITransferPermissionState derived state via an IVAs or via other mechanisms that require serialization support.
+    /// Instances of this class are immutable.
+    /// </summary>
+    [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
+    public class TransferPermissionStateForPublication : ITransferPermissionState, IEquatable<ITransferPermissionState>
+    {
+        public static ITransferPermissionState Empty { get { return _empty; } }
+        private static readonly ITransferPermissionState _empty = new TransferPermissionStateForPublication();
+
+        /// <summary>
+        /// Default constructor.  Constructs a new r/w instance with an empty, writeable GrantedTokenSet.
+        /// </summary>
+        public TransferPermissionStateForPublication()
+        {
+            _grantedTokenSet = new TokenSet<string>();
+        }
+
+        /// <summary>
+        /// Copy constructor.  By default, the resulting object is initialized to be readonly.
+        /// </summary>
+        public TransferPermissionStateForPublication(ITransferPermissionState other)
+        {
+            _interfaceName = other.InterfaceName.MapEmptyToNull();
+            SummaryStateCode = other.SummaryStateCode;
+            SummaryStateTimeStamp = other.SummaryStateTimeStamp;
+            _reason = other.Reason.MapEmptyToNull();
+            EstimatedAvailableAfterPeriod = other.EstimatedAvailableAfterPeriod;
+
+            GrantedTokenSet = other.GrantedTokenSet.ConvertToWritable(mapNullToEmpty: true);
+        }
+
+        /// <summary>
+        /// Gives the name of the specific ITransferPermissionRequest interface that this state relates to.  May be empty if the source only has one such interface.
+        /// </summary>
+        public string InterfaceName { get { return _interfaceName.MapNullToEmpty(); } }
+
+        [DataMember(Order = 1000, Name = "InterfaceName", IsRequired = false, EmitDefaultValue = false)]
+        private string _interfaceName;
+
+        /// <summary>
+        /// Gives the summary of the current transfer permission state. 
+        /// </summary>
+        [DataMember(Order = 2000, IsRequired = false, EmitDefaultValue = false)]
+        public TransferPermissionSummaryStateCode SummaryStateCode { get; private set; }
+
+        /// <summary>
+        /// Gives the time stamp of the last change in the SummaryStateCode
+        /// </summary>
+        public QpcTimeStamp SummaryStateTimeStamp { get; private set; }
+
+        [DataMember(Order = 3000, IsRequired = false, EmitDefaultValue = false)]
+        private double? SummaryStateTimeStampAgeInSec
+        {
+            get { return !SummaryStateTimeStamp.IsZero ? SummaryStateTimeStamp.Age.TotalSeconds : (double?)null; }
+            set { SummaryStateTimeStamp = (value != null) ? (QpcTimeStamp.Now - (value ?? 0.0).FromSeconds()) : QpcTimeStamp.Zero; }
+        }
+
+        /// <summary>
+        /// Gives a description of the current summary state code, if relevant.  
+        /// <para/>This is normally used for the NotAvailable state to describe why the state of this part is not available to grant transfer permission.
+        /// However it may also be used for other states.
+        /// </summary>
+        public string Reason { get { return _reason.MapNullToEmpty(); } }
+
+        [DataMember(Order = 4000, Name = "Reason", IsRequired = false, EmitDefaultValue = false)]
+        private string _reason;
+
+        /// <summary>
+        /// Gives the estimated time period after which this part expects to be available to grant transfer permission requests.  
+        /// It is expected that it will be given a non-zero value when in the AlmostAvailable state.
+        /// </summary>
+        [DataMember(Order = 5000, IsRequired = false, EmitDefaultValue = false)]
+        public TimeSpan EstimatedAvailableAfterPeriod { get; private set; }
+
+        /// <summary>
+        /// This token set gives the set of location names for which the part has granted permission for a transfer.  
+        /// This interface expects (requires) that the part only grant such permission when it can internally attempt to enforce that no other action it takes will be likely to interfear with any related externally triggered transfer activities.
+        /// It is up to the part granting transfer permission to internally enforce these conditions.
+        /// </summary>
+        public ITokenSet<string> GrantedTokenSet { get { return _grantedTokenSet.MapNullToEmpty(); } private set { _grantedTokenSet = value; } }
+
+        private ITokenSet<string> _grantedTokenSet;
+
+        [DataMember(Order = 6000, Name = "GrantedTokenSet", IsRequired = false, EmitDefaultValue = false)]
+        private string[] GrantedTokenSetDCSProxyArray { get { return GrantedTokenSet.ToArray().MapEmptyToNull(); } set { GrantedTokenSet = new TokenSet<string>(value.MapNullToEmpty()).MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given <paramref name="other"/> object.
+        /// </summary>
+        public virtual bool Equals(ITransferPermissionState other, bool compareTimeStamps = true)
+        {
+            return (other != null
+                    && InterfaceName == other.InterfaceName
+                    && SummaryStateCode == other.SummaryStateCode
+                    && (!compareTimeStamps || (SummaryStateTimeStamp == other.SummaryStateTimeStamp))
+                    && Reason == other.Reason
+                    && EstimatedAvailableAfterPeriod == other.EstimatedAvailableAfterPeriod
+                    && GrantedTokenSet.Equals(other.GrantedTokenSet, compareReadOnly: false)
+                    );
+        }
+
+        bool IEquatable<ITransferPermissionState>.Equals(ITransferPermissionState other)
+        {
+            return this.Equals(other, compareTimeStamps: true);
+        }
+
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            string interfaceName = InterfaceName;
+            string interfaceNameStr = (interfaceName.IsNullOrEmpty() ? "" : " " + interfaceName);
+
+            if (EstimatedAvailableAfterPeriod.IsZero())
+                return "TPS{0} State:{1} Reason:'{2}' {3}".CheckedFormat(interfaceNameStr, SummaryStateCode, Reason, GrantedTokenSet);
+            else
+                return "TPS{0} State:{1} Reason:'{2}' {3} EstAvailDelay:{4:f3} sec".CheckedFormat(interfaceNameStr, SummaryStateCode, Reason, GrantedTokenSet, EstimatedAvailableAfterPeriod.TotalSeconds);
+        }
+    }
+    /// <summary>
+    /// Extension methods
+    /// </summary>
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Returns true if the given <paramref name="transferPermissionTokenSet"/> is non-null and it contains the given key (token)
+        /// Returns true if the given <paramref name="itps"/> is non-null and its SummaryStateCode IsAvailable (aka it is Available)
         /// </summary>
-        public static bool GetIsTransferPermitted(this ITokenSet<string> transferPermissionTokenSet, string key)
+        public static bool IsAvailable(this ITransferPermissionState itps)
         {
-            return (transferPermissionTokenSet.SafeContains(key));
+            return itps != null && itps.SummaryStateCode.IsAvailable();
         }
 
-        public static SubstrateRoutingItemBase AttemptToGenerateSubstrateRoutingItem(this IStringParamAction serviceAction)
+        /// <summary>
+        /// Returns true if the given <paramref name="stateCode"/> is Available
+        /// </summary>
+        public static bool IsAvailable(this TransferPermissionSummaryStateCode stateCode)
         {
-            string serviceActionParam = serviceAction.ParamValue;
-            INamedValueSet actionNVP = serviceAction.NamedParamValues;
-
-            return AttemptToGenerateSubstrateRoutingItem(serviceActionParam, actionNVP);
+            return stateCode == TransferPermissionSummaryStateCode.Available;
         }
 
-        private static SubstrateRoutingItemBase AttemptToGenerateSubstrateRoutingItem(string serviceActionParam, INamedValueSet actionNVP)
+        /// <summary>
+        /// Returns true if the given <paramref name="itps"/> is Available or it is AlmostAvailable and the estimated remaining time to become available is less than or equal to the given maxEstimatedAvailableAfterPeriod
+        /// </summary>
+        public static bool IsAvailableOrAlmostAvailable(this ITransferPermissionState itps, TimeSpan ? maxEstimatedAvailableAfterPeriodIn = null, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
         {
-            switch (serviceActionParam)
+            if (itps == null)
+                return false;
+
+            if (itps.IsAvailable())
+                return true;
+
+            if (itps.SummaryStateCode != TransferPermissionSummaryStateCode.AlmostAvailable || itps.EstimatedAvailableAfterPeriod.IsZero())
+                return false;
+
+            if (maxEstimatedAvailableAfterPeriodIn == null)
+                return true;
+
+            var maxEstimatedAvailableAfterPeriod = maxEstimatedAvailableAfterPeriodIn ?? TimeSpan.Zero;
+
+            qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+            var elapsedTimeSinceStatePublished = (qpcTimeStamp - itps.SummaryStateTimeStamp);
+            var estimatedAvailableAfterPeriod = itps.EstimatedAvailableAfterPeriod - elapsedTimeSinceStatePublished;
+            if (estimatedAvailableAfterPeriod <= maxEstimatedAvailableAfterPeriod)
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns the estimated time remaining before the source module predicts that it will be available for transfer
+        /// </summary>
+        public static TimeSpan GetEstimatedTimeToAvailable(this ITransferPermissionState itps, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            TimeSpan result = TimeSpan.Zero;
+
+            if (itps != null)
             {
-                case "Move": return new MoveSubstrateItem(actionNVP["SubstName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID(), actionNVP["ToSubstLocName"].VC.GetValue<string>(rethrow: false));
-                case "Swap": return new SwapSubstratesItem(actionNVP["SubstName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID(), actionNVP["SwapWithSubstName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID());
-                default: return null;
+                var summaryStateAge = (qpcTimeStamp.MapDefaultToNow() - itps.SummaryStateTimeStamp);
+                result = TimeSpan.Zero.Max(itps.EstimatedAvailableAfterPeriod - summaryStateAge);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="itps"/> contains a non-empty GrantedTokenSet and the caller either passed <paramref name="checkAvailable"/> as false or the current SummaryStateCode IsAvailable().
+        /// </summary>
+        public static bool IsAnyGranted(this ITransferPermissionState itps, bool checkAvailable = true)
+        {
+            return itps != null && itps.GrantedTokenSet.MapNullToEmpty().IsNotEmpty && (itps.SummaryStateCode.IsAvailable() || !checkAvailable);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="itps"/>'s GrantedTokenSet contains the given <paramref name="locName"/> the caller either passed <paramref name="checkAvailable"/> as false or the current SummaryStateCode IsAvailable().
+        /// </summary>
+        public static bool IsGranted(this ITransferPermissionState itps, string locName, bool checkAvailable = true)
+        {
+            return itps != null && itps.GrantedTokenSet.SafeContains(locName) && (itps.SummaryStateCode.IsAvailable() || !checkAvailable);
+        }
+
+        /// <summary>
+        /// This is a temporary proxy for the IsGranted EM defined above.  Please switch to the use of the IsGranted EM.
+        /// </summary>
+        [Obsolete("This is a temporary proxy for the IsGranted EM defined above.  Please switch to the use of the IsGranted EM (2018-12-15)")]
+        public static bool GetIsTransferPermitted(this ITransferPermissionState itps, string key)
+        {
+            return itps.IsGranted(key, checkAvailable: true);
+        }
+
+        /// <summary>
+        /// Helper EM used to set the SummaryStateCode in a given <paramref name="tpsb"/> TransferPermissionStateBase object.
+        /// </summary>
+        public static void SetState(this TransferPermissionState tpsb, TransferPermissionSummaryStateCode stateCode, string reason, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp), TimeSpan estimatedAvailableAfterPeriod = default(TimeSpan), Logging.IMesgEmitter emitter = null, string linePrefix = "TPS")
+        {
+            var entryStateCode = tpsb.SummaryStateCode;
+
+            tpsb.SummaryStateCode = stateCode;
+            tpsb.SummaryStateTimeStamp = qpcTimeStamp.MapDefaultToNow();
+            tpsb.Reason = reason.MapNullTo("[GivenReasonWasNull]");
+            tpsb.EstimatedAvailableAfterPeriod = estimatedAvailableAfterPeriod;
+
+            if (emitter != null && emitter.IsEnabled)
+            {
+                string interfaceName = tpsb.InterfaceName;
+                string interfaceNameStr = (interfaceName.IsNullOrEmpty() ? linePrefix.MapNullToEmpty() : "{0} {1}".CheckedFormat(linePrefix, interfaceName));
+
+                if (tpsb.EstimatedAvailableAfterPeriod.IsZero())
+                    emitter.Emit("{0} state set to {1} [from:{2}, reason:{3}]", interfaceNameStr, tpsb.SummaryStateCode, entryStateCode, tpsb.Reason);
+                else
+                    emitter.Emit("{0} state set to {1} [from:{2}, estAvailAfter:{3:f3} sec, reason:{4}]", interfaceNameStr, tpsb.SummaryStateCode, entryStateCode, tpsb.EstimatedAvailableAfterPeriod.TotalSeconds, tpsb.Reason);
             }
         }
     }
-    
+
     #endregion
 
     #region TransferPermissionRequestItem, TransferPermissionRequestItemSettings
@@ -353,7 +798,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
         public override string ToString()
         {
-            return "{0} {1} LocName(s):{2}".CheckedFormat(Fcns.CurrentClassLeafName, Settings, String.Join(",", LocNameList));
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+
+            return "{0} {1} LocName(s):{2}{3}".CheckedFormat(Fcns.CurrentClassLeafName, Settings, String.Join(",", LocNameList), commentStr);
         }
     }
 
@@ -394,6 +841,97 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
     #endregion
 
+    #region Query Items (DelegatePredicate, PredicateItemBehavior)
+
+    /// <summary>
+    /// This item is used to perform a delegate based predicate item where the caller provides an aribrarty Func{string} which returns a non-empty string when the predicate fails which describes the reason the predicate failed
+    /// <para/>WARNING: the user of this item is REQUIRED to understand the limitations and ramifications of using a client provided delegate which will be called by the SRM part thread.  
+    /// </summary>
+    public class DelegatePredicateItem : SubstrateRoutingItemBase
+    {
+        /// <summary>
+        /// Constructor.
+        /// <para/>WARNING: the user of this item is REQUIRED to understand the limitations and ramifications of using a client provided delegate which will be called by the SRM part thread.  
+        /// </summary>
+        public DelegatePredicateItem(Func<string> predicateDelegate, PredicateItemBehavior itemBehavior, INamedValueSet namedValuesToMergeOnNegativeResult = null)
+        {
+            PredicateDelegate = predicateDelegate;
+        }
+
+        /// <summary>Gives the construction time given predicate delegate that this item is to use.  Returns non-empty string on predicate failure which describes why the predicate failed.</summary>
+        public Func<string> PredicateDelegate { get; private set; }
+
+        /// <summary>Gives the value of the enum that is used to select the behavior of the predicate item.  Aka what to  do when it fails.</summary>
+        public PredicateItemBehavior Behavior { get; private set; }
+
+        /// <summary>This set of named values will be merged (using AddAndUpdate) into the action's NamedValues if the predicate fails.</summary>
+        public INamedValueSet NamedValuesToMergeOnNegativeResult { get; private set; }
+
+        public override string ToString()
+        {
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+            string nvsStr = (NamedValuesToMergeOnNegativeResult.IsNullOrEmpty() ? "" : " MergeNVSOnFalse:{0}".CheckedFormat(NamedValuesToMergeOnNegativeResult.ToStringSML()));
+
+            return "{0} {2}{3}{4}".CheckedFormat(Fcns.CurrentClassLeafName, Behavior, commentStr, nvsStr);
+        }
+    }
+
+    /// <summary>
+    /// This enumeration defines the resulting behavior of evaluating the predicate within a given predicate item (such as SubstratePredicateItem)
+    /// <para/>None (0), NegativeFailsSequence, NegativeEndsSequence
+    /// </summary>
+    public enum PredicateItemBehavior : int
+    {
+        /// <summary>Placeholder default [0]</summary>
+        None = 0,
+
+        /// <summary>If the selected predicate fails (produces false) then the item causes the sequence to fail.</summary>
+        NegativeFailsSequence,
+
+        /// <summary>If the selected predicate fails (produces false) then the item causes the sequence to end (without attempting to explicitly run any additional items)</summary>
+        NegativeEndsSequence,
+    }
+
+    #endregion
+
+    #region Service action related EMs
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        [Obsolete("Please replace use of this method with direct use of the related AttemptToGenerateSubstrateRoutingItem EM. (2018-12-15)")]
+        public static SubstrateRoutingItemBase AttemptToGenerateSubstrateRoutingItem(this IStringParamAction serviceAction, IE039TableObserver tableObserver = null)
+        {
+            string serviceActionParam = serviceAction.ParamValue;
+            INamedValueSet actionNVP = serviceAction.NamedParamValues;
+
+            return tableObserver.AttemptToGenerateSubstrateRoutingItem(serviceActionParam, actionNVP);
+        }
+
+        /// <summary>
+        /// Attempts to generate a SubstrateRoutingItemBase for the given <paramref name="routingRequest"/> and <paramref name="nvp"/>.
+        /// Currently supported <paramref name="routingRequest"/> values include "Approach", "Move" and "Swap".
+        /// <para/>"Approach" requires that the given <paramref name="nvp"/> include two strings: robotOrRobotArmLocName and toSubstLocName.
+        /// <para/>"Move" requires that the given <paramref name="nvp"/> include two strings: substName and toSubstLocName.
+        /// <para/>"Swap" requires that the given <paramref name="nvp"/> include two strings: substName and swapWithSubstName.
+        /// <para/>This method 
+        /// </summary>
+        public static SubstrateRoutingItemBase AttemptToGenerateSubstrateRoutingItem(this IE039TableObserver tableObserver, string routingRequest, INamedValueSet nvp)
+        {
+            switch (routingRequest)
+            {
+                case "Approach": return new ApproachLocationItem(nvp["robotOrRobotArmLocName"].VC.GetValueA(rethrow: false), nvp["toSubstLocName"].VC.GetValueA(rethrow: false));
+                case "Move": return new MoveSubstrateItem(nvp["substName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["toSubstLocName"].VC.GetValueA(rethrow: false));
+                case "Swap": return new SwapSubstratesItem(nvp["substName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["swapWithSubstName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver));
+                default: return null;
+            }
+        }
+    }
+
+    #endregion
+
     #region SRMConfigBase, SRMBase
 
     public class SRMConfigBase
@@ -418,7 +956,6 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// <summary>This dictionary gives the set of locations (and ITRP instances) with which TransferPermissionRequestItem can be explicitly used in an SRMBase.  Internally the SRMBase will merge this set with the contents of the AutoLocNameToITPRDictionary so that all automatic locations can also be manually acquired and released.</summary>
         public ReadOnlyIDictionary<string, ITransferPermissionRequest> ManualLocNameToITPRDictionary { get; set; }
     }
-
 
     /// <summary>
     /// This is a useful base class for creating usage specific SRM types.  This class incorporates some of the common sequence execution framework logic 
@@ -447,7 +984,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             else if (!autoITPRDictionaryIsEmpty && !manualITPRDictionaryIsEmpty)
             {
                 // both auto and manual are provided as non-empty - internally use the union of the auto with the manual set.  the manual set has priority (same name items replaces any one corresponding from the auto set)
-                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(AutoLocNameToITPRDictionary.ConvertToWritable().SafeAddRange(ManualLocNameToITPRDictionary));
+                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(AutoLocNameToITPRDictionary.ConvertToWritable().SafeAddRange(ManualLocNameToITPRDictionary, onlyTakeFirst: false));
             }
         }
 
@@ -457,17 +994,53 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         public ReadOnlyIDictionary<string, ITransferPermissionRequest> AutoLocNameToITPRDictionary { get; private set; }
         public ReadOnlyIDictionary<string, ITransferPermissionRequest> ManualLocNameToITPRDictionary { get; private set; }
 
-        public INotificationObject<INamedValueSet> DetailsNVSPublisher { get { return detailsNVSPublisher; } }
-        protected InterlockedNotificationRefObject<INamedValueSet> detailsNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>(NamedValueSet.Empty);
+        /// <summary>Action factory method:  When run, the resulting action will attempt to retract all robot arms and will then release all held ITPR interfaces that this instance knows about.</summary>
+        public virtual IClientFacet RetractArmsAndReleaseAll(bool optimizeReleasing = true)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformRetractArmsAndReleaseAll(ipf, optimizeReleasing), CurrentMethodName, ActionLoggingReference);
+        }
 
+        protected virtual string PerformRetractArmsAndReleaseAll(IProviderFacet ipf, bool optimizeReleasing)
+        {
+            string ec = PerformRetractArms(ipf);
+
+            if (ec.IsNullOrEmpty())
+            {
+                var itprPartArray = ManualLocNameToITPRDictionary.Select(kvp => kvp.Value).ToArray();
+
+                if (optimizeReleasing)
+                    itprPartArray = itprPartArray.Where(itpr => itpr.TransferPermissionStatePublisher.Object.IsAnyGranted(checkAvailable: false)).ToArray();
+                    
+                var releaseAllICFArray = itprPartArray.Select(itpr => itpr.TransferPermission(TransferPermissionRequestType.ReleaseAll).StartInline()).ToArray();
+
+                releaseAllICFArray.WaitUntilSetComplete(isWaitLimitReachedDelegate: () => HasStopBeenRequested || ipf.ActionState.IsCancelRequested);
+                var releaseAllActionStates = releaseAllICFArray.Select(icf => icf.ActionState);
+                var firstFailed = releaseAllActionStates.FirstOrDefault(actionState => actionState.Failed);
+                ec = (firstFailed != null) ? firstFailed.ResultCode : string.Empty;
+            }
+
+            return ec;
+        }
+
+        /// <summary>
+        /// The default implementation of this method fails by indicating that it has not been implemented.
+        /// </summary>
+        protected virtual string PerformRetractArms(IProviderFacet ipf)
+        {
+            return "{0} has not been implemented in this base class.  It must be overriden in a dervied type.".CheckedFormat(CurrentMethodName);
+        }
+
+        /// <summary>Action factory method:  When run, the resulting action will attempt to execute each of the items in the given sequence of items.</summary>
         public virtual IClientFacet Sequence(params SubstrateRoutingItemBase[] itemParamsArray)
         {
-            return new BasicActionImpl(actionQ, ipf => PerformSequence(ipf, itemParamsArray), CurrentMethodName, ActionLoggingReference, mesgDetails: string.Join(",", itemParamsArray.Select(item => item.ToString())));
+            return new BasicActionImpl(actionQ, ipf => PerformSequence(ipf, itemParamsArray.SafeToArray()), CurrentMethodName, ActionLoggingReference, mesgDetails: string.Join(",", itemParamsArray.Select(item => item.ToString())));
         }
 
         protected virtual string PerformSequence(IProviderFacet ipf, SubstrateRoutingItemBase[] itemArray)
         {
             string ec = string.Empty;
+
+            string endSequenceReason = null;
 
             foreach (var item in itemArray)
             {
@@ -483,11 +1056,19 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
                     ec = PerformItem(ipf, (RunActionItem)item);
                 else if (item is TransferPermissionRequestItem)
                     ec = PerformItem(ipf, (TransferPermissionRequestItem)item);
+                else if (item is DelegatePredicateItem)
+                    ec = PerformItem(ipf, (DelegatePredicateItem)item, out endSequenceReason);
                 else
                     ec = "Item type '{0}' is not supported".CheckedFormat(item.GetType());
 
-                if (!ec.IsNullOrEmpty())
+                if (ec.IsNeitherNullNorEmpty())
                     break;
+
+                if (endSequenceReason.IsNeitherNullNorEmpty())
+                {
+                    Log.Debug.Emit("Sequence completed early [item '{0}' gave reason '{1}']", item, endSequenceReason);
+                    break;
+                }
             }
 
             if (ec.IsNullOrEmpty())
@@ -518,10 +1099,16 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
+            if (!fromLocObs.IsAccessible)
+                return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
+
             var toLocObs = GetSubstLocObserver(toLocName, SubstLocType.EmptyDestination);
 
             if (toLocObs == null)
                 return "{0} failed: given move to location is not supported here [{1}]".CheckedFormat(desc, toLocName);
+
+            if (!toLocObs.IsAccessible)
+                return "{0} failed: given move to location is not accessible [{1}]".CheckedFormat(desc, toLocObs.Info.NotAccessibleReason);
 
             string ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
 
@@ -563,8 +1150,14 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
+            if (!fromLocObs.IsAccessible)
+                return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
+
             if (swapAtLocObs == null)
                 return "{0} failed: given swap with substrate's current location is not supported here [{1}]".CheckedFormat(desc, swapWithSubstCurrentLocName);
+
+            if (!swapAtLocObs.IsAccessible)
+                return "{0} failed: given swap with substrate's location is not accessible [{1}]".CheckedFormat(desc, swapAtLocObs.Info.NotAccessibleReason);
 
             string ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, swapAtLocObs, desc);
 
@@ -600,23 +1193,34 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
+            if (!fromLocObs.IsAccessible)
+                return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
+
             if (toLocObs == null)
                 return "{0} failed: given move to/swap at location is not supported here [{1}]".CheckedFormat(desc, toLocName);
 
-            string ec;
+            if (!toLocObs.IsAccessible)
+                return "{0} failed: given move to/swap at location is not accessible [{1}]".CheckedFormat(desc, toLocObs.Info.NotAccessibleReason);
 
-            if (toLocObs.IsUnoccupied)
+            string ec = AcquireLocationTransferPermissionForThisItemIfNeeded(ipf, fromLocObs.ID.Name, toLocObs.ID.Name);
+
+            UpdateObservers();
+
+            if (ec.IsNullOrEmpty())
             {
-                ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
-            }
-            else
-            {
-                var swapWithSubstID = toLocObs.ContainsSubstInfo.ObjID;
-                var swapWithSubstObs = new E090SubstObserver(swapWithSubstID);
+                if (toLocObs.IsUnoccupied)
+                {
+                    ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
+                }
+                else
+                {
+                    var swapWithSubstID = toLocObs.ContainsSubstInfo.ObjID;
+                    var swapWithSubstObs = new E090SubstObserver(swapWithSubstID);
 
-                desc = "{0}[{1} with {2} @ {3}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, swapWithSubstID.FullName, toLocName);
+                    desc = "{0}[{1} with {2} @ {3}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, swapWithSubstID.FullName, toLocName);
 
-                ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, toLocObs, desc);
+                    ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, toLocObs, desc);
+                }
             }
 
             if (ec.IsNullOrEmpty())
@@ -713,7 +1317,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
                 if (isAcquireIfNeeded)
                 {
                     requestType = TransferPermissionRequestType.Acquire;
-                    kvpArray = kvpArray.Where(kvp => !kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+                    kvpArray = kvpArray.Where(kvp => !kvp.Value.TransferPermissionStatePublisher.Object.IsGranted(kvp.Key, checkAvailable: false)).ToArray();
                 }
                 else if (isRecursiveAcquire)
                 {
@@ -722,7 +1326,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
                 else if (isReleaseIfNeeded)
                 {
                     requestType = TransferPermissionRequestType.Release;
-                    kvpArray = kvpArray.Where(kvp => kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+                    kvpArray = kvpArray.Where(kvp => kvp.Value.TransferPermissionStatePublisher.Object.IsGranted(kvp.Key, checkAvailable: false)).ToArray();
                 }
                 else
                 {
@@ -758,6 +1362,46 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             return ec;
         }
 
+        protected virtual string PerformItem(IProviderFacet ipf, DelegatePredicateItem item, out string endSequenceReason)
+        {
+            var desc = item.ToString();
+
+            endSequenceReason = null;
+
+            string predicateResultStr = (item.PredicateDelegate != null) ? item.PredicateDelegate() : "PredicateDelegate is null";
+            bool predicateSucceeded = predicateResultStr.IsNullOrEmpty();
+
+            if (!predicateSucceeded && !item.NamedValuesToMergeOnNegativeResult.IsNullOrEmpty())
+            {
+                ipf.UpdateNamedValues(ipf.ActionState.NamedValues.MergeWith(item.NamedValuesToMergeOnNegativeResult, NamedValueMergeBehavior.AddAndUpdate).MakeReadOnly());
+            }
+
+            switch (item.Behavior)
+            {
+                case PredicateItemBehavior.None:
+                    if (predicateSucceeded)
+                        Log.Debug.Emit("{0}: predicate succeeded", desc);
+                    else
+                        Log.Debug.Emit("{0}: predicate failed: {1}", desc, predicateResultStr);
+
+                    return string.Empty;
+
+                case PredicateItemBehavior.NegativeFailsSequence:
+                    if (predicateSucceeded)
+                        return string.Empty;
+                    else
+                        return "{0} failed: {1}".CheckedFormat(desc, predicateResultStr);
+
+                case PredicateItemBehavior.NegativeEndsSequence:
+                    endSequenceReason = predicateResultStr;
+
+                    return string.Empty;
+
+                default:
+                    return "{0} failed: selected Behavior '{1}' is not valid".CheckedFormat(desc, item.Behavior);
+            }
+        }
+
         protected virtual string WaitForPostedItemsComplete(IProviderFacet ipf, string[] locNameArray = null)
         {
             string ec = string.Empty;
@@ -789,7 +1433,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
             if (ec.IsNullOrEmpty())
             {
-                var neededKVPSet = locNameParamsArray.Select(locName => KVP.Create(locName, AutoLocNameToITPRDictionary.SafeTryGetValue(locName))).Where(kvp => kvp.Value != null && !kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+                var neededKVPSet = locNameParamsArray.Select(locName => KVP.Create(locName, AutoLocNameToITPRDictionary.SafeTryGetValue(locName))).Where(kvp => kvp.Value != null && !kvp.Value.TransferPermissionStatePublisher.Object.IsGranted(kvp.Key, checkAvailable: false)).ToArray();
 
                 currentItemAutoReleaseKVPList.AddRange(neededKVPSet);      // request each one to get released even if the acquire fails
 

@@ -21,7 +21,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
 using MosaicLib.Modular.Action;
@@ -46,13 +45,35 @@ using MosaicLib.Utils.Tools;
 
 namespace MosaicLib.Modular.Interconnect.Remoting
 {
-    public interface IRemoting
+    /// <summary>
+    /// Common interface supported by both RemotingClient and RemotingServer part instances
+    /// </summary>
+    public interface IRemoting : IActivePartBase
     {
+        /// <summary>
+        /// Allows a client of a RemotingServer or RemotingClient instance to get access to the state and counters that the underlying BufferPool maintains.
+        /// </summary>
+        IBufferPoolInfo BufferPoolInfo { get; }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will attempt to run a Sync operation as determined by the contents of the given <paramref name="syncFlags"/>
+        /// </summary>
         IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags));
 
+        /// <summary>
+        /// In a RemotingClient, this publisher is used to publish the the ServerInfoNVS contents that were last obtained from the server side during session establishment.
+        /// </summary>
         INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get; }
 
+        /// <summary>
+        /// Gives the NVS containing the configuration keys that were given at construction time to the RemotingClient or RemotingServer and which are used to configure its behavior.
+        /// </summary>
         INamedValueSet ConfigNVS { get; }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate);
     }
 
     [Flags]
@@ -148,6 +169,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         private Sessions.SessionManager sessionManager;
         private BufferPool bufferPool;
 
+        /// <inheritdoc/>
+        public IBufferPoolInfo BufferPoolInfo { get { return bufferPool; } }
+
         private IValueAccessor<int> sessionCountIVA;
         private IValueAccessor<INamedValueSet> sessionStatesIVA;
         private bool sessionsChanged = false;
@@ -237,6 +261,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 Fcns.DisposeOfObject(ref messageStreamTool);
                 lastGeneratedMessage = null;        // the message can only be safely "released" if it has been delivered.
             }
+
+            public void NotifyOnSessionStateChanged(object source, Sessions.SessionState eventArgs)
+            {
+                if (messageStreamTool != null)
+                    messageStreamTool.NotifyOnSessionStateChanged(source, eventArgs);
+            }
         }
 
         private void Release()
@@ -256,7 +286,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             sessionsChanged = true;
         }
 
-        protected override string PerformGoOnlineAction(bool andInitialize)
+        protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             string ec = string.Empty;
 
@@ -264,6 +294,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 if (andInitialize && BaseState.IsOnlineOrAttemptOnline)
                     ec = PerformGoOfflineAction();
+
+                if (andInitialize && !npv.IsNullOrEmpty())
+                {
+                    Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
+
+                    // update and save the ConfigNVS as read only.  Normally the npv is null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
+                    Config.ConfigNVS = Config.ConfigNVS.MergeWith(npv, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate).ConvertToReadOnly();
+                }
 
                 if (sessionManager == null || transport == null)
                 {
@@ -359,7 +397,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     if (cst.actionRelayStreamTool == null)
                         return "Remote client '{0}' does not support remote actions".CheckedFormat(clientIdToken);
 
-                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
+                    if (!cst.session.State.IsConnected())
+                        return "The Current session is not connected [{0}]".CheckedFormat(cst.session);
+
+                    if (!OutboundActionNPVMergeWithNVS.IsNullOrEmpty() && OutboundActionNPVMergeBehavior != default(NamedValueMergeBehavior))
+                        npv = npv.MergeWith(OutboundActionNPVMergeWithNVS, OutboundActionNPVMergeBehavior).MakeReadOnly();
+
+                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf, npv);
                     return null;
                 }
             }
@@ -378,7 +422,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags))
         {
-            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, CurrentMethodName, ActionLoggingReference);
+            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, "Sync", ActionLoggingReference);
             action.NamedParamValues = new NamedValueSet() { { "syncFlags", syncFlags } };
             return action;
         }
@@ -400,6 +444,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return string.Empty;
         }
 
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        public IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSetOutboundActionNPVMergeValues(ipf, outboundActionNPVMergeWithNVS.ConvertToReadOnly(), outboundActionNPVMergeBehavior), CurrentMethodName, ActionLoggingReference);
+        }
+
+        private string PerformSetOutboundActionNPVMergeValues(IProviderFacet ipf, INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior)
+        {
+            OutboundActionNPVMergeWithNVS = outboundActionNPVMergeWithNVS.MapNullToEmpty();
+            OutboundActionNPVMergeBehavior = outboundActionNPVMergeBehavior;
+
+            return string.Empty;
+        }
+
+        private INamedValueSet OutboundActionNPVMergeWithNVS { get; set; }
+        private NamedValueMergeBehavior OutboundActionNPVMergeBehavior { get; set; }
+
         protected override void PerformMainLoopService()
         {
             InnerServiceBackground();
@@ -419,7 +482,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             foreach (var cst in clientSessionTrackerList.Array)
             {
-                count += cst.messageStreamToolTrackerList.Array.Sum(mstt => InnerServiceStream(qpcTimeStamp, cst, mstt));
+                foreach (var mstt in cst.messageStreamToolTrackerList.Array)
+                    count += InnerServiceStream(qpcTimeStamp, cst, mstt);
             }
 
             int perminantelyClosedCount = 0;
@@ -478,7 +542,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             }
         }
 
-        private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session)
+        private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session, string transportEndpointDescription)
         {
             ClientSessionTracker cst = new ClientSessionTracker()
             {
@@ -493,7 +557,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             AddClientSessionTracker(cst);
 
-            Log.Debug.Emit("New client session added [{0} {1} {2}]", session.SessionName, session.ClientUUID, session.ClientInstanceNum);
+            Log.Debug.Emit("New client session added [{0} {1} {2} {3}]", session.SessionName, session.ClientUUID, session.ClientInstanceNum, transportEndpointDescription);
         }
 
         /// <summary>
@@ -511,7 +575,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     if (mstt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
                     {
-                        mstt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
+                        mstt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp, "RemotingServer.InnerServiceStream: lastGeneratedMessage was delivered");
                         mstt.lastGeneratedMessage = null;
                         count++;
                     }
@@ -587,6 +651,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     cst.messageStreamToolTrackerList[stream] = mstt;
 
+                    // link session state publication to to message stream tool tracker
+                    cst.session.SessionStateChangedNotificationList.OnNotify += mstt.NotifyOnSessionStateChanged;
+                    mstt.NotifyOnSessionStateChanged(this, cst.session.State);
+
                     if (mstt.messageStreamTool is MessageStreamTools.IActionRelayMessageStreamTool)
                         cst.actionRelayStreamTool = mstt.messageStreamTool as MessageStreamTools.IActionRelayMessageStreamTool;
                 }
@@ -597,14 +665,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
             }
 
-            message.ReturnBuffersToPool(qpcTimeStamp);
+            message.ReturnBuffersToPool(qpcTimeStamp, "RemotingServer.HandleInboundMessage");
         }
 
         private string CreateMessageStreamTool(QpcTimeStamp qpcTimeStamp, MessageStreamToolTracker mstt, Messages.Message message)
         {
             INamedValueSet messageNVS = message.NVS;
 
-            string toolTypeStr = messageNVS["ToolTypeStr"].VC.GetValue<string>(rethrow: false);
+            string toolTypeStr = messageNVS["ToolTypeStr"].VC.GetValueA(rethrow: false);
             
             MessageStreamTools.IMessageStreamTool messageStreamTool = null;
 
@@ -666,19 +734,24 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
 
             if (Config.StreamToolsConfigArray.IsNullOrEmpty())
-                throw new System.ArgumentOutOfRangeException("Config.StreamToolsConfigArray", "Must contain at least one StreamToolConfigBase derived instance");
+                new System.ArgumentOutOfRangeException("Config.StreamToolsConfigArray", "Must contain at least one StreamToolConfigBase derived instance").Throw();
 
             bufferPool = new BufferPool(PartID + ".bp", configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
-            AddMainThreadStoppingAction(() => Release(releaseBufferPool: true, releaseMSTTs: true));
+            AddMainThreadStoppingAction(() => Release(releaseMSTTs: true));
 
             ActionLoggingReference.Config = new ActionLoggingConfig(ActionLoggingConfig.Debug_Debug_Trace_Trace, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            TraceActionLoggingReference = new ActionLogging(ActionLoggingReference) { Config = ActionLoggingConfig.Trace_Trace_Trace_Trace };
+            NoneActionLoggingReference = new ActionLogging(ActionLoggingReference) { Config = ActionLoggingConfig.None_None_None_None };
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>();
             serverInfoNVSIVA = (config.PartIVI ?? Interconnect.Values.Values.Instance).GetValueAccessor("{0}.ServerInfoNVS".CheckedFormat(PartID));
 
             EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, config.PartIVI);
         }
+
+        private readonly ActionLogging TraceActionLoggingReference;
+        private readonly ActionLogging NoneActionLoggingReference;
 
         public readonly string MyUUID = Guid.NewGuid().ToString();
 
@@ -697,6 +770,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         public INamedValueSet ConfigNVS { get { return Config.ConfigNVS; } }
 
         private BufferPool bufferPool;
+
+        /// <inheritdoc/>
+        public IBufferPoolInfo BufferPoolInfo { get { return bufferPool; } }
+
         private Transport.ITransportConnection transport;
         private Sessions.ConnectionSession session;
         private Sessions.SessionConfig sessionConfig;
@@ -726,7 +803,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private MessageStreamTools.IActionRelayMessageStreamTool actionRelayStreamTool = null;
 
-        private void Release(bool releaseBufferPool = false, bool releaseMSTTs = false, bool setConnStateToDisconnectedIfNeeded = true)
+        private void Release(bool releaseMSTTs = false, bool setConnStateToDisconnectedIfNeeded = true)
         {
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
@@ -741,11 +818,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 actionRelayStreamTool = null;
             }
 
-            if (releaseBufferPool)
-                Fcns.DisposeOfObject(ref bufferPool);
-
             if (BaseState.ConnState.IsConnectedOrConnecting() && setConnStateToDisconnectedIfNeeded)
-                SetBaseState(ConnState.Disconnected, CurrentMethodName);
+                SetBaseState(ConnState.Disconnected, "Release");
         }
 
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
@@ -757,7 +831,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
 
-                // update and save the ConfigNVS as read only.  Normally the npv null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
+                // update and save the ConfigNVS as read only.  Normally the npv is null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
                 Config.ConfigNVS = Config.ConfigNVS.MergeWith(npv, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate).ConvertToReadOnly();
             }
 
@@ -911,6 +985,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return ec;
         }
 
+        public override IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues)
+        {
+            var actionLoggingSelect = (namedParamValues.MapNullToEmpty())["ActionLoggingSelect"].VC.GetValueA(rethrow: false);
+
+            switch (actionLoggingSelect)
+            {
+                case "None": return CreateServiceAction(serviceName, namedParamValues, NoneActionLoggingReference);
+                case "Trace": return CreateServiceAction(serviceName, namedParamValues, TraceActionLoggingReference);
+                default: return CreateServiceAction(serviceName, namedParamValues, ActionLoggingReference);
+            }
+        }
+
         protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
         {
             StringScanner ss = new StringScanner(serviceName);
@@ -919,7 +1005,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 if (actionRelayStreamTool != null)
                 {
-                    actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
+                    if (session == null || !session.State.IsConnected())
+                        return "The Current session is not connected [{0}]".CheckedFormat(session.SafeToString(mapNullTo:"ClientSessionIsNull"));
+
+                    if (!OutboundActionNPVMergeWithNVS.IsNullOrEmpty() && OutboundActionNPVMergeBehavior != default(NamedValueMergeBehavior))
+                        npv = npv.MergeWith(OutboundActionNPVMergeWithNVS, OutboundActionNPVMergeBehavior).MakeReadOnly();
+
+                    actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf, npv);
                     InnerServiceBackground();
                     return null;
                 }
@@ -966,7 +1058,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags)) 
         {
-            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, CurrentMethodName, ActionLoggingReference);
+            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, "Sync", ActionLoggingReference);
             action.NamedParamValues = new NamedValueSet() { { "syncFlags", syncFlags } };
             return action;
         }
@@ -987,6 +1079,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             return string.Empty;
         }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        public IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSetOutboundActionNPVMergeValues(ipf, outboundActionNPVMergeWithNVS.ConvertToReadOnly(), outboundActionNPVMergeBehavior), CurrentMethodName, ActionLoggingReference);
+        }
+
+        private string PerformSetOutboundActionNPVMergeValues(IProviderFacet ipf, INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior)
+        {
+            OutboundActionNPVMergeWithNVS = outboundActionNPVMergeWithNVS.MapNullToEmpty();
+            OutboundActionNPVMergeBehavior = outboundActionNPVMergeBehavior;
+
+            return string.Empty;
+        }
+
+        private INamedValueSet OutboundActionNPVMergeWithNVS { get; set; }
+        private NamedValueMergeBehavior OutboundActionNPVMergeBehavior { get; set; }
 
         private bool manuallyTriggerAutoReconnectAttempt = false;
 
@@ -1055,7 +1166,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (session != null)
                 count += session.Service(qpcTimeStamp);
 
-            count += messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, mstt));
+            foreach (var mstt in messageStreamToolTrackerArray)
+                count += InnerServiceStream(qpcTimeStamp, mstt);
 
             NoteWorkCount(count);
 
@@ -1217,7 +1329,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     if (stt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
                     {
-                        stt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
+                        stt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp, "RemotingClient.InnerServiceStream: lastGeneratedMessage was delivered");
                         stt.lastGeneratedMessage = null;
                         count++;
                     }
@@ -1262,7 +1374,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (stt != null && stt.messageStreamTool != null)
                 stt.messageStreamTool.HandleInboundMessage(qpcTimeStamp, message);
 
-            message.ReturnBuffersToPool(qpcTimeStamp);
+            message.ReturnBuffersToPool(qpcTimeStamp, "RemotingClient.HandleInboundMessage");
         }
 
         #region NoteWorkCount, WaitForSomethingToDo - adpative sleep times.
@@ -1292,7 +1404,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
     public interface IEventAndPerformanceRecording : IServiceable
     {
-        void RecordReceived(params Buffers.Buffer[] bufferParamsArray);
+        void RecordReceived(Buffers.Buffer buffer);
+        void RecordReceived(Buffers.Buffer[] bufferArray, int firstBufferIndex);
         void RecordReceived(Messages.Message message);
         void RecordReceived(ManagementType managementType);
 
@@ -1420,12 +1533,34 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return count;
         }
 
-        public void RecordReceived(params Buffers.Buffer[] bufferParamsArray)
+        public void RecordReceived(Buffers.Buffer buffer)
         {
             RateCounterSet tcs = new RateCounterSet();
 
-            foreach (var buffer in bufferParamsArray)
+            if (buffer != null)
             {
+                tcs.Buffers++;
+                tcs.Bytes += buffer.byteCount;
+
+                if (buffer.PurposeCode == PurposeCode.Ack)
+                    tcs.Acks++;
+
+                if ((buffer.Flags & BufferHeaderFlags.BufferIsBeingResent) != 0)
+                    counterValues.ResentBuffersRx++;
+            }
+
+            avgReceiveRateCounterSetTool.RecordValues(tcs);
+        }
+
+        public void RecordReceived(Buffers.Buffer[] bufferArray, int firstBufferIndex)
+        {
+            RateCounterSet tcs = new RateCounterSet();
+
+            int bufferArrayLength = bufferArray.Length;
+            for (int index = firstBufferIndex; index < bufferArrayLength; index++)
+            {
+                var buffer = bufferArray[index];
+
                 if (buffer == null)
                     continue;
 

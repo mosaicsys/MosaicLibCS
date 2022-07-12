@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MosaicLib.WPF</RootNamespace>
     <AssemblyName>MosaicLibCS_WPF</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
@@ -28,6 +28,8 @@
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Debug\MosaicLibCS_WPF.XML</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
+    <LangVersion>5</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -38,6 +40,8 @@
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Release\MosaicLibCS_WPF.XML</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
+    <LangVersion>5</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="PresentationCore">
@@ -65,7 +69,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\..\..\CommonAssemblyInfo.cs">
+      <Link>Properties\CommonAssemblyInfo.cs</Link>
+    </Compile>
     <Compile Include="CommonSetup.cs" />
+    <Compile Include="Controls\DelayedConstructionWrapperUserControl.xaml.cs">
+      <DependentUpon>DelayedConstructionWrapperUserControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\BasicLED.xaml.cs">
       <DependentUpon>BasicLED.xaml</DependentUpon>
     </Compile>
@@ -102,6 +112,7 @@
     <Compile Include="Converters\CommonConverters.cs" />
     <Compile Include="Converters\LoggingConverters.cs" />
     <Compile Include="Converters\RadioButtonConverter.cs" />
+    <Compile Include="Converters\SemiConverters.cs" />
     <Compile Include="Extensions\Commands.cs" />
     <Compile Include="Extensions\ButtonIsPressedObserver.cs" />
     <Compile Include="Extensions\Attachable.cs" />
@@ -112,13 +123,17 @@
     <Compile Include="WPF_Logging.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">
+    <ProjectReference Include="..\..\..\MosaicLibCSBase.csproj">
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
-      <Name>MosaicLibCSBase2010</Name>
+      <Name>MosaicLibCSBase</Name>
       <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Controls\DelayedConstructionWrapperUserControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Controls\BasicLED.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

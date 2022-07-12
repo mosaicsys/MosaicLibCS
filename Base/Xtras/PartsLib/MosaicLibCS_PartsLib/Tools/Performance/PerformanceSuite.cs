@@ -73,7 +73,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             NetIfaceGroups = 0x2000000,
         }
 
-        public PerformanceSuitePartConfig(string partID = "PerfSuite", string dataFilesDirPath = @".\DataFiles")
+        public PerformanceSuitePartConfig(string partID = "PerfSuite", string dataFilesDirPath = @".\DataFiles", WriterBehavior writerBehavior = (WriterBehavior.AdvanceOnDayBoundary | (WriterBehavior.FlushAfterAnything & ~WriterBehavior.FlushAfterEveryGroupWrite)))
         {
             PartID = partID;
 
@@ -261,7 +261,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 FileIndexNumRows = 8192,
                 ClientNVS = new NamedValueSet() 
                 { 
-                    { "WriterBehavior", WriterBehavior.AdvanceOnDayBoundary | WriterBehavior.FlushAfterAnything },
+                    { "WriterBehavior", writerBehavior },
                 },
             };
 
@@ -404,7 +404,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
     public class PerformanceSuitePart : SimpleActivePartBase
 	{
-        public PerformanceSuitePart(PerformanceSuitePartConfig config)
+        public PerformanceSuitePart(PerformanceSuitePartConfig config, IMDRFWriter mdrfWriterIn = null)
             : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1)
         {
             Config = new PerformanceSuitePartConfig(config);
@@ -412,7 +412,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             if (!Config.DisableMMTimerPeriodUsage)
                 mmTimerPeriod = new MMTimerPeriod();
 
-            mdrfWriter = new MDRFWriter("{0}.mdrfwriter".CheckedFormat(PartID), Config.MDRFWriterSetupInfo, enableAPILocking: true);
+            mdrfWriter = mdrfWriterIn ?? new MDRFWriter("{0}.mdrfwriter".CheckedFormat(PartID), Config.MDRFWriterSetupInfo, enableAPILocking: true);
 
             if (!Config.PruneRules.IsEmpty)
             {
@@ -451,6 +451,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
             if (Config.NetIfacePerfPartConfig != null && Config.EnableNetIfacePerfPart)
                 partsList.Add(netIfacePerf = new NetIfacePerformancePart(Config.NetIfacePerfPartID, Config.NetIfacePerfPartConfig, mdrfWriter));
 
+            writerFlushIntervalTimer = new QpcTimer() { TriggerInterval = Config.MDRFWriterSetupInfo.MinNominalFileIndexWriteInterval, AutoReset = true }.Start();
+
             AddExplicitDisposeAction(() => Release());
         }
 
@@ -470,6 +472,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
         public IMDRFWriter MDRFWriter { get { return mdrfWriter; } }
         private File.DirectoryTreePruningManager pruningMgr;
         private List<IActivePartBase> partsList = new List<IActivePartBase>();
+        QpcTimer writerFlushIntervalTimer;
 
         private IActivePartBase cpuPerf, fileRWPerf, procPerf, pingPerf, serialEchoPerf, netIfacePerf;
 
@@ -498,6 +501,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
         {
             if (BaseState.IsOnline)
             {
+                if (mdrfWriter.IsFileOpen && writerFlushIntervalTimer.IsTriggered)
+                    mdrfWriter.Flush();
+
                 PartsLib.Tools.MDRF.Writer.FileInfo closedFileInfo = mdrfWriter.NextClosedFileInfo ?? emptyFileInfo;
 
                 if (pruningMgr != null)

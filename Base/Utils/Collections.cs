@@ -74,8 +74,8 @@ namespace MosaicLib.Utils
                 {
                     try
                     {
-                        if (itemParamsArray != null)
-                            itemParamsArray.DoForEach(item => backingQueue.Enqueue(item));
+                        foreach (var item in itemParamsArray.MapNullToEmpty())
+                            backingQueue.Enqueue(item);
                     }
                     finally
                     {
@@ -95,8 +95,8 @@ namespace MosaicLib.Utils
                 {
                     try
                     {
-                        if (set != null)
-                            set.DoForEach(item => backingQueue.Enqueue(item));
+                        foreach (var item in set.MapNullToEmpty())
+                            backingQueue.Enqueue(item);
                     }
                     finally
                     {
@@ -182,7 +182,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Dequeues and removes all of the items in the queue and returns them in an array.
             /// </summary>
-            public ItemType [] DequeueAll()
+            public ItemType[] DequeueAll()
             {
                 ItemType[] array;
 
@@ -245,7 +245,7 @@ namespace MosaicLib.Utils
             private readonly object mutex = new object();
 
             /// <summary>This is the backing queue object on which this object is based.</summary>
-            private Queue<ItemType> backingQueue = new Queue<ItemType>();
+            private readonly Queue<ItemType> backingQueue = new Queue<ItemType>();
 
             /// <summary>storage for the VolatileCount property.  Used as a local cached copy of the queue.Count value.</summary>
             private volatile int volatileCount = 0;
@@ -277,6 +277,7 @@ namespace MosaicLib.Utils
         /// This class is a local replacement for the System.Collections.ObjectModel.ReadOnlyCollection as the native one simply provides a read-only facade on the underlying mutable IList from which it is constructed.
         /// <para/>Note: This object is intended as a utility storage class.  All interfaces are implemented explicitly so the caller can only make use of this object's contents by casting it to one of the supported interfaces.
         /// </summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0044:Add readonly modifier", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
         [Serializable]
         public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable, IEquatable<IList<TItemType>>
         {
@@ -573,19 +574,16 @@ namespace MosaicLib.Utils
             public static ReadOnlyIDictionary<TKey, TValue> Empty { get { return _empty; } }
             private static readonly ReadOnlyIDictionary<TKey, TValue> _empty = new ReadOnlyIDictionary<TKey, TValue>();
 
-            private KeyValuePair<TKey, TValue>[] itemsArray;
+            private readonly KeyValuePair<TKey, TValue>[] itemsArray;
             private static readonly KeyValuePair<TKey, TValue>[] emptyArray = EmptyArrayFactory<KeyValuePair<TKey, TValue>>.Instance;
 
-            [NonSerialized]
             private IDictionary<TKey, TValue> _dOfItems = null;
 
-            [NonSerialized]
             private ReadOnlyIList<TKey> _rolOfKeys = null;
 
-            [NonSerialized]
             private ReadOnlyIList<TValue> _rolOfValues = null;
 
-            private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray)); } }
+            private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray, onlyTakeFirst: false)); } }
             private ReadOnlyIList<TKey> ROLOfKeys { get { return _rolOfKeys ?? (_rolOfKeys = new ReadOnlyIList<TKey>(itemsArray.Select(item => item.Key))); } }
             private ReadOnlyIList<TValue> ROLOfValues { get { return _rolOfValues ?? (_rolOfValues = new ReadOnlyIList<TValue>(itemsArray.Select(item => item.Value))); } }
 
@@ -684,6 +682,152 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region ReadOnlyHashSet
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0044:Add readonly modifier", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
+        [Serializable]
+        public class ReadOnlyHashSet<TItemType> : ISet<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IEnumerable
+        {
+            public ReadOnlyHashSet(IEnumerable<TItemType> set = null)
+            {
+                itemsArray = set.SafeToArray();
+            }
+
+            public ReadOnlyHashSet(TItemType item1, params TItemType [] itemParamsArray)
+                : this(item1.Concat(itemParamsArray))
+            { }
+
+            public static ReadOnlyHashSet<TItemType> Empty { get { return _Empty; } }
+            private static readonly ReadOnlyHashSet<TItemType> _Empty = new ReadOnlyHashSet<TItemType>();
+
+            private TItemType[] itemsArray;
+
+            [NonSerialized]
+            private ISet<TItemType> _setOfItems = null;
+
+            private ISet<TItemType> SetOfItems { get { return _setOfItems ?? (_setOfItems = new HashSet<TItemType>().SafeAddRange(itemsArray)); } }
+
+            /// <summary>Returns the count of the number of items that are in this set</summary>
+            public int Count
+            {
+                get { return itemsArray.Length; }
+            }
+
+            #region ISet, ICollection, IEnumerable implementations
+
+            bool ISet<TItemType>.Add(TItemType value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.ExceptWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.IntersectWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            /// <summary>Returns true if this set is a proper (strict) subset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsProperSubsetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsProperSubsetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a proper (strict) superset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsProperSupersetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsProperSupersetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a subset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsSubsetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsSubsetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a superset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsSupersetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsSupersetOf(other);
+            }
+
+            /// <summary>Returns true if this set overlaps the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool Overlaps(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.Overlaps(other);
+            }
+
+            /// <summary>Returns true if this set contains the same set of elements as the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool SetEquals(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.SetEquals(other);
+            }
+
+            void ISet<TItemType>.SymmetricExceptWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.UnionWith(IEnumerable<TItemType> other)
+
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<TItemType>.Add(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<TItemType>.Clear()
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool ICollection<TItemType>.Contains(TItemType item)
+            {
+                return SetOfItems.Contains(item);
+            }
+
+            void ICollection<TItemType>.CopyTo(TItemType[] array, int arrayIndex)
+            {
+                itemsArray.CopyTo(array, arrayIndex);
+            }
+
+            bool ICollection<TItemType>.IsReadOnly
+            {
+                get { return true; }
+            }
+
+            bool ICollection<TItemType>.Remove(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            public IEnumerator<TItemType> GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            #endregion
+        }
+
+        #endregion
+
         #region ArrayEnumerator
 
         /// <summary>
@@ -700,8 +844,8 @@ namespace MosaicLib.Utils
                 this.current = default(TItemType);
             }
 
-            private TItemType[] array;
-            private int arrayLength;
+            private readonly TItemType[] array;
+            private readonly int arrayLength;
 
             /// <summary>
             /// Gives the index of the "next" element.  
@@ -729,7 +873,7 @@ namespace MosaicLib.Utils
                 {
                     if (index <= 0 || index >= arrayLength + 1)
                     {
-                        throw new System.InvalidOperationException("The enumerator is positioned before the first element of the array or after the last element");
+                        new System.InvalidOperationException("The enumerator is positioned before the first element of the array or after the last element").Throw();
                     }
 
                     return this.Current;
@@ -1044,7 +1188,7 @@ namespace MosaicLib.Utils
                     return readOnlyIList;
                 }
             }
-            
+
             #endregion
 
             #region Private fields
@@ -1053,7 +1197,7 @@ namespace MosaicLib.Utils
             private readonly object listMutex = new object();
 
             /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
-            private List<ObjectType> objectList = new List<ObjectType>();
+            private readonly List<ObjectType> objectList = new List<ObjectType>();
 
             /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
             private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
@@ -1076,7 +1220,7 @@ namespace MosaicLib.Utils
             private volatile bool rebuildVolatileReadOnlyIList = true;
 
             #endregion
-            
+
             #region IList, ICollection, IEnumerable implementations
 
             void IList<ObjectType>.Insert(int index, ObjectType item)
@@ -1230,8 +1374,8 @@ namespace MosaicLib.Utils
             object ICollection.SyncRoot
             {
                 get { return listMutex; }
-            } 
-           
+            }
+
             #endregion
         }
 
@@ -1247,13 +1391,13 @@ namespace MosaicLib.Utils
         {
             #region Private fields and related private methods
 
-            private List<TItemType> list;
-            private TItemType [] _array = null;
+            private readonly List<TItemType> list;
+            private TItemType[] _array = null;
             private ReadOnlyIList<TItemType> _readOnlyIList = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _array and _readOnlyIList to null)</summary>
-            private void NoteContentsChanged() 
-            { 
+            private void NoteContentsChanged()
+            {
                 _array = null;
                 _readOnlyIList = null;
             }
@@ -1287,7 +1431,7 @@ namespace MosaicLib.Utils
             /// </summary>
             public TItemType[] Array
             {
-                get 
+                get
                 {
                     return _array ?? (_array = list.ToArray());
                 }
@@ -1323,10 +1467,10 @@ namespace MosaicLib.Utils
             public int RemoveAll(Predicate<TItemType> match)
             {
                 if (match == null)
-                    throw new System.ArgumentNullException("match");
+                    new System.ArgumentNullException("match").Throw();
 
                 int remoteCount = 0;
-                for (int idx = 0; idx < list.Count; )
+                for (int idx = 0; idx < list.Count;)
                 {
                     TItemType item = list[idx];
                     if (match(item))
@@ -1469,14 +1613,14 @@ namespace MosaicLib.Utils
         {
             #region Private fields and related private methods
 
-            private Dictionary<TKeyType, TValueType> dictionary;
-            private TKeyType [] _keyArray = null;
-            private TValueType [] _valueArray = null;
-            private KeyValuePair<TKeyType, TValueType> [] _keyValuePairArray = null;
+            private readonly Dictionary<TKeyType, TValueType> dictionary;
+            private TKeyType[] _keyArray = null;
+            private TValueType[] _valueArray = null;
+            private KeyValuePair<TKeyType, TValueType>[] _keyValuePairArray = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _keyArray, _valueArray, and _keyValuePairArray to null)</summary>
-            private void NoteContentsChanged() 
-            { 
+            private void NoteContentsChanged()
+            {
                 _keyArray = null;
                 _valueArray = null;
                 _keyValuePairArray = null;
@@ -1512,7 +1656,7 @@ namespace MosaicLib.Utils
             /// </summary>
             public TKeyType[] KeyArray
             {
-                get 
+                get
                 {
                     return _keyArray ?? (_keyArray = dictionary.Keys.ToArray());
                 }
@@ -1714,7 +1858,8 @@ namespace MosaicLib.Utils
         /// <para/>This class implicilty uses default(<typeparamref name="TItemType"/>) to indicate when a token position is empty.
         /// As such you cannot Add default values to the set.
         /// </summary>
-        [Serializable]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
+        [DataContract(Namespace = MosaicLib.Constants.MosaicLibNameSpaceRoot)]
         public class TokenSet<TItemType> : ITokenSet<TItemType>
         {
             private static readonly EqualityComparer<TItemType> defaultEqualityComparer = EqualityComparer<TItemType>.Default;
@@ -1725,7 +1870,7 @@ namespace MosaicLib.Utils
             /// This property returns the sigleton Empty, readonly TokenSet{<typeparamref name="TItemType"/>}.
             /// </summary>
             public static TokenSet<TItemType> Empty { get { return _empty; } }
-            private static TokenSet<TItemType> _empty = new TokenSet<TItemType>(asReadOnly: true);
+            private static readonly TokenSet<TItemType> _empty = new TokenSet<TItemType>(asReadOnly: true);
 
             /// <summary>Constructs a new TokenSet with the given <paramref name="firstItem"/>, and optional <paramref name="moreItemParamsArray"/> item parameters</summary>
             public TokenSet(TItemType firstItem, params TItemType[] moreItemParamsArray)
@@ -1798,8 +1943,8 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Getter returns true if the list is read only.  Setter may be used to set the list to be read-only, but may not be used to set a read/only set to be read/write</summary>
-            public bool IsReadOnly 
-            { 
+            public bool IsReadOnly
+            {
                 get { return isReadOnly; }
                 set
                 {
@@ -1959,11 +2104,30 @@ namespace MosaicLib.Utils
                 return this.SequenceEqual(other);
             }
 
-            [NonSerialized]
             private bool isReadOnly;
 
-            private TItemType token1, token2, token3;
+            [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
+            private TItemType token1;
+
+            [DataMember(Order = 2000, IsRequired = false, EmitDefaultValue = false)]
+            private TItemType token2;
+
+            [DataMember(Order = 3000, IsRequired = false, EmitDefaultValue = false)]
+            private TItemType token3;
+
             private List<TItemType> moreTokens;
+
+            [DataMember(Order = 4000, Name = "moreTokens", IsRequired = false, EmitDefaultValue = false)]
+            private TItemType[] MoreTokensArray
+            {
+                get { return moreTokens.SafeToArray(mapNullToEmpty: false).MapEmptyToNull(); }
+                set { moreTokens = (value.IsNullOrEmpty() ? null : new List<TItemType>(value)); }
+            }
+
+            internal TItemType Token1 { get { return token1; } }
+            internal TItemType Token2 { get { return token2; } }
+            internal TItemType Token3 { get { return token3; } }
+            internal IEnumerable<TItemType> MoreTokens { get { return moreTokens; } }
 
             public override string ToString()
             {
@@ -1990,8 +2154,198 @@ namespace MosaicLib.Utils
             private void ThrowIfIsReadOnly(string reasonPrefix)
             {
                 if (IsReadOnly)
-                    throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set");
+                    new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set").Throw();
             }
+        }
+
+        #endregion
+
+        #region Deduplicator
+
+        /// <summary>
+        /// This class is used to convert a loose sequence of item instances into a sequence of item instances where recent duplicates are replaced with the prior equal instance.
+        /// This can be used to help reduce the memory storeage space used when a sequence of non-identical, but otherwise equal, objects are generated.  
+        /// An example of this is meta data forwarding for IVAs propagated using a remoting connection.
+        /// <para/>Note: this class only provides heuristic deduplication.  
+        /// This class only considers one item for each given hash code and as such, if it is given a sequence of non-equal items with the same hash code value, 
+        /// it may not replace given items with an equal prior item that is in its history.
+        /// </summary>
+        public class Deduplicator<TItemType> 
+            where TItemType : IEquatable<TItemType>
+        {
+            /// <summary>Constructor.  Sets MaxHistoryCount to the given <paramref name="maxHistoryCount"/> value.</summary>
+            public Deduplicator(int maxHistoryCount = 100)
+            {
+                MaxHistoryCount = maxHistoryCount;
+            }
+
+            /// <summary>
+            /// Gives the current max history count.  
+            /// If this value is set to be less than the current number of items in the hisotry set then this property will remove the excess items from the history set.
+            /// </summary>
+            public int MaxHistoryCount
+            {
+                get { return _MaxHistoryCount; }
+                set
+                {
+                    _MaxHistoryCount = value;
+                    RemoveHistoryItemsIfNeeded(value);
+                }
+            }
+
+            private int _MaxHistoryCount;
+
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
+            public override string ToString()
+            {
+                return "Deduplicator<{0}> {1} Matches:{2} NonMatches:{3} hit rate:{4:f2}".CheckedFormat(typeof(TItemType).GetTypeLeafName(), MaxHistoryCount, MatchCount, NonMatchCount, MatchCount * ((double)MatchCount + NonMatchCount).SafeOneOver());
+            }
+
+            private struct ValueHashPair
+            {
+                public int HashCode { get; set; }
+                public TItemType Value { get; set; }
+
+                public override string ToString()
+                {
+                    return "hash:{0} value:{1}".CheckedFormat(HashCode, Value.SafeToString(mapNullTo: "[Null]"));
+                }
+            }
+
+            private readonly Queue<ValueHashPair> valueHashPairHistoryQueue = new Queue<ValueHashPair>();
+            private readonly Dictionary<int, ValueHashPair> valueHashPairDictionary = new Dictionary<int, ValueHashPair>();
+
+            /// <summary>
+            /// This value is incremented each time the Process method is able to substitute the given item with a previously processed one of equal content
+            /// </summary>
+            public int MatchCount { get; set; }
+
+            /// <summary>
+            /// This value is incremented each time the Process method given an item that does not equal to any previously processed one within the hashcode and MaxHistoryCount constraints.
+            /// </summary>
+            public int NonMatchCount { get; set; }
+
+            /// <summary>
+            /// Removes the prior contents from the history set so that Processing of future items will not produce items that have been processed prior to this call.
+            /// </summary>
+            public void Clear()
+            {
+                valueHashPairHistoryQueue.Clear();
+                valueHashPairDictionary.Clear();
+                MatchCount = 0;
+                NonMatchCount = 0;
+            }
+
+            /// <summary>
+            /// Processes the given <paramref name="itemIn"/> instance and either returns it unmodified or returns a recently given previous item instance
+            /// that has equal content.
+            /// </summary>
+            public TItemType Process(TItemType itemIn)
+            {
+                if (MaxHistoryCount <= 0)
+                    return itemIn;
+
+                var itemInHashCode = itemIn.SafeGetHashCode();
+
+                ValueHashPair vhp;
+                if (valueHashPairDictionary.TryGetValue(itemInHashCode, out vhp) && vhp.Value.SafeEquals(itemIn))
+                {
+                    MatchCount += 1;
+                    return vhp.Value;
+                }
+                else
+                {
+                    RemoveHistoryItemsIfNeeded(Math.Max(MaxHistoryCount - 1, 0));
+
+                    var newItemVHP = new ValueHashPair() { HashCode = itemInHashCode, Value = itemIn };
+
+                    valueHashPairHistoryQueue.Enqueue(newItemVHP);
+                    valueHashPairDictionary[itemInHashCode] = newItemVHP;
+
+                    NonMatchCount += 1;
+
+                    return itemIn;
+                }
+            }
+
+            /// <summary>
+            /// Common method use to shrink the history set, either on change in the MaxHistoryCount or on Process of a new item that is about to be added to the set.
+            /// </summary>
+            private void RemoveHistoryItemsIfNeeded(int maxCount)
+            {
+                while (valueHashPairHistoryQueue.Count > maxCount)
+                {
+                    var removeVHP = valueHashPairHistoryQueue.Dequeue();
+                    valueHashPairDictionary.Remove(removeVHP.HashCode);
+                }
+            }
+        }
+
+        #endregion
+
+        #region SharedMutexSet
+
+        /// <summary>
+        /// This class is used to support cases where a set of objects each need a mutex but where they can share use of a limited range of actual mutex objects
+        /// and where the use of more than one such mutex object can be used to arbitrarily reduce the risk of ownership collision caused by this shared use.
+        /// </summary>
+        public class SharedMutexSet
+        {
+            /// <summary>
+            /// This gives the default set size for sets that are constructed without providing an externally specified set size value.
+            /// </summary>
+            public static ushort DefaultSetSize = 128;
+
+            /// <summary>
+            /// Constructor.  Caller may provide the set size (<paramref name="setSizeIn"/>) to use, or if unspecified, the static <see cref="DefaultSetSize"/> value will be used.
+            /// </summary>
+            /// <param name="setSizeIn"></param>
+            public SharedMutexSet(ushort setSizeIn = default(ushort))
+            {
+                var setSize = ((int)setSizeIn).MapDefaultTo(DefaultSetSize).Clip(1, ushort.MaxValue);
+
+                mutexArray = Enumerable.Range(0, setSize).Select(_ => new object()).ToArray();
+            }
+
+            /// <summary>
+            /// Returns the size of the set of mutex objects that are in the set.
+            /// </summary>
+            public int SetSize { get { return mutexArray.Length; } }
+
+            /// <summary>
+            /// Returns the current counter value.
+            /// WARNING: this value is volatile and may be incremented and/or wrapped asynchronously to the use of this property so no guarantees or other assertions are made about the values it returns.
+            /// </summary>
+            public int VolatileCounter { get { return counter; } }
+
+            /// <summary>
+            /// Gets and returns the (heuristically) next mutex object from the sequence which will (generally) iterate repeatedly through the fixed set of such objects.
+            /// [aka once the last object is given, the next call will give the first, and then the second, etc.].
+            /// </summary>
+            /// <remarks>
+            /// Note: for performance this method does not use atomic increment.  As such if two threads call this method with a very high level of 
+            /// instruction alignment then the two counter increment operations may produce the same index value and result in the same mutex object being 
+            /// returned on both threads.  
+            /// This is viewed has having a very low propability and given that heuristic re-issuing of the same set of objects is the intended behavior here,
+            /// the optimization is reasonable and does not decrease the utility of this class.
+            /// </remarks>
+            public object GetNextSharedMutexObject()
+            {
+                int index = counter++;
+
+                if (!mutexArray.IsSafeIndex(index))
+                {
+                    counter = index = 0;
+                }
+
+                return mutexArray[index];
+            }
+
+            private readonly object[] mutexArray;
+
+            private volatile int counter;
         }
 
         #endregion
@@ -2136,31 +2490,50 @@ namespace MosaicLib.Utils
 
         #region IDictionary<TKey, TValue> (SafeAddItems, SafeAddRange, SafeSetValueForKey)
 
-        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstItem"/> and any following <paramref name="moreItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
-        public static IDictionary<TKey, TValue> SafeAddItems<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> firstItem, params KeyValuePair<TKey, TValue>[] moreItemsArray)
+        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstKVP"/> and any following <paramref name="moreKVPItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        public static TDictionary SafeAddItems<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> firstKVP, params KeyValuePair<TKey, TValue>[] moreKVPItemsArray)
+            where TDictionary : IDictionary<TKey, TValue>
         {
-            dictionary.SafeSetKeyValue(firstItem);
+            dictionary.SafeSetKeyValue(firstKVP);
 
-            if (!moreItemsArray.IsNullOrEmpty())
-                moreItemsArray.DoForEach(item => dictionary.SafeSetKeyValue(item));
+            if (!moreKVPItemsArray.IsNullOrEmpty())
+            {
+                foreach (var kvp in moreKVPItemsArray)
+                    dictionary.SafeSetKeyValue(kvp);
+            }
 
             return dictionary;
         }
 
-        /// <summary>Adds (using SafeSetKeyValue)  the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
-        public static IDictionary<TKey, TValue> SafeAddRange<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
+        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet, bool onlyTakeFirst = false)
+            where TDictionary : IDictionary<TKey, TValue>
         {
-            if (itemSet != null)
-                itemSet.DoForEach(item => dictionary.SafeSetKeyValue(item));
+            if (itemSet != null && dictionary != null)
+            {
+                foreach (var kvp in itemSet)
+                    dictionary.SafeSetKeyValue(kvp, onlyTakeFirst: onlyTakeFirst);
+            }
 
             return dictionary;
         }
 
         /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="kvp"/>'s Key is non-null then uses the TKey indexed setter to set the key's value in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
-        public static IDictionary<TKey, TValue> SafeSetKeyValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> kvp)
+        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> kvp, bool onlyTakeFirst = false)
+            where TDictionary : IDictionary<TKey, TValue>
         {
-            if (dictionary != null && kvp.Key != null)
+            if (dictionary != null && kvp.Key != null && (!onlyTakeFirst || !dictionary.ContainsKey(kvp.Key)))
                 dictionary[kvp.Key] = kvp.Value;
+
+            return dictionary;
+        }
+
+        /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="key"/> is non-null then uses the TKey indexed setter to set the <paramref name="key"/>'s <paramref name="value"/> in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
+        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, TKey key, TValue value, bool onlyTakeFirst = false)
+            where TDictionary : IDictionary<TKey, TValue>
+        {
+            if (dictionary != null && key != null && (!onlyTakeFirst || !dictionary.ContainsKey(key)))
+                dictionary[key] = value;
 
             return dictionary;
         }
@@ -2220,13 +2593,37 @@ namespace MosaicLib.Utils
                 return mapNullToEmpty ? new TokenSet<TItemType>() : null;
         }
 
+        /// <summary>
+        /// Determine the given TokenSet (<paramref name="value"/>) has the same set of tokens (by object.Equals equality) as the given <paramref name="other"/> set contains.  
+        /// Optinally compares the two sets IsReadOnly values for equality.
+        /// </summary>
+        public static bool Equals<TItemType>(this ITokenSet<TItemType> value, ITokenSet<TItemType> other, bool compareReadOnly)
+        {
+            if (Object.ReferenceEquals(value, other))
+                return true;
+
+            if (value == null || other == null)
+                return false;
+
+            if (compareReadOnly && (value.IsReadOnly != other.IsReadOnly))
+                return false;
+
+            TokenSet<TItemType> valueAsTS = value as TokenSet<TItemType>;
+            TokenSet<TItemType> otherAsTS = other as TokenSet<TItemType>;
+
+            // if this set has matching occupied local token values and both sets do not have moreTokens lists then return true
+            if (valueAsTS != null && otherAsTS != null && Equals(valueAsTS.Token1, otherAsTS.Token1) && Equals(valueAsTS.Token2, otherAsTS.Token2) && Equals(valueAsTS.Token3, otherAsTS.Token3) && valueAsTS.MoreTokens == null && otherAsTS.MoreTokens == null)
+                return true;
+
+            return value.SequenceEqual(other);
+        }
         #endregion
     }
 
     namespace Collections.Trees
     {
         public class Tree<TItemType, TKeyPathItemType>
-            where TKeyPathItemType: IEquatable<TKeyPathItemType>
+            where TKeyPathItemType : IEquatable<TKeyPathItemType>
         {
             public TreeNode<TItemType, TKeyPathItemType> RootNode { get; private set; }
 
@@ -2243,14 +2640,14 @@ namespace MosaicLib.Utils
                 {
                     TKeyPathItemType[] keyPathArray = keyPathSelector(item) ?? Utils.Collections.EmptyArrayFactory<TKeyPathItemType>.Instance;
 
-                    TreeNode<TItemType, TKeyPathItemType> currentNode = null;
+                    TreeNode<TItemType, TKeyPathItemType> currentNode;
 
                     if (treeNodeDictionary.TryGetValue(keyPathArray, out currentNode) && currentNode != null && currentNode.Item != null && throwOnDuplicate)
-                        throw new DuplicatePathException("Key path [{0}] already found while building tree".CheckedFormat(keyPathArray.ToString(separator: " ")));
+                        new DuplicatePathException("Key path [{0}] already found while building tree".CheckedFormat(keyPathArray.ToString(separator: " "))).Throw();
 
                     if (currentNode == null)
                     {
-                        currentNode = new TreeNode<TItemType,TKeyPathItemType> { Item = item, KeyPathArray = keyPathArray, IsRootNode = keyPathArray.IsNullOrEmpty() };
+                        currentNode = new TreeNode<TItemType, TKeyPathItemType> { Item = item, KeyPathArray = keyPathArray, IsRootNode = keyPathArray.IsNullOrEmpty() };
                         treeNodeDictionary[keyPathArray] = currentNode;
 
                         var parentNode = currentNode.TryToFillInAndReturnParentNode(treeNodeDictionary);
@@ -2285,18 +2682,21 @@ namespace MosaicLib.Utils
 
                 public int GetHashCode(TKeyPathItemType[] array)
                 {
-                    int length = array.SafeLength();
-                    int hash = (array == null) ? -1 : 1 + length;
+                    var hcb = default(HashCodeBuilder);
 
-                    for (int idx = 0; idx < length; idx++)
+                    if (array != null)
                     {
-                        var item = array[idx];
-                        int itemHash = (item != null) ? item.GetHashCode() : 0x55aa55aa;
+                        hcb.Add(array.Length + 1);
 
-                        hash = (hash << 5) ^ hash ^ itemHash;
+                        foreach (var item in array)
+                            hcb.AddHashCodeForItem(item);
+                    }
+                    else
+                    {
+                        hcb.Add(-1);
                     }
 
-                    return hash;
+                    return hcb.Result;
                 }
             }
 
@@ -2337,7 +2737,7 @@ namespace MosaicLib.Utils
 
         public static partial class ExtensionMethods
         {
-            public static TreeNode<TItemType,TKeyPathItemType> TryToFillInAndReturnParentNode<TItemType, TKeyPathItemType>(this TreeNode<TItemType, TKeyPathItemType> treeNode, Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary)
+            public static TreeNode<TItemType, TKeyPathItemType> TryToFillInAndReturnParentNode<TItemType, TKeyPathItemType>(this TreeNode<TItemType, TKeyPathItemType> treeNode, Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary)
             {
                 var currentNode = treeNode;
 
@@ -2349,7 +2749,7 @@ namespace MosaicLib.Utils
 
                     TKeyPathItemType[] parentNodeKeyPath = treeNode.KeyPathArray.SafeSubArray(0, currentNodeKeyPathLength - 1);
 
-                    TreeNode<TItemType, TKeyPathItemType> parentNode = null;
+                    TreeNode<TItemType, TKeyPathItemType> parentNode;
 
                     if (!treeNodeDictionary.TryGetValue(parentNodeKeyPath, out parentNode) || parentNode == null)
                     {
@@ -2360,7 +2760,7 @@ namespace MosaicLib.Utils
                     currentNode.ParentNode = parentNode;
 
                     currentNode = parentNode;
-               }
+                }
 
                 return treeNode.ParentNode;
             }
@@ -2494,15 +2894,15 @@ namespace MosaicLib.Utils
             /// Public property that allows the caller to obtain an array containing the names of the clients that have tokens that have not been released yet.
             /// </summary>
             /// <remarks>This property is provided to allow test code to safely infer the contents of the internal token list.</remarks>
-            public string[] CurrentClientsList 
-            { 
-                get 
+            public string[] CurrentClientsList
+            {
+                get
                 {
                     lock (tokenListMutex)
                     {
                         return tokenList.Select((t) => t.ClientName).ToArray();
                     }
-                } 
+                }
             }
 
             /// <summary>
@@ -2564,8 +2964,7 @@ namespace MosaicLib.Utils
             private readonly object tokenListMutex = new object();
 
             /// <summary>The list of tokens that have been created and which have not been disposed.</summary>
-            private List<Details.ISharedResourceTokenBase> tokenList = new List<Details.ISharedResourceTokenBase>();
-
+            private readonly List<Details.ISharedResourceTokenBase> tokenList = new List<Details.ISharedResourceTokenBase>();
         }
 
         namespace Details
@@ -2603,12 +3002,12 @@ namespace MosaicLib.Utils
                 /// <summary>
                 /// Each assigned ReleaseAction gets added to the explicit dispose action list provided by DisposableBase (wrapped in a binding delegate).  Generally only the SharedResourceSetupAndReleaseBase will make use of this to add its own release action.
                 /// </summary>
-                public Action<ISharedResourceTokenBase> ReleaseAction 
+                public Action<ISharedResourceTokenBase> ReleaseAction
                 {
                     set
                     {
                         AddExplicitDisposeAction(() => value(this));
-                    } 
+                    }
                 }
             }
         }

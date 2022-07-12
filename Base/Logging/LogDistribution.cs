@@ -1494,7 +1494,7 @@ namespace MosaicLib
             /// </summary>
 			protected void InnerLogLog(MesgType mesgType, string mesg, bool acquireLock = true)
 			{
-                using (var l = new ScopedLock(distMutex, acquireLock: acquireLock))
+                using (var l = new ScopedLockStruct(distMutex, acquireLock: acquireLock))
                 {
                     LogMessage lm = InnerGetLogMessage(false);
 

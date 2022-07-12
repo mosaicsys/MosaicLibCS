@@ -84,8 +84,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
             get { return (PingTargetArray.SafeLength() <= 1 ? new ValueContainer(PingTargetArray.SafeAccess(0, string.Empty)) : new ValueContainer(PingTargetArray)); }
             set 
             {
-                string[] strArray = value.GetValue<string[]>(false);
-                string str = value.GetValue<string>(false);
+                var strArray = value.GetValueLS(false, allowAllTypeChangeAttempts: false).SafeToArray(mapNullToEmpty: false);
+                string str = value.GetValueA(false);
                 if (strArray == null && !str.IsNullOrEmpty())
                     strArray = str.Split(new[] { ' ', ',', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
 
@@ -118,7 +118,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             pingTrackerArray.DoForEach(pt => mdrfWriter.Add(pt.hGrp.GroupInfo));
 
-            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, new NamedValueSet() { { "noMDRF" } });
+            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, Defaults.PerfLoggerDefaultNVS);
         }
 
         void Release()
@@ -151,8 +151,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 IPAddress = IPAddressArray.SafeAccess(0, System.Net.IPAddress.None);
                 h = new Histogram(binBoundariesArray);
 
-                timeoutCountGPI = new MDRF.Writer.GroupPointInfo() { Name = "timeoutCount", ValueCST = ContainerStorageType.UInt64, VC = new ValueContainer(0L) };
-                failureCountGPI = new MDRF.Writer.GroupPointInfo() { Name = "failureCount", ValueCST = ContainerStorageType.UInt64, VC = new ValueContainer(0L) };
+                timeoutCountGPI = new MDRF.Writer.GroupPointInfo() { Name = "timeoutCount", CST = ContainerStorageType.UInt64, VC = new ValueContainer(0L) };
+                failureCountGPI = new MDRF.Writer.GroupPointInfo() { Name = "failureCount", CST = ContainerStorageType.UInt64, VC = new ValueContainer(0L) };
 
                 hGrp = new MDRFHistogramGroupSource("hPing_{0}".CheckedFormat(HostNameOrAddress),
                                                     h,

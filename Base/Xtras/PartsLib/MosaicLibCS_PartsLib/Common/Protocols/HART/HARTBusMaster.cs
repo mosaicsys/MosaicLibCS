@@ -580,7 +580,7 @@ namespace MosaicLib.PartsLib.Protocols.HART
         public BusMaster(string name, string targetSpecStr, bool autoConnect)
             : base(name, "HART.BusMaster")
         {
-            portConfig = new SerialIO.PortConfig(name + ".sp", targetSpecStr, MosaicLib.SerialIO.LineTerm.None)
+            portConfig = new SerialIO.PortConfig(name + ".sp", targetSpecStr, MosaicLib.SerialIO.LineTerm.None, disablePartBaseIVIUsage: true)
             {
                 EnableAutoReconnect = autoConnect,
                 // SpinWaitTimeLimit = TimeSpan.FromSeconds(0.001),
@@ -597,7 +597,7 @@ namespace MosaicLib.PartsLib.Protocols.HART
             catch (System.Exception ex)
             {
                 Log.Error.Emit("CreatePort failed: {0}", ex.Message);
-                sp = SerialIO.Factory.CreatePort(new MosaicLib.SerialIO.PortConfig(name + ".sp", "<NullPort/>", MosaicLib.SerialIO.LineTerm.None));
+                sp = SerialIO.Factory.CreatePort(new MosaicLib.SerialIO.PortConfig(name + ".sp", "<NullPort/>", MosaicLib.SerialIO.LineTerm.None, disablePartBaseIVIUsage: true));
             }
 
             spFlushAction = sp.CreateFlushAction(TimeSpan.FromSeconds(0.100));

@@ -24,7 +24,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 using MosaicLib.Modular.Common;
@@ -134,24 +133,26 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             lock (mutex)
             {
-                string connectionType = connParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false);
+                string connectionType = connParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false);
 
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
                 if (connectionFactoryForType == null)
-                    throw new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML()));
+                    new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML())).Throw();
 
                 try 
                 {
                     return connectionFactoryForType.CreateServerConnection(connParamsNVS, sessionManager);
                 }
-                catch (TransportConnectionFactoryException)
+                catch (TransportConnectionFactoryException ex)
                 {
-                    throw;
+                    ex.Throw();
+                    return null;
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Encountered unexpected exception", ex);
+                    new TransportConnectionFactoryException("Encountered unexpected exception", ex).Throw();
+                    return null;
                 }
             }
         }
@@ -162,24 +163,26 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             lock (mutex)
             {
-                string connectionType = connParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false);
+                string connectionType = connParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false);
 
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
                 if (connectionFactoryForType == null)
-                    throw new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML()));
+                    new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML())).Throw();
 
                 try 
                 {
                     return connectionFactoryForType.CreateClientConnection(connParamsNVS, session);
                 }
-                catch (TransportConnectionFactoryException)
+                catch (TransportConnectionFactoryException ex)
                 {
-                    throw;
+                    ex.Throw();
+                    return null;
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Encountered unexpected exception", ex);
+                    new TransportConnectionFactoryException("Encountered unexpected exception", ex).Throw();
+                    return null;
                 }
             }
         }
@@ -332,9 +335,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 try
                 {
                     Port = ConnParamsNVS["Port"].VC.GetValue<int>(rethrow: false, defaultValue: Constants.DefaultUDPPort);
-                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                     NumConcurrentReads = ConnParamsNVS["NumConcurrentReads"].VC.GetValue<int>(rethrow: false, defaultValue: IsServer ? DefaultServerConcurrentReads : DefaultClientConcurrentReads);
-                    int requestReceiveBufferSize = ConnParamsNVS["ReceiveBufferSize"].VC.GetValue<int>(rethrow: false);
+                    int requestReceiveBufferSize = ConnParamsNVS["ReceiveBufferSize"].VC.GetValueI4(rethrow: false);
 
                     IPV6 = ConnectionType.EndsWith("v6");
 
@@ -344,7 +347,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             if (connParamsNVS.Contains("IPAddress"))
                             {
                                 IPAddress ipAddress;
-                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValue<string>(rethrow: false).MapNullToEmpty(), out ipAddress))
+                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValueA(rethrow: false).MapNullToEmpty(), out ipAddress))
                                     IPAddress = ipAddress;
                                 else
                                     IPAddress = IPAddress.None;
@@ -362,7 +365,24 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             break;
 
                         case TransportRole.Server:
-                            IPAddress = IPV6 ? IPAddress.IPv6Any : IPAddress.Any;
+                            var bindToIPAddressStr = connParamsNVS["BindToIPAddress"].VC.GetValueA(rethrow: false);
+                            var anyIPAddress = IPV6 ? IPAddress.IPv6Any : IPAddress.Any;
+
+                            if (bindToIPAddressStr.IsNeitherNullNorEmpty())
+                            {
+                                IPAddress ipAddress;
+                                if (bindToIPAddressStr == "localhost")
+                                    IPAddress = IPV6 ? IPAddress.IPv6Loopback : IPAddress.Loopback;
+                                else if (IPAddress.TryParse(bindToIPAddressStr, out ipAddress))
+                                    IPAddress = ipAddress;
+                                else
+                                    IPAddress = anyIPAddress;
+                            }
+                            else
+                            {
+                                IPAddress = anyIPAddress;
+                            }
+
                             ServerIPEndPoint = new IPEndPoint(IPAddress, Port);
 
                             udpPort = new UdpClient(ServerIPEndPoint);
@@ -370,7 +390,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             break;
 
                         default:
-                            throw new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML()));
+                            new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML())).Throw();
+                            break;
                     }
 
                     if (udpPort != null && udpPort.Client != null)
@@ -381,7 +402,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     udpSocket = ((udpPort != null) ? udpPort.Client : null);
 
                     if (udpSocket == null)
-                        throw new TransportConnectionFactoryException("Unable to construct {0} {1}: settings {2} are not valid".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML()));
+                        new TransportConnectionFactoryException("Unable to construct {0} {1}: settings {2} are not valid".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML())).Throw();
 
                     logger = new Logging.Logger("{0}_{1}{2:d2}_Port{3:d5}".CheckedFormat(ConnectionType, Role, InstanceNum, Port));
 
@@ -417,7 +438,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex);
+                    new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex).Throw();
                 }
             }
 
@@ -533,7 +554,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 int count = 0;
 
-                postedSendList.FilterAndRemove(st => (st == null || st.done)).Where(st => st != null).DoForEach(st => { HandleCompletedSend(qpcTimeStamp, st); count++; });
+                foreach (var st in postedSendList.FilterAndRemove(st => (st == null || st.done)))
+                {
+                    if (st != null)
+                    {
+                        HandleCompletedSend(qpcTimeStamp, st);
+                        count++;
+                    }
+                }
 
                 return count;
             }
@@ -541,7 +569,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             private void HandleCompletedSend(QpcTimeStamp qpcTimeStamp, SendTracker st)
             {
                 if (st.buffer.State == Buffers.BufferState.SendPosted)
-                    st.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, Fcns.CurrentMethodName);
+                    st.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, "HandleCompletedSend");
 
                 trace.Emit("st:{0:x4} sent [{1} to {2}]", st.seqNum & 0x0ffff, st.buffer, st.ipEndPoint);
             }
@@ -621,17 +649,48 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public volatile bool done;
             }
 
+
+            List<RecvTracker> doneRTList = new List<RecvTracker>();
+
             private int ServicePostedRecv(QpcTimeStamp qpcTimeStamp)
             {
+                const string methodName = "ServicePostedRecv";
                 int count = 0;
+
+                if (postedRecvList.Count > 0)
                 {
-                    List<RecvTracker> doneRTWithBufferList = postedRecvList.FilterAndRemove(rt => (rt == null || rt.done)).Where(rt => rt != null).ToList();
-
-                    if (doneRTWithBufferList.Count > 0)
+                    // NOTE: the following for loop intentionally compairs index against the dynamic list.Count as it may change the list.Count on the fly.
+                    for (int index = 0; index < postedRecvList.Count; )
                     {
-                        doneRTWithBufferList.Where(rt => rt.buffer != null).DoForEach(rt => rt.buffer.UpdateHeaderFromByteArray());
+                        var rt = postedRecvList[index];
 
-                        HandleCompletedRecv(qpcTimeStamp, doneRTWithBufferList);
+                        if (rt == null)
+                        {
+                            postedRecvList.RemoveAt(index);
+                        }
+                        else if (rt.done)
+                        {
+                            doneRTList.Add(rt);
+                            postedRecvList.RemoveAt(index);
+                        }
+                        else
+                        {
+                            index++;
+                        }
+                    }
+
+                    if (doneRTList.Count > 0)
+                    {
+                        foreach (var rt in doneRTList)
+                        {
+                            if (rt.buffer != null)
+                                rt.buffer.UpdateHeaderFromByteArray();
+                        }
+
+                        HandleCompletedRecv(qpcTimeStamp, doneRTList);
+
+                        doneRTList.Clear();
+
                         count++;
                     }
                 }
@@ -646,7 +705,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                         trace.Emit("rt:{0:x4} BeingReceiveFrom calling", rt.seqNum & 0x0ffff);
 
-                        buffer.SetState(qpcTimeStamp, Buffers.BufferState.ReceivePosted, Fcns.CurrentMethodName);
+                        buffer.SetState(qpcTimeStamp, Buffers.BufferState.ReceivePosted, methodName);
 
                         postedRecvList.Add(rt);
 
@@ -676,7 +735,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 if (SessionBase != null)
                 {
-                    while (doneRTWithBufferList.SafeCount() > 0)
+                    while (doneRTWithBufferList.Count > 0)
                     {
                         RecvTracker rtPeek = doneRTWithBufferList[0];
                         EndPoint fromEndPoint = (rtPeek != null) ?  rtPeek.fromEndPoint : null;
@@ -695,7 +754,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         {
                             doneRTWithBufferList.RemoveAt(0);
 
-                            SessionBase.HandleInboundBuffers(qpcTimeStamp, fromEndPoint, rtPeek.buffer);
+                            SessionBase.HandleInboundBuffers(qpcTimeStamp, fromEndPoint, new[] { rtPeek.buffer }, 0);
                         }
                         else
                         {
@@ -706,13 +765,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             bufferArray.DoForEach(buffer => { trace.Emit("{0}", buffer); });
 
                             string fromIPEndPointStr = fromEndPoint.SafeToString();
-                            bool anyMismatch = rtSetArray.Any(rt => rt.fromEndPoint.SafeToString() != fromIPEndPointStr);
-                            if (anyMismatch)
+                            foreach (var rt in rtSetArray)
                             {
-                                logger.Error.Emit("{0}: mismatch fromIPEndPoint found", Fcns.CurrentMethodName);
+                                if (rt.fromEndPoint.SafeToString() != fromIPEndPointStr)
+                                {
+                                    logger.Error.Emit("{0}: mismatch fromIPEndPoint found", Fcns.CurrentMethodName);
+                                    break;
+                                }
                             }
 
-                            SessionBase.HandleInboundBuffers(qpcTimeStamp, fromEndPoint, bufferArray);
+                            SessionBase.HandleInboundBuffers(qpcTimeStamp, fromEndPoint, bufferArray, 0);
                         }
                     }
                 }
@@ -846,7 +908,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 {
                     Port = ConnParamsNVS["Port"].VC.GetValue<int>(rethrow: false, defaultValue: Constants.DefaultTCPPort);
                     KeepAlivePeriod = ConnParamsNVS["KeepAlivePeriod"].VC.GetValue<TimeSpan>(rethrow: false, defaultValue: (10.0).FromSeconds());
-                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                     TCPOptimizations = ConnParamsNVS["TCPOptimizations"].VC.GetValue<TCPOptimizations>(rethrow: false, defaultValue: TCPOptimizations.OptimizedDefault);
 
                     IPV6 = ConnectionType.EndsWith("v6");
@@ -861,12 +923,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         case TransportRole.Client:
                             if (connParamsNVS.Contains("HostName"))
                             {
-                                HostName = connParamsNVS["HostName"].VC.GetValue<string>(rethrow: false);
+                                HostName = connParamsNVS["HostName"].VC.GetValueA(rethrow: false);
                             }
                             else if (connParamsNVS.Contains("IPAddress"))
                             {
                                 IPAddress ipAddress;
-                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValue<string>(rethrow: false).MapNullToEmpty(), out ipAddress))
+                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValueA(rethrow: false).MapNullToEmpty(), out ipAddress))
                                     IPAddress = ipAddress;
                                 else
                                     IPAddress = IPAddress.None;
@@ -897,7 +959,24 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         case TransportRole.Server:
                             NumConcurrentAccepts = connParamsNVS["NumConcurrentAccepts"].VC.GetValue<int>(rethrow: false, defaultValue: DefaultNumConcurrentAccepts);
 
-                            IPAddress = IPV6 ? IPAddress.IPv6Any : IPAddress.Any;
+                            var bindToIPAddressStr = connParamsNVS["BindToIPAddress"].VC.GetValueA(rethrow: false);
+                            var anyIPAddress = IPV6 ? IPAddress.IPv6Any : IPAddress.Any;
+
+                            if (bindToIPAddressStr.IsNeitherNullNorEmpty())
+                            {
+                                IPAddress ipAddress;
+                                if (bindToIPAddressStr == "localhost")
+                                    IPAddress = IPV6 ? IPAddress.IPv6Loopback : IPAddress.Loopback;
+                                else if (IPAddress.TryParse(bindToIPAddressStr, out ipAddress))
+                                    IPAddress = ipAddress;
+                                else
+                                    IPAddress = anyIPAddress;
+                            }
+                            else
+                            {
+                                IPAddress = anyIPAddress;
+                            }
+
                             ServerIPEndPoint = new IPEndPoint(IPAddress, Port);
 
                             tcpListener = new TcpListener(ServerIPEndPoint);
@@ -913,7 +992,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                             break;
                         default:
-                            throw new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML()));
+                            new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML())).Throw();
+                            break;
                     }
 
                     if (IsClient)
@@ -926,7 +1006,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex);
+                    new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex).Throw();
                 }
             }
 
@@ -1032,13 +1112,29 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public volatile bool done;
             }
 
+            private bool AreAnyPostedAcceptTrackersDone
+            {
+                get 
+                {
+                    var postedAcceptListCount = postedAcceptList.Count;
+                    for (int index = 0; index < postedAcceptListCount; index++)
+                    {
+                        var at = postedAcceptList[index];
+                        if (at.done)
+                            return true;
+                    }
+
+                    return false;
+                }
+            }
+
             private int ServicePostedAccepts(QpcTimeStamp qpcTimeStamp)
             {
                 int count = 0;
 
                 try
                 {
-                    if (postedAcceptList.Count > 0 && postedAcceptList.Any(at => at.done))
+                    if (AreAnyPostedAcceptTrackersDone)
                     {
                         AcceptTracker[] succeededAcceptTrackerArray = postedAcceptList.FilterAndRemove(at => at.done && at.acceptedTcpClient != null && at.acceptedTcpClient.Client != null && at.ex == null).ToArray();
                         AcceptTracker[] failedAcceptTrackerArray = postedAcceptList.FilterAndRemove(at => at.done && (at.ex != null || at.acceptedTcpClient == null || at.acceptedTcpClient.Client == null)).ToArray();
@@ -1246,7 +1342,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 public void Release(string reason)
                 {
-                    SetState(TCPTransport.ConnectionTrackerState.Closed, reason ?? Fcns.CurrentMethodName);
+                    var qpcTime = QpcTimeStamp.Now;
+
+                    SetState(TCPTransport.ConnectionTrackerState.Closed, reason ?? "Release");
 
                     Fcns.DisposeOfObject(ref tcpClient);
                     tcpSocket = null;
@@ -1254,7 +1352,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     postedSendList.Clear();
 
                     if (connectionSession != null)
-                        connectionSession.NoteTransportIsClosed(QpcTimeStamp.Now, remoteEndPoint, "Connection is being released: {0}".CheckedFormat(reason));
+                        connectionSession.NoteTransportIsClosed(qpcTime, remoteEndPoint, "Connection is being released: {0}".CheckedFormat(reason));
                 }
 
                 public void HandleAsynchException(string caller, System.Exception ex)
@@ -1333,13 +1431,28 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public int receivedByteCount;
             }
 
+            bool AreAnyConnectionTrackersUnusable()
+            {
+                int connectionTrackerListCount = connectionTrackerList.Count;
+
+                for (int idx = 0; idx < connectionTrackerListCount; idx++)
+                {
+                    var ct = connectionTrackerList[idx];
+
+                    if (ct == null || !ct.IsUsable)
+                        return true;
+                }
+
+                return false;
+            }
+
             int ServiceConnectionTrackers(QpcTimeStamp qpcTimeStamp)
             {
                 int count = 0;
-                if (connectionTrackerList.Any(ct => ct == null || !ct.IsUsable))
+                if (AreAnyConnectionTrackersUnusable())
                 {
                     ConnectionTracker[] deadCTArray = connectionTrackerList.FilterAndRemove(ct => ct == null || !ct.IsUsable).ToArray();
-                    foreach (var ct in deadCTArray.Where(item => item != null))
+                    foreach (var ct in deadCTArray.WhereIsNotDefault())
                     {
                         logger.Debug.Emit("Releasing Connection '{0}'", ct);
                         ct.Release("Non-usable connection found in service loop");
@@ -1362,11 +1475,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 {
                                     string reason = "by client request: {0}".CheckedFormat(closeRequestReason);
 
-                                    ct.SetState(ConnectionTrackerState.Closed, reason);
-                                    ct.connectionSession.NoteTransportIsClosed(qpcTimeStamp, ct.remoteEndPoint, reason);
-
                                     Fcns.DisposeOfObject(ref ct.tcpClient);
                                     ct.tcpSocket = null;
+
+                                    ct.SetState(ConnectionTrackerState.Closed, reason);
+                                    ct.connectionSession.NoteTransportIsClosed(qpcTimeStamp, ct.remoteEndPoint, reason);
 
                                     continue;
                                 }
@@ -1526,7 +1639,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                                     if (ct.connectionSession != null && rt != null)
                                     {
-                                        ct.connectionSession.HandleInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, rt.bufferArray);
+                                        ct.connectionSession.HandleInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, rt.bufferArray, 0);
 
                                         ct.SetState(ConnectionTrackerState.Ready, "Received Buffers have been forwarded");
                                         count++;
@@ -1534,9 +1647,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     else if (ct.connectionSession == null)
                                     {
                                         // ask the session manager to process the first buffer run (which generally contains a session request buffer).
-                                        HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate = (ts, ep, bufArray) => HandleConnectionOutboundBuffersDelegate(ts, ct, ep, bufArray);
+                                        HandleOutboundBuffersDelegate newConnectionHandleOutboundBuffersDelegate = (ts, ep, bufArray) => HandleConnectionOutboundBuffersDelegate(ts, ct, ep, bufArray);
 
-                                        ct.connectionSession = ServerSession.ProcessSessionLevelInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, newConnectionHandleOutboundBuffersDelegate, rt.bufferArray);
+                                        ct.connectionSession = ServerSession.ProcessSessionLevelInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, newConnectionHandleOutboundBuffersDelegate, rt.bufferArray, 0);
 
                                         if (ct.connectionSession != null)
                                             ct.SetState(ConnectionTrackerState.Ready, "Received Buffers have been processed at session level");
@@ -1567,7 +1680,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 break;
 
                             default:
-                                throw new System.InvalidOperationException("ConnectionState {0} is not valid or supported here".CheckedFormat(ct.State));
+                                new System.InvalidOperationException("ConnectionState {0} is not valid or supported here".CheckedFormat(ct.State)).Throw();
+                                break;
                         }
                     }
                     catch (System.Exception ex)
@@ -1584,7 +1698,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private void ReleaseConnectionTrackers()
             {
-                connectionTrackerList.FilterAndRemove().DoForEach(ct => ct.Release(Fcns.CurrentMethodName));
+                connectionTrackerList.FilterAndRemove().DoForEach(ct => ct.Release("ReleaseConnectionTrackers"));
             }
 
             List<ConnectionTracker> connectionTrackerList = new List<ConnectionTracker>();
@@ -1606,7 +1720,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         if (firstAddress != null)
                             ct.remoteIPAddress = firstAddress;
                         else
-                            throw new HostNotFoundException("GetHostByAddress '{0}' gave no valid addresses".CheckedFormat(ct.remoteHostName));
+                            new HostNotFoundException("GetHostByAddress '{0}' gave no valid addresses".CheckedFormat(ct.remoteHostName)).Throw();
                     }
                     catch (System.Exception ex)
                     {
@@ -1683,19 +1797,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         }
                         else if (readCount != TcpBufferRunHeaderV1.size)
                         {
-                            throw new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount));
+                            new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount)).Throw();
                         }
                         else
                         {
                             ct.incommingBufferRunHeader = ct.incommingBufferRunHeaderByteArray.MarshalStructFromByteArray<TcpBufferRunHeaderV1>(rethrow: true);
 
                             if (!ct.incommingBufferRunHeader.IsMagicValid)
-                                throw new TCPTransportProtocolViolation("Received invalid buffer run header: Magic {0:x8} != expected {1:x8}".CheckedFormat(ct.incommingBufferRunHeader.Magic, TcpBufferRunHeaderV1.MagicValueV1));
+                                new TCPTransportProtocolViolation("Received invalid buffer run header: Magic {0:x8} != expected {1:x8}".CheckedFormat(ct.incommingBufferRunHeader.Magic, TcpBufferRunHeaderV1.MagicValueV1)).Throw();
 
                             ct.bufferRunBufferLenArray = ct.incommingBufferRunHeader.BufferLenArray.Where(len => len != 0).ToArray();
                             int firstBadBufferLength = ct.bufferRunBufferLenArray.Where(len => len > ct.bufferPool.BufferSize).FirstOrDefault();
                             if (firstBadBufferLength != 0)
-                                throw new TCPTransportProtocolViolation("Received invalid buffer run header {0}: Requested Len {1} > MaxBufferLen {2}".CheckedFormat(ct, firstBadBufferLength, ct.bufferPool.BufferSize));
+                                new TCPTransportProtocolViolation("Received invalid buffer run header {0}: Requested Len {1} > MaxBufferLen {2}".CheckedFormat(ct, firstBadBufferLength, ct.bufferPool.BufferSize)).Throw();
 
                             ct.SetState(ConnectionTrackerState.ReadyToIssueBufferReceives, "valid buffer run header received [{0}]".CheckedFormat(ct.incommingBufferRunHeader));
                         }
@@ -1725,7 +1839,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         if (rt.receivedByteCount < rt.expectedReadCount)
                             ct.SetState(ConnectionTrackerState.ReissuePartiallyCompleteReceive, "EndReceive gave {0} bytes of buffer data [now have {1} of {2}]".CheckedFormat(readCount, rt.receivedByteCount, rt.expectedReadCount));
                         else if (rt.receivedByteCount != rt.expectedReadCount)
-                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, rt.expectedReadCount, ct.incommingBufferRunHeader));
+                            new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, rt.expectedReadCount, ct.incommingBufferRunHeader)).Throw();
                         else
                         {
                             QpcTimeStamp tsNow = QpcTimeStamp.Now;
@@ -1735,7 +1849,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 buffer.SetState(tsNow, Buffers.BufferState.Received, "EndReceive completed");
 
                                 if (!buffer.header.IsPurposeCodeValid)
-                                    throw new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode));
+                                    new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode)).Throw();
                             }
 
                             ct.SetState(ConnectionTrackerState.ProcessReceivedBuffers, "a run of buffers have been received [total bytes:{0} buffers:{1}]".CheckedFormat(readCount, rt.bufferArray.Length));
@@ -1805,6 +1919,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             void InnerPostSendOneBufferRun(ConnectionTracker ct, Buffers.Buffer [] bufferArray, int offset, int count)
             {
+                const string methodName = "InnerPostSendOneBufferRun";
+
                 if (ct != null && ct.tcpSocket != null && !IsDisposingOrDisposed && !inRelease)
                 {
                     Buffers.Buffer[] bufferSubArray = bufferArray.SafeSubArray(offset, count);
@@ -1824,7 +1940,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     ct.postedSendList.Add(st);
 
                     if (traceLogger.Trace.IsEnabled)
-                        traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", Fcns.CurrentMethodName, st.brHeader);
+                        traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", methodName, st.brHeader);
 
                     st.iar = ct.tcpSocket.BeginSend(bufferSegementList, SocketFlags.None, HandleConnectionBeginSendAsynchRequestCallback, st);
                 }
@@ -1841,7 +1957,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private void HandleCompletedSend(QpcTimeStamp qpcTimeStamp, SendTracker st)
             {
-                string reason = Fcns.CurrentMethodName;
+                string reason = "HandleCompletedSend";
 
                 foreach (var buffer in st.bufferArray)
                 {
@@ -1867,7 +1983,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         int sendCount = ct.tcpSocket.EndSend(iar);
 
                         if (sendCount != st.totalByteCount)
-                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndSend produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(sendCount, st.totalByteCount, st.brHeader));
+                            new TCPTransportProtocolViolation("Invalid Buffer delivery: EndSend produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(sendCount, st.totalByteCount, st.brHeader)).Throw();
 
                         st.done = true;
                     }
@@ -1921,7 +2037,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         bufferLenArray.SafeCopyFrom(value);
 
                         if (value.SafeLength() > maxBuffersInRun)
-                            throw new System.ArgumentOutOfRangeException("BufferLenArray", "Array length must be between 0 and {0}".CheckedFormat(maxBuffersInRun));
+                            new System.ArgumentOutOfRangeException("BufferLenArray", "Array length must be between 0 and {0}".CheckedFormat(maxBuffersInRun)).Throw();
                     }
                 }
 
@@ -2004,8 +2120,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 ConnParamsNVS = (connParamsNVS = connParamsNVS.ConvertToReadOnly(mapNullToEmpty: true));
 
-                TransmitDelayCount = ConnParamsNVS["TransmitDelayCount"].VC.GetValue<int>(rethrow: false);
-                TransmitReorderInterval = ConnParamsNVS["TransmitReorderInterval"].VC.GetValue<int>(rethrow: false);
+                TransmitDelayCount = ConnParamsNVS["TransmitDelayCount"].VC.GetValueI4(rethrow: false);
+                TransmitReorderInterval = ConnParamsNVS["TransmitReorderInterval"].VC.GetValueI4(rethrow: false);
                 TransmitReorderAdditionalDelay = ConnParamsNVS["TransmitReorderAdditionalDelay"].VC.GetValue<int>(rethrow: false, defaultValue: 1);
 
                 SessionBase = sessionBase;
@@ -2141,6 +2257,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private int ServicePostedSends(QpcTimeStamp qpcTimeStamp)
             {
+                const string methodName = "ServicePostedSends";
                 int count = 0;
 
                 lock (LocalPort.Mutex)
@@ -2214,7 +2331,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     foreach (var bdi in deliveredBDIArray)
                     {
                         if (bdi.buffer.State == Buffers.BufferState.SendPosted)
-                            bdi.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, Fcns.CurrentMethodName);
+                            bdi.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, methodName);
                     }
                 }
 
@@ -2304,7 +2421,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                     PatchPanel.BufferDeliveryItem[] consecutiveBdisFromPortNumArray = rxBDIList.FilterAndRemove(bdi => bdi.fromPortNum == fromPortNum, consecutive: true, fromFront: true).ToArray();
 
-                    SessionBase.HandleInboundBuffers(qpcTimeStamp, fromPortNum, consecutiveBdisFromPortNumArray.Select(bdi => bdi.buffer).ToArray());
+                    SessionBase.HandleInboundBuffers(qpcTimeStamp, fromPortNum, consecutiveBdisFromPortNumArray.Select(bdi => bdi.buffer).ToArray(), 0);
 
                     consecutiveBdisFromPortNumArray.DoForEach(bdi => { bdi.delivered = true; });
 
@@ -2327,7 +2444,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 lock (mutex)
                 {
-                    Port port = portNameToPortDicationary.SafeTryGetValue(portName);
+                    Port port = portNameToPortDictionary.SafeTryGetValue(portName);
 
                     if (port == null && createIfNeeded)
                     {
@@ -2339,7 +2456,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         };
 
                         portList.Add(port);
-                        portNameToPortDicationary[portName] = port;
+                        portNameToPortDictionary[portName] = port;
                     }
 
                     return port;
@@ -2396,7 +2513,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
             }
 
-            public Dictionary<string, Port> portNameToPortDicationary = new Dictionary<string, Port>();
+            public Dictionary<string, Port> portNameToPortDictionary = new Dictionary<string, Port>();
             public List<Port> portList = new List<Port>() { null };
         }
 

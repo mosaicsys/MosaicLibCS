@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -10,13 +10,14 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MosaicLib.PartsLib</RootNamespace>
     <AssemblyName>MosaicLibCS_PartsLib</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <OldToolsVersion>3.5</OldToolsVersion>
     <UpgradeBackupLocation />
-    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <TargetFrameworkProfile>
+    </TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -28,6 +29,8 @@
     <WarningLevel>4</WarningLevel>
     <NoWarn>1591, 1587</NoWarn>
     <DocumentationFile>bin\Debug\MosaicLibCS_PartsLib.XML</DocumentationFile>
+    <LangVersion>5</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -38,6 +41,8 @@
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Release\MosaicLibCS_PartsLib.XML</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
+    <LangVersion>5</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -51,6 +56,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\..\..\CommonAssemblyInfo.cs">
+      <Link>Properties\CommonAssemblyInfo.cs</Link>
+    </Compile>
     <Compile Include="Common\BCR\BCRSim.cs" />
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
     <Compile Include="Common\E084\E084PassiveTransferState.cs" />
@@ -86,9 +94,9 @@
     <Compile Include="Tools\Performance\SerialEchoPerformance.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">
+    <ProjectReference Include="..\..\..\MosaicLibCSBase.csproj">
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
-      <Name>MosaicLibCSBase2010</Name>
+      <Name>MosaicLibCSBase</Name>
       <Private>False</Private>
     </ProjectReference>
   </ItemGroup>

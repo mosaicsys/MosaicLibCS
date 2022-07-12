@@ -32,6 +32,7 @@ using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Part;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Writer;
@@ -39,11 +40,15 @@ using MosaicLib.PartsLib.Tools.Performance;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 
+using Mosaic.ToolsLib.MDRF2.Writer;
+using Mosaic.ToolsLib.Compression;
+
 namespace MosaicLib.Tools.PerformanceMonitorHost
 {
     public static class PerformanceMonitorHost
     {
         private static string appName = "AppNameNotFound";
+        private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
 
         private static MMTimerPeriod mmTimerPeriod;
 
@@ -70,6 +75,7 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
 
         static void Main(string[] args)
         {
+            string[] entryArgs = args;
             try
             {
                 mmTimerPeriod = new MMTimerPeriod();
@@ -117,6 +123,10 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
 
                 List<IActivePartBase> partsList = new List<IActivePartBase>();
 
+                appLogger.Info.Emit("{0} being run with arguments: {1}", currentExecAssy.GetSummaryNameAndVersion(), string.Join(" ", entryArgs));
+                appLogger.Info.Emit(" and current directory '{0}'", System.IO.Directory.GetCurrentDirectory());
+                appLogger.WaitForDistributionComplete((0.2).FromSeconds());
+
                 using (Win32.Hooks.ConsoleCtrlHandlerHook consoleCtrlHandlerHook = new Win32.Hooks.ConsoleCtrlHandlerHook("cch", (sender, ctrlType) => CtrlHandlerDelegate(sender, ctrlType, partsList)))
                 {
                     bool isDebuggerAttached = System.Diagnostics.Debugger.IsAttached;
@@ -124,11 +134,29 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
                     if (enableOutputDebugStringCapturePart && !useOutputDebugStringLMH && !useDiagnosticTraceLMH)
                         partsList.Add(odsCapturePart = new OutputDebugStringCapturePart("ODS", generateMesgType: Logging.MesgType.Info));
 
-                    var perfSuiteConfig = new PerformanceSuitePartConfig().Setup();
-                    partsList.Add(perfSuite = new PerformanceSuitePart(perfSuiteConfig));
+                    var perfSuiteConfig = new PerformanceSuitePartConfig(writerBehavior: WriterBehavior.AdvanceOnDayBoundary | WriterBehavior.FlushAfterEveryMessage | WriterBehavior.WriteGroupsBeforeEveryOccurrence | WriterBehavior.WriteGroupsBeforeEveryObject);
+                    perfSuiteConfig.MDRFWriterSetupInfo = perfSuiteConfig.MDRFWriterSetupInfo.MapDefaultsTo(SetupInfo.DefaultForMDRF2);
+                    perfSuiteConfig.MDRFWriterSetupInfo.NominalMaxFileSize = 10 * 1024 * 1024;
+                    perfSuiteConfig.MDRFWriterSetupInfo.MinNominalFileIndexWriteInterval = (5.0).FromSeconds();
+                    perfSuiteConfig.MDRFWriterSetupInfo.MaxFileRecordingPeriod = (1.0).FromHours();
+                    perfSuiteConfig.Setup();
 
-                    MDRFLogMessageHandlerAdapterConfig mdrfLMHConfig = new MDRFLogMessageHandlerAdapterConfig() { OnlyRecordMessagesIfFileIsAlreadyActive = true }.Setup();
-                    MDRFLogMessageHandlerAdapter mdrfLMH = new MDRFLogMessageHandlerAdapter("LMH.MDRF", Logging.LogGate.All, perfSuite.MDRFWriter, mdrfLMHConfig);
+                    CompressorSelect compressorSelect = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.CompressorSelect").GetValue<CompressorSelect>(CompressorSelect.GZip);
+                    int compressionLevel = config.GetConfigKeyAccessOnce("PerfSuite.MDRF2.CompressionLevel").GetValue(10);
+
+                    var mdrf2WriterConfig = new MDRF2WriterConfig()
+                    {
+                        PartID = $"{perfSuiteConfig.PartID}.mdrf2",
+                        SetupInfo = perfSuiteConfig.MDRFWriterSetupInfo,
+                        WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID,
+                        CompressorSelect = compressorSelect,
+                        CompressionLevel = compressionLevel,
+                    };
+                    var mdrf2Writer = new MDRF2Writer(mdrf2WriterConfig);
+                    partsList.Add(perfSuite = new PerformanceSuitePart(perfSuiteConfig, mdrf2Writer));
+
+                    MDRF2LogMessageHandlerAdapterConfig mdrfLMHConfig = new MDRF2LogMessageHandlerAdapterConfig() { OnlyRecordMessagesIfFileIsAlreadyActive = true }.Setup();
+                    MDRF2LogMessageHandlerAdapter mdrfLMH = new MDRF2LogMessageHandlerAdapter("LMH.MDRF", Logging.LogGate.All, mdrf2Writer, mdrfLMHConfig);
                     Logging.AddLogMessageHandlerToDefaultDistributionGroup(new Logging.Handlers.QueueLogMessageHandler(mdrfLMH));
 
                     IClientFacet[] goOnlineActionArray = partsList.Select(part => part.CreateGoOnlineAction(true).StartInline()).ToArray();

@@ -29,9 +29,12 @@ using MosaicLib;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Semi.E039;
+using MosaicLib.Semi.E041;
 using MosaicLib.Semi.E090;
 using MosaicLib.Semi.E090.SubstrateRouting;
 using MosaicLib.Semi.E090.SubstrateScheduling;
@@ -39,8 +42,30 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
+
 namespace MosaicLib.Semi.E090.SubstrateTestingTools
 {
+    /*
+     * The classes and defintions here are generally used as part of the Scheduler related addition to the E090 namespace concepts.
+     * 
+     * The SubstrateTestingTools namespace contains a set of implementation objects that serve to demonstrate use of the set of concepts that are found in the sub-namespaces of
+     * the Semi.E090 namespace.  These classes are also used as the basis for a number of E090 and related unit tests.
+     * 
+     * TestECSParts: a test harness class that is used to setup and construct a standard set of parts as used with the unit tests.
+     * 
+     * TestSchedulerEngine, TestSubstrateAndProcessTracker and TestSubstrateSchedulerTool: together these define a complete scheduler that is able to specify and execute a 
+     *   movement and processing sequence.  The TestSubstrateSchedulerTool also makes use of two Error Annunciators that are used to direct the scheduler in how to handle
+     *   routing and prepare related failures.
+     *   
+     * (I)SimpleExampleProcessModuleEngine: this part is used as an example simple process module with a single location that supports both the IPrepare and ITPR interfaces.
+     *   This part also supports fault injection so that it can be used to test process failure scenerios.
+     *   
+     * (I)BeltExampleProcessModuleEngine: this part is used as an example belt and disk process module with a number of locations that are used sequentially.  
+     *   It supports ITPR but not currently IPrepare.
+     * 
+     * Together these parts may be used to generate mockp-ups of various processing and scheduling use patterns.
+     */
+
     #region TestECSParts
 
     /// <summary>
@@ -51,31 +76,30 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     /// </summary>
     public class TestECSParts : DisposableBase
     {
-        public TestECSParts(string baseName, ReferenceSet<E039Object> e090HistorySet = null, int numLPSlotsAndWafers = 5)
-            : this(baseName, new E039BasicTablePartConfig(baseName + ".E039Table") { DefaultFallbackReferenceHistorySet = e090HistorySet }, numLPSlotsAndWafers: numLPSlotsAndWafers)
+        public TestECSParts(string baseName, ReferenceSet<E039Object> e090HistorySet = null, int numLPSlotsAndWafers = 5, bool disableR1ArmB = false)
+            : this(baseName, new E039BasicTablePartConfig(baseName + ".E039Table") { DefaultFallbackReferenceHistorySet = e090HistorySet }, numLPSlotsAndWafers: numLPSlotsAndWafers, disableR1ArmB: disableR1ArmB)
         { }
 
-        public TestECSParts(string baseName, E039BasicTablePartConfig e039BasicTablePartConfig, bool e039AutoGoOnline = true, bool otherPartsAutoGoOnline = true, int numLPSlotsAndWafers = 5)
+        public TestECSParts(string baseName, E039BasicTablePartConfig e039BasicTablePartConfig, bool e039AutoGoOnline = true, bool otherPartsAutoGoOnline = true, int numLPSlotsAndWafers = 5, IConfig iConfig = null, bool disableR1ArmB = false)
         {
+            iConfig = iConfig ?? Config.Instance;
+
+            ANManagerPart = new E041.ANManagerPart(baseName + ".ANManager", ivi: e039BasicTablePartConfig.ObjectIVI, isi: e039BasicTablePartConfig.ISI, iConfig: iConfig);
+
             E039TableUpdater = new E039BasicTablePart(e039BasicTablePartConfig).RunGoOnlineActionInline();
             if (e039AutoGoOnline)
                 E039TableUpdater.RunGoOnlineAction();
 
-            PM1 = new SimpleExampleProcessModuleEngine(baseName + ".PM1", this, pmLocName: "PM1");
-            PM2 = new SimpleExampleProcessModuleEngine(baseName + ".PM2", this, pmLocName: "PM2");
-            PM3 = new BeltExampleProcessModuleEngine(baseName + ".PM3", E039TableUpdater, locBaseName: "PM3", engineType: BeltExampleProcessModuleEngineType.Linear);
-            PM4 = new BeltExampleProcessModuleEngine(baseName + ".PM4", E039TableUpdater, locBaseName: "PM4", engineType: BeltExampleProcessModuleEngineType.Circular);
+            PM1 = new SimpleExampleProcessModuleEngine(baseName + ".PM1", this, pmLocName: "PM1", enableAlmostAvailable: true);
+            PM2 = new SimpleExampleProcessModuleEngine(baseName + ".PM2", this, pmLocName: "PM2", enableAlmostAvailable: false);
+            PM3 = new BeltExampleProcessModuleEngine(baseName + ".PM3", E039TableUpdater, locBaseName: "PM3", engineType: BeltExampleProcessModuleEngineType.Linear, enableAlmostAvailable: true);
+            PM4 = new BeltExampleProcessModuleEngine(baseName + ".PM4", E039TableUpdater, locBaseName: "PM4", engineType: BeltExampleProcessModuleEngineType.Circular, enableAlmostAvailable: true);
 
             PMReject = new SimpleExampleProcessModuleEngine(baseName + ".PMReject", this, pmLocName: "PMReject");
             PMAbort = new SimpleExampleProcessModuleEngine(baseName + ".PMAbort", this, pmLocName: "PMAbort");
             PMReturn = new SimpleExampleProcessModuleEngine(baseName + ".PMReturn", this, pmLocName: "PMReturn");
 
-            var srmConfig = new TestSRMConfig(baseName + ".SRM")
-            {
-                ECSParts = this,
-                NumLPSlots = numLPSlotsAndWafers,
-                NumLPWafers = numLPSlotsAndWafers,
-                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(
+            SRMLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(
                     new KeyValuePair<string, ITransferPermissionRequest> []
                     {
                         KVP.Create(PM1.LocID.Name, (ITransferPermissionRequest) PM1),
@@ -86,7 +110,15 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         KVP.Create(PMReject.LocID.Name, (ITransferPermissionRequest) PMReject),
                         KVP.Create(PMAbort.LocID.Name, (ITransferPermissionRequest) PMAbort),
                         KVP.Create(PMReturn.LocID.Name, (ITransferPermissionRequest) PMReturn),
-                    }),
+                    });
+
+            var srmConfig = new TestSRMConfig(baseName + ".SRM")
+            {
+                ECSParts = this,
+                NumLPSlots = numLPSlotsAndWafers,
+                NumLPWafers = numLPSlotsAndWafers,
+                AutoLocNameToITPRDictionary = SRMLocNameToITPRDictionary,
+                DisableR1ArmB = disableR1ArmB,
             };
             SRM = new TestSRM(srmConfig).RunGoOnlineActionInline();
 
@@ -95,7 +127,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             AddExplicitDisposeAction(() =>
                 {
-                    new IActivePartBase[] { SRM, PMReject, PMAbort, PMReturn, PM4, PM3, PM2, PM1, E039TableUpdater }.DoForEach(part => part.DisposeOfGivenObject());
+                    new IActivePartBase[] { SRM, PMReject, PMAbort, PMReturn, PM4, PM3, PM2, PM1, E039TableUpdater, ANManagerPart }.DoForEach(part => part.DisposeOfGivenObject());
                 });
 
             stationNameToEnumDictionary = new ReadOnlyIDictionary<string, TestStationEnum>(
@@ -109,7 +141,27 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 KVP.Create(PMAbort.LocID.Name, TestStationEnum.PMAbort),
                 KVP.Create(PMReturn.LocID.Name, TestStationEnum.PMReturn)
             );
+
+            StationToITPRDictionary = new ReadOnlyIDictionary<TestStationEnum, ITransferPermissionRequest>(SRMLocNameToITPRDictionary.Select(kvpIn => KVP.Create(stationNameToEnumDictionary.SafeTryGetValue(kvpIn.Key), kvpIn.Value)).Where(kvp => kvp.Key != TestStationEnum.None));
+
+            StationToIPreparednessStateFactoryDictionary = new ReadOnlyIDictionary<TestStationEnum, Func<IPreparednessState>>(
+                    new KeyValuePair<TestStationEnum, IPrepare<IProcessSpec, IProcessStepSpec>>[]
+                    {
+                        KVP.Create(TestStationEnum.PM1, PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM2, PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM3Input, PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM3Output, PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PM4, PM4 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMReject, PMReject as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMAbort, PMAbort as IPrepare<IProcessSpec, IProcessStepSpec>),
+                        KVP.Create(TestStationEnum.PMReturn, PMReturn as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    }
+                    .Where(kvp => kvp.Value != null)
+                    .Select(kvp => KVP.Create<TestStationEnum, Func<IPreparednessState>>(kvp.Key, () => kvp.Value.StatePublisher.Object))
+                   );
         }
+
+        public E041.IANManagerPart ANManagerPart { get; private set; }
 
         public IE039TableUpdater E039TableUpdater { get; private set; }
         public IE039TableObserver E039TableObserver { get { return E039TableUpdater; } }
@@ -125,6 +177,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public TestSRM SRM { get; private set; }
         public ITestSchedulerEngine Scheduler { get; set; }
+
+        public ReadOnlyIDictionary<string, ITransferPermissionRequest> SRMLocNameToITPRDictionary { get; private set; }
+        public ReadOnlyIDictionary<TestStationEnum, ITransferPermissionRequest> StationToITPRDictionary { get; private set; }
+        public ReadOnlyIDictionary<TestStationEnum, Func<IPreparednessState>> StationToIPreparednessStateFactoryDictionary { get; private set; }
 
         public TestStationEnum GetStationEnum(string forLocName)
         {
@@ -150,6 +206,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         ReadOnlyIDictionary<string, TestStationEnum> stationNameToEnumDictionary = ReadOnlyIDictionary<string, TestStationEnum>.Empty;
     }
 
+    /// <summary>
+    /// None, AL1, PM1, PM2, PM3Input, PM3Output, PM4, PMReject, PMAbort, PMReturn
+    /// </summary>
     public enum TestStationEnum
     {
         None = 0,
@@ -173,26 +232,43 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
     public interface ITestSchedulerEngine : IActivePartBase
     {
-        IClientFacet SetSubstrateProcessSpecs(ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIDsArray);
+        IClientFacet SetSubstrateProcessSpecs(string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIDsArray);
         IClientFacet SetSJRS(SubstrateJobRequestState sjrs, params E039ObjectID[] substIDsArray);
+        IClientFacet VerifyIdle();
+        IClientFacet Sync();
     }
 
-    public class TestSchedulerEngine : SimpleActivePartBase, ITestSchedulerEngine
+    public class TestSchedulerEngine : SimpleActivePartBase, ITestSchedulerEngine, ISubstrateSchedulerPart
     {
-        public TestSchedulerEngine(string partID = "Sched", TestECSParts ecsParts = null, ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase> substrateSchedulerTool = null)
-            : base (partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2)
+        public TestSchedulerEngine(string partID = "Sched", TestECSParts ecsParts = null, TestSubstrateSchedulerTool substrateSchedulerTool = null, bool verifyIdleOnDispose = true)
+            : base (partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.02).FromSeconds()))
         {
             EcsParts = ecsParts;
-            SubstrateSchedulerTool = substrateSchedulerTool;
-            SubstrateSchedulerTool.HostingPartNotifier = this;
+            TestSubstrateSchedulerTool = substrateSchedulerTool;
+            TestSubstrateSchedulerTool.HostingPartNotifier = this;
+
+            stateIVA = Values.Instance.GetValueAccessor<ISubstrateSchedulerPartState>("{0}.State".CheckedFormat(PartID));
+            ServiceAndPublishStateIfNeeded(force: true);
+
+            if (verifyIdleOnDispose)
+            {
+                AddExplicitDisposeAction(() =>
+                    {
+                        string ec = PerformVerifyIdle(forDispose: true);
+                        if (ec.IsNeitherNullNorEmpty())
+                        {
+                            new System.InvalidOperationException("VerifyIdle failed: {0}".CheckedFormat(ec)).Throw();
+                        }
+                    });
+            }
         }
 
         public TestECSParts EcsParts { get; private set;}
-        ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase> SubstrateSchedulerTool { get; set; }
+        TestSubstrateSchedulerTool TestSubstrateSchedulerTool { get; set; }
 
-        public IClientFacet SetSubstrateProcessSpecs(ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIdArray)
+        public IClientFacet SetSubstrateProcessSpecs(string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIdArray)
         {
-            return new BasicActionImpl(actionQ, ipf => PerformSetSubstrateProcessSpecs(ipf, processSpec, initialSJRM, substIdArray), CurrentMethodName, ActionLoggingReference);
+            return new BasicActionImpl(actionQ, ipf => PerformSetSubstrateProcessSpecs(ipf, jobID, processSpec, initialSJRM, substIdArray), CurrentMethodName, ActionLoggingReference);
         }
 
         public IClientFacet SetSJRS(SubstrateJobRequestState sjrs, params E039ObjectID[] substIdArray)
@@ -200,29 +276,109 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return new BasicActionImpl(actionQ, ipf => PerformSetSJRS(ipf, sjrs, substIdArray), CurrentMethodName, ActionLoggingReference);
         }
 
+        public IClientFacet VerifyIdle()
+        {
+            return new BasicActionImpl(ActionQueue, ipf => PerformVerifyIdle(forDispose: false), CurrentMethodName, ActionLoggingReference);
+        }
+
+        public IClientFacet Sync()
+        {
+            return new BasicActionImpl(ActionQueue, ipf =>
+                {
+                    PerformMainLoopService();
+                    return "";
+                }, CurrentMethodName, ActionLoggingReference);
+        }
+
+        /// <summary>
+        /// Action factory method:  When the resuling action is run it will attempt to change the part's BehaviorEnableFlags to be the given value.
+        /// The scheduler will generally confirm that this request is permitted by the tool before making the change.  
+        /// If the <paramref name="force"/> flag is true then the part will make the change in state even if the tool indicates that it should not be permitteed.
+        /// The <paramref name="force"/> flag is expected to be used in cases where the user has been asked if they really want to make this change and they
+        /// explicitly confirm that they do.
+        /// </summary>
+        public IClientFacet SetSelectedBehavior(BehaviorEnableFlags flags, bool force = false)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSetSelectedBehavior(ipf, flags, force), CurrentMethodName, ActionLoggingReference, "{0}{1}".CheckedFormat(flags, force ? ", force" : ""));
+        }
+
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
-            UseState requestUseState = andInitialize ? UseState.Online : UseState.OnlineUninitialized;
-            var denyReasonList = SubstrateSchedulerTool.VerifyUseStateChange(BaseState, requestUseState, andInitialize: andInitialize);
+            ServiceAndPublishStateIfNeeded();
+
+            var denyReasonList = TestSubstrateSchedulerTool.VerifyStateChange(state, new NamedValueSet() { andInitialize ? "SetAutomatic" : "GoOnline" } );
 
             if (!denyReasonList.IsNullOrEmpty())
                 return "Cannot {0}: {1}".CheckedFormat(ipf.ToString(ToStringSelect.MesgAndDetail), String.Join(", ", denyReasonList));
 
-            return "";
+            RequestsAndStatusOutFromTool requestAndStatusFromTool = default(RequestsAndStatusOutFromTool);
+
+            string ec = TestSubstrateSchedulerTool.PerformGoOnlineActionEx(ipf, andInitialize, npv, () => HasStopBeenRequested, ref requestAndStatusFromTool);
+
+            string toolFaultReason = requestAndStatusFromTool.ToolFaultReason.MapNullToEmpty();
+            if (BaseState.ExplicitFaultReason != toolFaultReason)
+            {
+                SetExplicitFaultReason(toolFaultReason);
+                ec = ec.MapNullOrEmptyTo(toolFaultReason);
+            }
+
+            if (!requestAndStatusFromTool.RequestNVSFromTool.IsNullOrEmpty())
+                InnerHandleRequestFromTool(requestAndStatusFromTool.RequestNVSFromTool, publishIfNeeded: false);
+
+            if (ec.IsNullOrEmpty() && BaseState.UseState != UseState.AttemptOnline)
+                ec = BaseState.Reason;
+
+            if (ec.IsNullOrEmpty() && npv.Contains("SetSelectedBehavior"))
+            {
+                var flags = npv["SetSelectedBehavior"].VC.GetValue<BehaviorEnableFlags>(rethrow: true);
+                var force = npv.Contains("Force");
+
+                ec = PerformSetSelectedBehavior(ipf, flags, force, publish: false);
+            }
+
+            ServiceAndPublishStateIfNeeded(force: true);
+
+            return ec;
         }
 
         protected override string PerformGoOfflineAction(IProviderActionBase ipf)
         {
-            var denyReasonList = SubstrateSchedulerTool.VerifyUseStateChange(BaseState, UseState.Offline);
+            state.BehaviorEnableFlags = BehaviorEnableFlags.None;
+
+            ServiceAndPublishStateIfNeeded();
+
+            var denyReasonList = TestSubstrateSchedulerTool.VerifyStateChange(state, new NamedValueSet() { "GoOffline" });
 
             if (!denyReasonList.IsNullOrEmpty())
                 Log.Warning.Emit("Attempt to {0} gave warnings: {1}", ipf.ToString(ToStringSelect.MesgAndDetail), String.Join(", ", denyReasonList));
 
-            return "";
+            string ec = TestSubstrateSchedulerTool.PerformGoOfflineAction(ipf, () => HasStopBeenRequested);
+
+            return ec;
         }
 
-        private string PerformSetSubstrateProcessSpecs(IProviderFacet ipf, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, E039ObjectID[] substIdArray)
+
+
+        private string PerformSetSubstrateProcessSpecs(IProviderFacet ipf, string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, E039ObjectID[] substIdArray)
         {
+            switch (initialSJRM)
+            {
+                default:
+                case SubstrateJobRequestState.None:
+                    break;
+                case SubstrateJobRequestState.Run:
+                case SubstrateJobRequestState.Stop:
+                case SubstrateJobRequestState.Pause:
+                    if (state.BehaviorEnableFlags.IsClear(BehaviorEnableFlags.Automatic))
+                        Log.Warning.Emit("{0}: Current behavior enable flags do not permit automatic operation now [{1}]", ipf.ToString(ToStringSelect.MesgAndDetail), state);
+                    break;
+                case SubstrateJobRequestState.Abort:
+                case SubstrateJobRequestState.Return:
+                    if (state.BehaviorEnableFlags.IsClear(BehaviorEnableFlags.Recovery))
+                        Log.Warning.Emit("{0}: Current behavior enable flags do not permit automatic recovery operations now [{1}]", ipf.ToString(ToStringSelect.MesgAndDetail), state);
+                    break;
+            }
+
             foreach (var substIDiter in substIdArray)
             {
                 var substID = substIDiter ?? E039ObjectID.Empty;
@@ -233,10 +389,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     return "{0} has already been assigned a process spec".CheckedFormat(substID.FullName);
 
                 st = new TestSubstrateAndProcessTracker();
-                st.Setup(EcsParts, substID, Log, processSpec);
+                st.Setup(EcsParts, Log, substID, jobID, processSpec, TestSubstrateSchedulerTool.AllLocObserverDictionary);
 
                 trackerDictionary[substID.FullName] = st;
-                SubstrateSchedulerTool.Add(st);
+                TestSubstrateSchedulerTool.Add(st);
 
                 if (initialSJRM != SubstrateJobRequestState.None)
                 {
@@ -252,6 +408,24 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private string PerformSetSJRS(IProviderFacet ipf, SubstrateJobRequestState sjrs, E039ObjectID[] substIdArray)
         {
+            switch (sjrs)
+            {
+                default:
+                case SubstrateJobRequestState.None:
+                    break;
+                case SubstrateJobRequestState.Run:
+                case SubstrateJobRequestState.Stop:
+                case SubstrateJobRequestState.Pause:
+                    if (state.BehaviorEnableFlags.IsClear(BehaviorEnableFlags.Automatic))
+                        Log.Warning.Emit("{0}: Current behavior enable flags do not permit automatic operation now [{1}]", ipf.ToString(ToStringSelect.MesgAndDetail), state);
+                    break;
+                case SubstrateJobRequestState.Abort:
+                case SubstrateJobRequestState.Return:
+                    if (state.BehaviorEnableFlags.IsClear(BehaviorEnableFlags.Recovery))
+                        Log.Warning.Emit("{0}: Current behavior enable flags do not permit automatic recovery operations now [{1}]", ipf.ToString(ToStringSelect.MesgAndDetail), state);
+                    break;
+            }
+
             foreach (var substIDiter in substIdArray)
             {
                 var substID = substIDiter ?? E039ObjectID.Empty;
@@ -278,15 +452,88 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return "";
         }
 
+        private string PerformVerifyIdle(bool forDispose = false)
+        {
+            string ec = "";
+
+            if (!forDispose && !BaseState.IsBusy)
+                ec = "BaseState is not idle [{0}]".CheckedFormat(BaseState);
+            else if (forDispose && BaseState.UseState != UseState.Stopped)
+                ec = "BaseState is not Stopped on dispose [{0}]".CheckedFormat(BaseState);
+
+            if (ec.IsNullOrEmpty())
+                ec = TestSubstrateSchedulerTool.VerifyIdle();
+
+            return ec;
+        }
+
+        protected string PerformSetSelectedBehavior(IProviderFacet ipf, BehaviorEnableFlags flags, bool force, bool publish = true)
+        {
+            var denyReasonList = TestSubstrateSchedulerTool.VerifyStateChange(state, new NamedValueSet() { { "SetSelectedBehavior", flags } });
+
+            if (denyReasonList.IsNullOrEmpty())
+            {
+            }
+            else if (force)
+            {
+                Log.Warning.Emit("{0}: operation being forced with tool reported warning(s): ", ipf.ToString(ToStringSelect.MesgAndDetail), String.Join(", ", denyReasonList));
+            }
+            else
+            {
+                return "Cannot {0}: {1}".CheckedFormat(ipf.ToString(ToStringSelect.MesgAndDetail), String.Join(", ", denyReasonList));
+            }
+
+            state.BehaviorEnableFlags = flags;
+
+            if (publish)
+                ServiceAndPublishStateIfNeeded();
+
+            return "";
+        }
+
         IDictionaryWithCachedArrays<string, TestSubstrateAndProcessTracker> trackerDictionary = new IDictionaryWithCachedArrays<string, TestSubstrateAndProcessTracker>();
+
+        SubstrateSchedulerPartState state = new SubstrateSchedulerPartState()
+        {
+            PartStatusFlags = SubstrateSchedulerPartStatusFlags.None,
+            BehaviorEnableFlags = BehaviorEnableFlags.ServiceActions | BehaviorEnableFlags.RecoveryMaterialMovement,
+        };
+
+        ISubstrateSchedulerPartState lastPublishedState = SubstrateSchedulerPartStateForPublication.Empty;
+
+        public INotificationObject<ISubstrateSchedulerPartState> StatePublisher { get { return statePublisher; } }
+        private InterlockedNotificationRefObject<ISubstrateSchedulerPartState> statePublisher = new InterlockedNotificationRefObject<ISubstrateSchedulerPartState>(SubstrateSchedulerPartStateForPublication.Empty);
+
+        IValueAccessor<ISubstrateSchedulerPartState> stateIVA;
+
+        private void ServiceAndPublishStateIfNeeded(bool force = false)
+        {
+            var capturedBaseState = BaseState;
+            bool baseStateChanged = !Object.ReferenceEquals(capturedBaseState, state.PartBaseState);
+
+            if (force || baseStateChanged || !state.Equals(lastPublishedState))
+            {
+                state.PartBaseState = capturedBaseState;
+
+                Log.Debug.Emit("Publishing {0}", state);
+
+                statePublisher.Object = lastPublishedState = state.MakeCopyOfThis();
+
+                stateIVA.Set(new SubstrateSchedulerPartStateForPublication(lastPublishedState));
+            }
+        }
 
         protected override void PerformMainLoopService()
         {
             bool isUpdateNeeded = trackerDictionary.ValueArray.Any(tracker => tracker.IsUpdateNeeded);
             if (isUpdateNeeded)
-                trackerDictionary.ValueArray.DoForEach(tracker => tracker.UpdateIfNeeded());
+            {
+                QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
 
-            SubstrateStateTally substrateStateTally = new SubstrateStateTally();
+                trackerDictionary.ValueArray.DoForEach(tracker => tracker.UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp));
+            }
+
+            substrateStateTally.Clear();
             trackerDictionary.ValueArray.DoForEach(tracker => substrateStateTally.Add(tracker));
 
             int serviceCount = 0;
@@ -294,11 +541,34 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             try
             {
-                serviceCount += SubstrateSchedulerTool.Service(isUpdateNeeded || InFastSpinPeriod, ref substrateStateTally, baseState);
+                if (!Object.ReferenceEquals(BaseState, state.PartBaseState))
+                    ServiceAndPublishStateIfNeeded(force: true);
+
+                RequestsAndStatusOutFromTool requestAndStatusFromTool = default(RequestsAndStatusOutFromTool);
+
+                serviceCount += TestSubstrateSchedulerTool.Service(state, ref requestAndStatusFromTool);
+
+                string toolFaultReason = requestAndStatusFromTool.ToolFaultReason.MapNullToEmpty();
+                if (BaseState.ExplicitFaultReason != toolFaultReason)
+                    SetExplicitFaultReason(toolFaultReason);
+
+                bool toolIsWaitingForActionToBeSelected = ((requestAndStatusFromTool.ToolStatusFlags & SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected) != 0);
+                if (toolIsWaitingForActionToBeSelected != ((state.PartStatusFlags & SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected) != 0))
+                {
+                    state.PartStatusFlags.Set(SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected, toolIsWaitingForActionToBeSelected);
+                    ServiceAndPublishStateIfNeeded();
+                }
+
+                if (!requestAndStatusFromTool.RequestNVSFromTool.IsNullOrEmpty())
+                {
+                    InnerHandleRequestFromTool(requestAndStatusFromTool.RequestNVSFromTool);
+                }
             }
             catch (System.Exception ex)
             {
                 SetBaseState(UseState.FailedToOffline, "{0} caught unexpected exception: {1}".CheckedFormat(CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
+
+                ServiceAndPublishStateIfNeeded();
                 return;
             }
 
@@ -309,7 +579,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 foreach (var dropTracker in dropTrackerSet)
                 {
                     trackerDictionary.Remove(dropTracker.SubstID.FullName);
-                    SubstrateSchedulerTool.Drop(dropTracker);
+                    TestSubstrateSchedulerTool.Drop(dropTracker);
                 }
             }
 
@@ -322,10 +592,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 if (substrateStateTally.sjsWaitingForStart > 0)
                     nextBusyReason = "Substrates are waiting for start";
+                else if (substrateStateTally.sjsWaitingForPrepare > 0)
+                    nextBusyReason = "Substrates are waiting for prepare";
                 else if (substrateStateTally.sjsRunning > 0)
                     nextBusyReason = "Substrates are in process";
-                else if (substrateStateTally.stsAtWork > (substrateStateTally.sjsPaused + substrateStateTally.sjsReturned))
-                    nextBusyReason = "Unpaused and Unreturned substrates are at work";
+                else if (substrateStateTally.sjsStopping + substrateStateTally.sjsAborting + substrateStateTally.sjsPausing + substrateStateTally.sjsReturning > 0)
+                    nextBusyReason = "Substrates are stopping, aborting, pausing and/or returning";
             }
 
             if (nextBusyReason.IsNullOrEmpty() && InFastSpinPeriod)
@@ -334,7 +606,48 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             BusyReason = nextBusyReason;
 
             if (backgroundSpinLogTimer.IsTriggered)
-                Log.Debug.Emit("Background spin log: serviceCount:{0} {1} busyReason:'{2}' {3}", serviceCount, substrateStateTally, BusyReason, baseState);
+            {
+                var substLocMapStr = string.Join(", ", trackerDictionary.ValueArray.Select(tracker => "{0}@{1}".CheckedFormat(tracker.SubstID.Name, tracker.Info.LocID)));
+                Log.Debug.Emit("Background spin log: serviceCount:{0} {1} busyReason:'{2}' {3} map:{4}", serviceCount, substrateStateTally, BusyReason, baseState, substLocMapStr);
+            }
+        }
+
+        SubstrateStateTally substrateStateTally = new SubstrateStateTally();
+
+        private void InnerHandleRequestFromTool(INamedValueSet requestNVSFromTool, bool publishIfNeeded = true)
+        {
+            string requestNVSFromToolSML = requestNVSFromTool.SafeToStringSML();
+
+            var requestNV = requestNVSFromTool.FirstOrDefault().MapNullToEmpty();
+            switch (requestNV.Name)
+            {
+                case "SetService": 
+                    if (BaseState.UseState == UseState.OnlineFailure) 
+                        SetBaseState(UseState.OnlineUninitialized, "By tool request: {0}".CheckedFormat(requestNVSFromToolSML)); 
+                    state.BehaviorEnableFlags = BehaviorEnableFlags.Service; 
+                    break;
+
+                case "SetRecovery":
+                    state.BehaviorEnableFlags &= ~BehaviorEnableFlags.Automatic; 
+                    state.BehaviorEnableFlags |= BehaviorEnableFlags.Service | BehaviorEnableFlags.RecoveryMaterialMovement; 
+                    break;
+
+                case "SetAutomatic": 
+                    state.BehaviorEnableFlags &= ~BehaviorEnableFlags.Service; 
+                    state.BehaviorEnableFlags |= BehaviorEnableFlags.Automatic | BehaviorEnableFlags.RecoveryMaterialMovement; 
+                    break;
+
+                case "SetUseState": 
+                    SetBaseState(requestNV.VC.GetValue<UseState>(rethrow: false, defaultValue: UseState.FailedToOffline), "By tool request: {0}".CheckedFormat(requestNVSFromToolSML)); 
+                    break;
+
+                default: 
+                    SetBaseState(UseState.FailedToOffline, "Unrecognized tool request: {0}".CheckedFormat(requestNVSFromToolSML)); 
+                    break;
+            }
+
+            if (publishIfNeeded)
+                ServiceAndPublishStateIfNeeded();
         }
 
         QpcTimer backgroundSpinLogTimer = new QpcTimer() { TriggerIntervalInSec = 2.0, AutoReset = true }.Start();
@@ -381,11 +694,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         }
     }
 
-    public class TestSubstrateAndProcessTracker : SubstrateAndProcessTrackerBase<ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
+    public class TestSubstrateAndProcessTracker : SubstrateAndProcessTrackerBase<ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>, IJobTrackerLinkage
     {
-        public void Setup(TestECSParts ecsParts, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
+        public void Setup(TestECSParts ecsParts, Logging.IBasicLogger logger, E039ObjectID substID, string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, IDictionary<string, E090SubstLocObserver> allLocObserverDictionary)
         {
             ECSParts = ecsParts;
+            AllLocObserverDictionary = allLocObserverDictionary;
 
             base.Setup(ECSParts.E039TableUpdater, substID, logger, processSpec);
 
@@ -394,14 +708,18 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             robotArmsLocNameList = new ReadOnlyIList<string>(ECSParts.SRM.R1ArmALocID.Name, ECSParts.SRM.R1ArmBLocID.Name);
 
             FinalizeSPSAtEndOfLastStep = true;
+
+            JobID = jobID;
+            JobTrackerLinkage = this;
         }
 
         public override void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
         {
-            throw new System.InvalidOperationException("This method can no longer be used directly - use the ECSParts variant in stead");
+            new System.InvalidOperationException("This method can no longer be used directly - use the local variant instead").Throw();
         }
 
         public TestECSParts ECSParts { get; set; }
+        public IDictionary<string, E090SubstLocObserver> AllLocObserverDictionary { get; set; }
         public IClientFacet CurrentStationProcessICF { get; set; }
         public bool FinalizeSPSAtEndOfLastStep { get; set; }
 
@@ -535,171 +853,642 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             CurrentStationProcessICF = icf;
         }
 
-        public int Service()
+        public int Service(ISubstrateSchedulerPartState stateToTool
+            , QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp)
+            , bool forceUpdate = false
+            , bool serviceSubstObserver = true
+            , ServiceBasicSJSStateChangeTriggerFlags sjsStateChangeTriggerFlags = ServiceBasicSJSStateChangeTriggerFlags.All & ~ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart
+            , bool serviceEvaluationUpdates = true
+            , bool serviceDropReasonUpdates = true
+            , bool serviceProcessCompletion = true
+            , bool alreadyFoundFirstWaitingForStartSubstrate = true)
         {
-            IClientFacet icf = CurrentStationProcessICF;
-            IActionState actionState = (icf != null ? icf.ActionState : null);
+            int didCount = 0;
 
-            string currentLoc = Info.LocID;
+            bool substUpdateNeeded = (IsServiceNeeded && serviceSubstObserver) || forceUpdate;
 
-            var station = ECSParts.GetStationEnum(currentLoc);
-            bool currentLocIsPM4 = station == TestStationEnum.PM4;
-
-            if (icf != null && actionState.IsComplete)
+            if (substUpdateNeeded)
             {
-                IClientFacetWithResult<IProcessStepResult> icfWithResult = icf as IClientFacetWithResult<IProcessStepResult>;
-                IProcessStepResult stepResult = (icfWithResult != null ? icfWithResult.ResultValue: null);
+                didCount += UpdateIfNeeded(forceUpdate: forceUpdate, qpcTimeStamp: qpcTimeStamp, noteStartingService: true).MapToInt();
 
-                if (stepResult == null)
-                    stepResult = new ProcessStepResultBase(actionState.ResultCode);
-                    
-                if (stepResult != null && stepResult.SPS == SubstProcState.Processed && stepResult.ResultCode.IsNullOrEmpty() && actionState.Failed)
-                    Logger.Debug.Emit("Note: {0} gave non-failure stepResult sps:{1}", icf.ToString(ToStringSelect.MesgDetailAndState), stepResult.SPS);
-
-                Add(new ProcessStepTrackerResultItem<ProcessStepSpecBase>() { LocName = Info.LocID, StepSpec = NextStepSpec, StepResult = stepResult }, autoLatchFinalSPS: FinalizeSPSAtEndOfLastStep && !currentLocIsPM4);
-
-                CurrentStationProcessICF = null;
-
-                return 1;
-            }
-            else if (icf == null && FinalizeSPSAtEndOfLastStep && NextStepSpec == null && !Info.SPS.IsProcessingComplete())
-            {
-                if (station != TestStationEnum.PM4)
+                if (sjsStateChangeTriggerFlags != default(ServiceBasicSJSStateChangeTriggerFlags))
                 {
-                    var finalSPS = GetFinalSPS();
-                    if (Info.SPS != finalSPS)
+                    didCount += ServiceBasicSJSStateChangeTriggers(sjsStateChangeTriggerFlags);
+
+                    // if ServiceBasicSJSStateChangeTriggers changed anything then we may need to re-update the tracker's state.
+                    if (IsUpdateNeeded)
+                        didCount += UpdateIfNeeded(forceUpdate: forceUpdate, qpcTimeStamp: qpcTimeStamp, noteStartingService: false).MapToInt();
+                }
+
+                if (serviceEvaluationUpdates)
+                {
+                    UpdateEvalInfo(alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, stateToTool: stateToTool);
+
+                    if (Info.SJS == SubstrateJobState.Held && !evalInfo.flags.blockedByInboundHoldRequest)
                     {
-                        Logger.Debug.Emit("Setting Subst:'{0}' final SPS to {1} [at loc:{2}]", Info.ObjID.Name, finalSPS, currentLoc);
-                        E039TableUpdater.SetSubstProcState(Info, finalSPS);
-                        return 1;
+                        switch (SubstrateJobRequestState)
+                        {
+                            case SubstrateJobRequestState.None: break;
+                            case SubstrateJobRequestState.Run: SetSubstrateJobState((Info.STS == SubstState.AtSource) ? SubstrateJobState.WaitingForStart : SubstrateJobState.Running, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Stop: SetSubstrateJobState(SubstrateJobState.Stopping, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Pause: SetSubstrateJobState(SubstrateJobState.Pausing, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Abort: SetSubstrateJobState(SubstrateJobState.Aborting, "Inbound Hold Released"); break;
+                            case SubstrateJobRequestState.Return: break;
+                            default: break;
+                        }
+                    }
+                    else if (evalInfo.flags.blockedByInboundHoldRequest)
+                    {
+                        switch (SubstrateJobRequestState)
+                        {
+                            case SubstrateJobRequestState.None: break;
+                            case SubstrateJobRequestState.Run:
+                            case SubstrateJobRequestState.Pause:
+                            case SubstrateJobRequestState.Stop:
+                            case SubstrateJobRequestState.Abort:
+                                switch (Info.SJS)
+                                {
+                                    case SubstrateJobState.WaitingForStart:
+                                    case SubstrateJobState.WaitingForPrepare:
+                                    case SubstrateJobState.Running:
+                                    case SubstrateJobState.Stopping:
+                                    case SubstrateJobState.Pausing:
+                                    case SubstrateJobState.Aborting:
+                                        SetSubstrateJobState(SubstrateJobState.Held, "Inbound Hold Requested through Prepare Interface at next process location");
+                                        break;
+                                    case SubstrateJobState.Returning:
+                                    case SubstrateJobState.Stranded:
+                                    default: break;
+                                }
+                                break;
+                            case SubstrateJobRequestState.Return: break;
+                            default: break;
+                        }
                     }
                 }
             }
 
-            return 0;
-        }
+            bool isFinalOrNull = SubstObserver.Object.IsFinalOrNull();
 
-        public ReadOnlyIList<string> NextLocNameList
-        {
-            get
+            if (serviceDropReasonUpdates && (substUpdateNeeded || isFinalOrNull))
+                didCount += ServiceDropReasonAssertion();
+
+            if (serviceProcessCompletion)
             {
-                if (CurrentStationProcessICF != null || Info.STS.IsAtDestination())
-                    return ReadOnlyIList<string>.Empty;
+                IClientFacet icf = CurrentStationProcessICF;
+                IActionState actionState = (icf != null ? icf.ActionState : null);
 
-                IProcessStepSpec stepSpec = NextStepSpec;
-                var inferredSPS = Info.InferredSPS;
+                string currentLoc = Info.LocID;
 
-                switch (Info.SJS)
+                var currentStation = ECSParts.GetStationEnum(currentLoc);
+                bool currentLocIsPM4 = (currentStation == TestStationEnum.PM4);
+
+                if (icf != null && actionState.IsComplete)
                 {
-                    case E090.SubstrateJobState.WaitingForStart:
-                        if (stepSpec != null)
-                        {
-                            // tell the caller where the substrate needs to be next in order to be able to start processing - this allows the caller to delay the running transition until the next process location is ready/empty if desired.
-                            return stepSpec.UsableLocNameList;
-                        }
-                        else
-                        {
-                            return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
-                        }
+                    IClientFacetWithResult<IProcessStepResult> icfWithResult = icf as IClientFacetWithResult<IProcessStepResult>;
+                    IProcessStepResult stepResult = (icfWithResult != null ? icfWithResult.ResultValue: null);
 
-                    case E090.SubstrateJobState.Running:
-                    case E090.SubstrateJobState.Stopping:
-                        if (stepSpec != null)
-                        {
-                            return stepSpec.UsableLocNameList;
-                        }
-                        else if (Info.STS.IsAtDestination())
-                        {
-                            return ReadOnlyIList<string>.Empty;
-                        }
-                        else if (inferredSPS.IsProcessingComplete(includeLost: false, includeSkipped: false))
-                        {
-                            return destLocNameList;
-                        }
-                        else if (Info.STS.IsAtSource() && inferredSPS.IsNeedsProcessing())
-                        {
-                            Logger.Debug.Emit("{0} marking '{1}' Processed [AtSource, NeedsProcessing, Recipe has no process steps]", Fcns.CurrentMethodName, Info.ObjID.Name);
-                            E039TableUpdater.SetSubstProcState(SubstObserver, SubstProcState.Processed);
-                            return destLocNameList;
-                        }
-                        else if (inferredSPS.IsProcessStepComplete())
-                        {
-                            bool atPM4 = Info.LocID == ECSParts.PM4.OutputLocID.Name;
+                    if (stepResult == null)
+                        stepResult = new ProcessStepResultBase(actionState.ResultCode);
+                    
+                    if (stepResult != null && stepResult.SPS == SubstProcState.Processed && stepResult.ResultCode.IsNullOrEmpty() && actionState.Failed)
+                        Logger.Debug.Emit("Note: {0} gave non-failure stepResult sps:{1}", icf.ToString(ToStringSelect.MesgDetailAndState), stepResult.SPS);
 
-                            return atPM4 ? robotArmsLocNameList : destLocNameList;
-                        }
-                        else
-                        {
-                            // For cases that this code does not directly recognize.  Just leave the wafer in its current location (aka strand it)
-                            return ReadOnlyIList<string>.Empty;
-                        }
+                    Add(new ProcessStepTrackerResultItem<ProcessStepSpecBase>() { LocName = Info.LocID, StepSpec = NextStepSpec, StepResult = stepResult }, autoLatchFinalSPS: FinalizeSPSAtEndOfLastStep && !currentLocIsPM4);
 
-                    case E090.SubstrateJobState.Returning:
-                    case E090.SubstrateJobState.Aborting:
-                        if (Info.STS.IsAtWork())
-                            return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
-                        else
-                            return ReadOnlyIList<string>.Empty;
+                    CurrentStationProcessICF = null;
 
-                    default:
-                        // in the future this code may need to split out and handle the Returning, Pausing, Stopping and Aborting cases.  for now all such cases strand the wafer in its current location.
-                        return ReadOnlyIList<string>.Empty;
+                    didCount += 1;
+                }
+                else if (icf == null && FinalizeSPSAtEndOfLastStep && NextStepSpec == null && !Info.SPS.IsProcessingComplete() && !currentLocIsPM4)
+                {
+                    // this is typically used to record the final SPS for substrates that finished their last processing step at PM4, after they have been moved onto a robot arm.
+                    var finalSPS = GetFinalSPS();
+                    if (finalSPS.IsProcessingComplete() && !isFinalOrNull)
+                    {
+                        Logger.Debug.Emit("Setting {0} final SPS to {1} [at loc:{2}]", SubstID.FullName, finalSPS, currentLoc);
+ 
+                        E039TableUpdater.SetSubstProcState(Info, finalSPS);
+
+                        didCount += 1;
+                    }
                 }
             }
+
+            return didCount;
+        }
+
+        private ReadOnlyIList<string> GetNextLocNameList(ISubstrateSchedulerPartState stateToTool)
+        {
+            if (CurrentStationProcessICF != null || Info.STS.IsAtDestination() || SubstObserver.Object.IsFinalOrNull() || IsDropRequested)
+                return ReadOnlyIList<string>.Empty;
+
+            IProcessStepSpec stepSpec = NextStepSpec;
+            var inferredSPS = Info.InferredSPS;
+
+            bool isProcessMaterialMovementEnabled = stateToTool.IsProcessMaterialMovementEnabled();
+            bool isRecoveryMaterialMovementEnabled = stateToTool.IsRecoveryMaterialMovementEnabled();
+
+            switch (Info.SJS)
+            {
+                case SubstrateJobState.WaitingForStart:
+                case SubstrateJobState.WaitingForPrepare:
+                    if (stepSpec != null && isProcessMaterialMovementEnabled)
+                    {
+                        // tell the caller where the substrate needs to be next in order to be able to start processing - this allows the caller to delay the running transition until the next process location is ready/empty if desired.
+                        return stepSpec.UsableLocNameList;
+                    }
+                    else if (stateToTool.IsRecoveryMaterialMovementEnabled())
+                    {
+                        return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
+                    }
+                    else
+                    {
+                        return ReadOnlyIList<string>.Empty;
+                    }
+
+                case SubstrateJobState.Running:
+                case SubstrateJobState.Stopping:
+                case SubstrateJobState.Pausing:
+                case SubstrateJobState.Held:       // Held is handled like Running for purposes of determining the next loc name list contents
+                    if (stepSpec != null)
+                    {
+                        if (isProcessMaterialMovementEnabled)
+                            return stepSpec.UsableLocNameList;
+                        else if (isRecoveryMaterialMovementEnabled)
+                            return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
+                        else
+                            return ReadOnlyIList<string>.Empty;
+                    }
+                    else if (Info.STS.IsAtDestination())
+                    {
+                        return ReadOnlyIList<string>.Empty;
+                    }
+                    else if (inferredSPS.IsProcessingComplete(includeLost: false, includeSkipped: false))
+                    {
+                        if (isProcessMaterialMovementEnabled || isRecoveryMaterialMovementEnabled)
+                            return destLocNameList;
+                        else
+                            return ReadOnlyIList<string>.Empty;
+                    }
+                    else if (Info.STS.IsAtSource() && inferredSPS.IsNeedsProcessing())
+                    {
+                        Logger.Debug.Emit("{0} marking '{1}' Processed [AtSource, NeedsProcessing, Recipe has no process steps]", Fcns.CurrentMethodName, Info.ObjID.Name);
+                        E039TableUpdater.SetSubstProcState(SubstObserver, SubstProcState.Processed);
+                        return ReadOnlyIList<string>.Empty;
+                    }
+                    else if (inferredSPS.IsProcessStepComplete() && isProcessMaterialMovementEnabled)
+                    {
+                        bool atPM4 = Info.LocID == ECSParts.PM4.OutputLocID.Name;
+
+                        return atPM4 ? robotArmsLocNameList : destLocNameList;
+                    }
+                    else if (isRecoveryMaterialMovementEnabled && (Info.SJS == SubstrateJobState.Stopping || Info.SJS == SubstrateJobState.Pausing) && Info.STS.IsAtWork())
+                    {
+                        return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
+                    }
+                    else
+                    {
+                        // For cases that this code does not directly recognize.  Just leave the wafer in its current location (aka strand it)
+                        return ReadOnlyIList<string>.Empty;
+                    }
+
+                case SubstrateJobState.Returning:
+                case SubstrateJobState.Aborting:
+                    if (Info.STS.IsAtWork() && isRecoveryMaterialMovementEnabled)
+                        return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
+                    else
+                        return ReadOnlyIList<string>.Empty;
+
+                default:
+                    // in the future this code may need to split out and handle the Returning, Pausing, Stopping and Aborting cases.  for now all such cases strand the wafer in its current location.
+                    return ReadOnlyIList<string>.Empty;
+            }
+        }
+
+        public void UpdateEvalInfo(bool alreadyFoundFirstWaitingForStartSubstrate, ISubstrateSchedulerPartState stateToTool, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            var entryNextLocNameList = evalInfo.nextLocNameList.MapNullToEmpty();
+            var entryNextLocNameListVCStr = evalInfo.nextLocNameListVCStr;
+
+            if (SubstObserver.Object.IsFinalOrNull())
+            {
+                evalInfo.Clear(andNextLocNameListVCStr: true);
+                return;
+            }
+
+            var st = this;
+
+            evalInfo.Clear();
+
+            var isProcessMaterialMovementEnabled = stateToTool.IsProcessMaterialMovementEnabled();
+            var isProcssStepExecutionEnabled = stateToTool.IsProcessStepExecutionEnabled();
+            var isRecoveryMaterialMovementEnabled = stateToTool.IsRecoveryMaterialMovementEnabled();
+
+            bool isUsable = true;
+
+            switch (st.Info.SJS)
+            {
+                case SubstrateJobState.WaitingForStart:
+                    if (alreadyFoundFirstWaitingForStartSubstrate || !isProcessMaterialMovementEnabled || !isProcssStepExecutionEnabled)
+                        isUsable = false;
+                    break;
+                case SubstrateJobState.WaitingForPrepare:
+                    if (!isProcessMaterialMovementEnabled || !isProcssStepExecutionEnabled)
+                        isUsable = false;
+                    break;
+                case SubstrateJobState.Running:
+                case SubstrateJobState.Stopping:
+                case SubstrateJobState.Pausing:
+                case SubstrateJobState.Held:
+                    if (!isProcessMaterialMovementEnabled && !isRecoveryMaterialMovementEnabled)
+                        isUsable = false;
+                    break;
+                case SubstrateJobState.Aborting:
+                case SubstrateJobState.Returning:
+                    if (!isRecoveryMaterialMovementEnabled)
+                        isUsable = false;
+                    break;
+
+                default:
+                    isUsable = false;
+                    break;
+            }
+
+            var currentLocName = st.Info.LocID;
+
+            if (isUsable)
+            {
+                var currentStation = evalInfo.currentStation = ECSParts.GetStationEnum(currentLocName);
+                var currentLocObs = evalInfo.currentLocObs = AllLocObserverDictionary.SafeTryGetValue(currentLocName);
+                if (currentLocObs == null || !currentLocObs.Info.NotAccessibleReason.IsNullOrEmpty())
+                    isUsable = false;   // the substrate's current location is not currently accessible
+            }
+
+            if (isUsable)
+            {
+                var currentITPR = evalInfo.currentITPR = ECSParts.StationToITPRDictionary.SafeTryGetValue(evalInfo.currentStation);
+                var currentITPS = ((currentITPR != null) ? currentITPR.TransferPermissionStatePublisher.Object : null);
+                if (currentITPS != null && !currentITPS.IsAvailableOrAlmostAvailable(maxEstimatedAvailableAfterPeriodIn: null))
+                    isUsable = false;   // the ITPR for the current substrate's location does not indicate that it is available.
+            }
+
+            var nextLocNameList = st.GetNextLocNameList(stateToTool);
+
+            if (!entryNextLocNameList.Equals(nextLocNameList.MapNullToEmpty()))
+            {
+                evalInfo.nextLocNameList = nextLocNameList;
+                evalInfo.nextLocNameListVCStr = ValueContainer.CreateFromObject(nextLocNameList).ToStringSML();
+
+                if (evalInfo.lastNonEmptyNextLocNameListVCStr != evalInfo.nextLocNameListVCStr && !evalInfo.nextLocNameList.IsNullOrEmpty())
+                {
+                    evalInfo.lastNonEmptyNextLocNameListVCStr = evalInfo.nextLocNameListVCStr;
+                    Logger.Debug.Emit("{0}: At loc '{1}' NextLocNamedList changed to {2}", st.SubstID.FullName, st.Info.LocID, evalInfo.nextLocNameListVCStr);
+                }
+            }
+
+            if (!isUsable)
+                return;
+
+            evalInfo.nextStationEvalList.AddRange((nextLocNameList ?? ReadOnlyIList<string>.Empty).Select(locName => new StationEvaluationItem(AllLocObserverDictionary.SafeTryGetValue(locName), ECSParts)));
+
+            bool isAtWork = st.Info.STS.IsAtWork(); // aka it is not at source or destination.
+
+            EvaluationInfo.Flags flags = default(EvaluationInfo.Flags);
+
+            flags.readyToStart = (st.Info.SJS == SubstrateJobState.WaitingForStart && st.Info.SJRS == SubstrateJobRequestState.Run);
+            flags.hasBeenStarted = (st.Info.SJS != SubstrateJobState.WaitingForStart && st.Info.SJS != SubstrateJobState.Paused);
+            flags.readyToPrepare = (st.Info.SJS == SubstrateJobState.WaitingForPrepare && st.Info.SJRS == SubstrateJobRequestState.Run);
+            flags.hasBeenPrepared = flags.hasBeenStarted && (st.Info.SJS != SubstrateJobState.WaitingForPrepare);
+            flags.readyToRun = !flags.readyToStart && !flags.readyToPrepare && (isAtWork || st.Info.SJRS == SubstrateJobRequestState.Run);
+
+            bool isSJSRunningOrStoppingOrPausing = (st.Info.SJS == SubstrateJobState.Running || st.Info.SJS == SubstrateJobState.Stopping || st.Info.SJS == SubstrateJobState.Pausing);
+
+            flags.wantsToBeHere = (nextLocNameList ?? ReadOnlyIList<string>.Empty).Contains(st.Info.LocID);
+            flags.wantsToMove = !nextLocNameList.IsNullOrEmpty() && !flags.wantsToBeHere;
+
+            flags.isInProcessOrPendingProcess = (st.CurrentStationProcessICF != null);
+            flags.canStartProcessStepHereNow = (isAtWork && flags.wantsToBeHere && isSJSRunningOrStoppingOrPausing && !flags.isInProcessOrPendingProcess);
+
+            if (flags.wantsToMove && !flags.isInProcessOrPendingProcess)
+            {
+                evalInfo.firstCanMoveToStationEval = evalInfo.nextStationEvalList.FirstOrDefault(stationEval => stationEval.isAvailableMoveTarget);
+                evalInfo.firstCanSwapAtStationEval = evalInfo.nextStationEvalList.FirstOrDefault(stationEval => stationEval.isAvailableSwapTarget);
+
+                flags.haveAvailableMoveTarget = !flags.isInProcessOrPendingProcess && evalInfo.firstCanMoveToStationEval.isAvailableMoveTarget;
+                flags.haveAvailableSwapTarget = !flags.isInProcessOrPendingProcess && evalInfo.firstCanSwapAtStationEval.isAvailableSwapTarget;
+
+                flags.canBeMovedNow = flags.hasBeenStarted && flags.haveAvailableMoveTarget;
+                flags.canBeSwappedNow = flags.hasBeenStarted && flags.haveAvailableSwapTarget;
+            }
+
+            if (flags.hasBeenStarted && flags.wantsToMove && !flags.haveAvailableMoveTarget && !flags.haveAvailableSwapTarget && !flags.isInProcessOrPendingProcess)
+            {
+                evalInfo.firstPossibleAlmostAvailableForApproachToStationEval = evalInfo.nextStationEvalList.Where(stationEval => stationEval.isPossibleAlmostAvailableToApproachTarget).OrderBy(stationEval => stationEval.GetITPS().GetEstimatedTimeToAvailable(qpcTimeStamp)).FirstOrDefault();
+
+                flags.havePossibleAlmostAvailableForApproach = evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.IsValid;
+            }
+
+            flags.isOnRobotArm = (currentLocName == ECSParts.SRM.R1ArmALocID.Name || currentLocName == ECSParts.SRM.R1ArmBLocID.Name);
+
+            flags.nextStationEvalListIncludesPipelinedPMInput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMInputLocation);
+            flags.nextStationEvalListIncludesPipelinedPMOutput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMOutputLocation);
+
+            flags.blockedByInboundHoldRequest = flags.wantsToMove && evalInfo.nextStationEvalList.All(stationEval => stationEval.locationIsRequestingHoldInboundMaterial);
+
+            evalInfo.flags = flags;
+        }
+
+        /// <summary>This flag is true when the tool has referenced the substrate in an SRM action and that action has not completed.</summary>
+        public bool IsInSRMAction { get; set; }
+
+        public override bool IsMotionPending { get { return IsInSRMAction; } }
+
+        public EvaluationInfo evalInfo = new EvaluationInfo();
+
+        public class EvaluationInfo
+        {
+            public TestStationEnum currentStation;
+            public E090SubstLocObserver currentLocObs;
+            public ITransferPermissionRequest currentITPR;
+            public ReadOnlyIList<string> nextLocNameList;
+            public string nextLocNameListVCStr;
+            public string lastNonEmptyNextLocNameListVCStr;
+            public List<StationEvaluationItem> nextStationEvalList = new List<StationEvaluationItem>();
+
+            public Flags flags;
+
+            public struct Flags
+            {
+                /// <summary>SJS is WaitingForStart and SJRS is Run</summary>
+                public bool readyToStart;
+                /// <summary>SJS is not WaitingForStart and is not Paused</summary>
+                public bool hasBeenStarted;
+
+                /// <summary>SJS is WaitingForPrepare and SJRS is Run</summary>
+                public bool readyToPrepare;
+                /// <summary>SJS is neither WaitingForStart nor WaitingForPrepare</summary>
+                public bool hasBeenPrepared;
+
+                /// <summary>!readyToStart &amp;&amp; !readyToPrepare &amp;&amp; (!isAtSource || SRJS == Run)</summary>
+                public bool readyToRun;
+
+                public bool wantsToBeHere, wantsToMove;
+                public bool isInProcessOrPendingProcess, canStartProcessStepHereNow;
+                public bool haveAvailableMoveTarget, haveAvailableSwapTarget;
+                public bool canBeMovedNow, canBeSwappedNow;
+                public bool havePossibleAlmostAvailableForApproach;
+                public bool isOnRobotArm;
+                public bool nextStationEvalListIncludesPipelinedPMInput;
+                public bool nextStationEvalListIncludesPipelinedPMOutput;
+                public bool blockedByInboundHoldRequest;
+
+                public bool IsAnyFlagSet
+                {
+                    get { return (readyToStart || hasBeenStarted || readyToPrepare || hasBeenPrepared
+                                 || readyToRun
+                                 || wantsToBeHere || wantsToMove 
+                                 || isInProcessOrPendingProcess || canStartProcessStepHereNow 
+                                 || haveAvailableMoveTarget || haveAvailableSwapTarget
+                                 || canBeMovedNow || canBeSwappedNow 
+                                 || havePossibleAlmostAvailableForApproach 
+                                 || isOnRobotArm
+                                 || nextStationEvalListIncludesPipelinedPMInput
+                                 || nextStationEvalListIncludesPipelinedPMOutput
+                                 || blockedByInboundHoldRequest
+                                 ); }
+                }
+            }
+
+            public StationEvaluationItem firstCanMoveToStationEval, firstCanSwapAtStationEval, firstPossibleAlmostAvailableForApproachToStationEval;
+
+            public void Clear(bool andNextLocNameListVCStr = true)
+            {
+                currentStation = TestStationEnum.None;
+                currentLocObs = null;
+                currentITPR = null;
+                nextLocNameList = ReadOnlyIList<string>.Empty;
+                if (andNextLocNameListVCStr)
+                    nextLocNameListVCStr = string.Empty;
+                nextStationEvalList.Clear();
+                flags = default(Flags);
+                firstCanMoveToStationEval = firstCanSwapAtStationEval = firstPossibleAlmostAvailableForApproachToStationEval = default(StationEvaluationItem);
+            }
+        }
+
+        public struct StationEvaluationItem
+        {
+            public StationEvaluationItem(E090SubstLocObserver locObs, TestECSParts ecsParts)
+            {
+                var locObsWithTracker = locObs as SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>;
+
+                this.locObs = locObs;
+                locInfo = (locObs != null ? locObs.Info : default(E090SubstLocInfo));
+                station = ecsParts.GetStationEnum(locInfo.ObjID.Name);
+                itpr = ecsParts.StationToITPRDictionary.SafeTryGetValue(station);
+                var ipsF = ecsParts.StationToIPreparednessStateFactoryDictionary.SafeTryGetValue(station);
+                ips = (ipsF != null ? ipsF() : null);
+                var itps = (itpr != null ? itpr.TransferPermissionStatePublisher.Object : null);
+                var locHasNoITPROrIsAvailable = (itpr == null || itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.Available);
+
+                stAtLoc = (locObsWithTracker != null) ? locObsWithTracker.Tracker : null;
+                stAtLocWantsToMove = (stAtLoc != null && stAtLoc.evalInfo.flags.wantsToMove);
+                stAtLocIsBeingProcessed = (stAtLoc != null && stAtLoc.CurrentStationProcessICF != null);
+
+                locationIsCurrentlyAccessible = (locObs != null) && locInfo.NotAccessibleReason.IsNullOrEmpty();
+                locationIsNotCurrentlyAccessible = !locationIsCurrentlyAccessible;
+
+                locationIsRequestingHoldInboundMaterial = ((ips != null) && ips.SummaryState.IsSet(QuerySummaryState.HoldInboundMaterial));
+
+                isAvailableMoveTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && locInfo.IsUnoccupied && locHasNoITPROrIsAvailable;
+                isAvailableSwapTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && (stAtLoc != null) && !stAtLocIsBeingProcessed && stAtLocWantsToMove && locHasNoITPROrIsAvailable;
+
+                isPossibleAlmostAvailableToApproachTarget = locationIsCurrentlyAccessible && !locationIsRequestingHoldInboundMaterial && !isAvailableMoveTarget && !isAvailableSwapTarget && itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable;
+            }
+
+            public E090SubstLocObserver locObs;
+            public E090SubstLocInfo locInfo;
+            public TestSubstrateAndProcessTracker stAtLoc;
+            public TestStationEnum station;
+            public ITransferPermissionRequest itpr;
+            public IPreparednessState ips;
+
+            public bool IsValid { get { return locObs != null && locObs.Info.ObjID.Name.IsNeitherNullNorEmpty(); } }
+            public bool IsPipelinedPMInputLocation { get { return station == TestStationEnum.PM4 || station == TestStationEnum.PM3Input; } }
+            public bool IsPipelinedPMOutputLocation { get { return station == TestStationEnum.PM4 || station == TestStationEnum.PM3Output; } }
+
+            public bool stAtLocIsBeingProcessed;
+            public bool stAtLocWantsToMove;
+            public bool locationIsRequestingHoldInboundMaterial;
+            public bool locationIsCurrentlyAccessible;
+            public bool locationIsNotCurrentlyAccessible;
+
+            public bool isAvailableMoveTarget;
+            public bool isAvailableSwapTarget;
+            public bool isPossibleAlmostAvailableToApproachTarget;
+
+            public ITransferPermissionState GetITPS(ITransferPermissionState fallbackValue = null)
+            {
+                return (itpr != null ? itpr.TransferPermissionStatePublisher.Object : fallbackValue);
+            }
+
+            public bool GetIsAlmostAvailableToApproachTarget(TimeSpan maxEstimatedAlmostAvailablePeriod, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+            {
+                if (!isPossibleAlmostAvailableToApproachTarget)
+                    return false;
+
+                var itps = itpr.TransferPermissionStatePublisher.Object;
+                if (itps != null && itps.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable)
+                    return itps.IsAvailableOrAlmostAvailable(maxEstimatedAlmostAvailablePeriod, qpcTimeStamp);
+
+                return false;
+            }
+        }
+
+        #region IJobTrackerLinkage
+
+        private string JobID { get; set; }
+
+        string IJobTrackerLinkage.ID { get {return JobID;}}
+        bool IJobTrackerLinkage.SubstrateTrackerHasBeenUpdated { get; set; }
+        bool IJobTrackerLinkage.IsDropRequested { get { return false ; } }
+        string IJobTrackerLinkage.DropRequestReason { get { return string.Empty; } }
+
+        #endregion
+    }
+
+    public class TestSubstrateSchedulerToolConfig : ICopyable<TestSubstrateSchedulerToolConfig>
+    {
+        public TestSubstrateSchedulerToolConfig(string name, TestECSParts ecsParts)
+        {
+            Name = name;
+            ECSParts = ecsParts;
+            MaxEstimatedAlmostAvailablePeriod = (1.0).FromSeconds();
+            EnableAutoResumeFromStranded = true;
+            ServiceBasicSJSStateChangeTriggerFlags = SubstrateScheduling.ServiceBasicSJSStateChangeTriggerFlags.All & ~(ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart);
+        }
+
+        public TestSubstrateSchedulerToolConfig MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (TestSubstrateSchedulerToolConfig)this.MemberwiseClone();
+        }
+
+        public string Name { get; private set; }
+        public TestECSParts ECSParts { get; private set; }
+
+        public TimeSpan MaxEstimatedAlmostAvailablePeriod { get; set; }
+
+        public bool EnableAutoResumeFromStranded { get; set; }
+
+        public ServiceBasicSJSStateChangeTriggerFlags ServiceBasicSJSStateChangeTriggerFlags { get; set; }
+
+        public bool UseWaitingForPrepare
+        {
+            get { return ServiceBasicSJSStateChangeTriggerFlags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.UseWaitingForPrepare); }
+            set { ServiceBasicSJSStateChangeTriggerFlags = ServiceBasicSJSStateChangeTriggerFlags.Set(ServiceBasicSJSStateChangeTriggerFlags.UseWaitingForPrepare, value); }
         }
     }
 
     public class TestSubstrateSchedulerTool: ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
     {
-        public TestSubstrateSchedulerTool(TestECSParts ecsParts)
+        public TestSubstrateSchedulerTool(string name, TestECSParts ecsParts) 
+            : this(new TestSubstrateSchedulerToolConfig(name, ecsParts)) 
+        { }
+
+        public TestSubstrateSchedulerTool(string name, TestECSParts ecsParts, TimeSpan maxEstimatedAlmostAvailablePeriod)
+            : this(new TestSubstrateSchedulerToolConfig(name, ecsParts) { MaxEstimatedAlmostAvailablePeriod = maxEstimatedAlmostAvailablePeriod })
+        { }
+
+        public TestSubstrateSchedulerTool(TestSubstrateSchedulerToolConfig toolConfig)
         {
-            ECSPart = ecsParts;
-            Logger = new Logging.Logger(Fcns.CurrentClassLeafName);
+            Name = toolConfig.Name;
+            ToolConfig = toolConfig.MakeCopyOfThis();
 
-            r1ArmALocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.R1ArmALocID, substTrackerDictionary);
-            r1ArmBLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.R1ArmBLocID, substTrackerDictionary);
+            ECSParts = ToolConfig.ECSParts;
+            Logger = new Logging.Logger(Name);
 
-            al1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.AL1LocID, substTrackerDictionary);
-            pm1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM1.LocID, substTrackerDictionary);
-            pm2LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM2.LocID, substTrackerDictionary);
-            pm3InputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM3.InputLocID, substTrackerDictionary);
-            pm3OutputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM3.OutputLocID, substTrackerDictionary);
-            pm4TransferLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM4.InputLocID, substTrackerDictionary);
-            pmRejectLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMReject.LocID, substTrackerDictionary);
-            pmAbortLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMAbort.LocID, substTrackerDictionary);
-            pmReturnLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMReturn.LocID, substTrackerDictionary);
+            RouteSequenceFailedAnnunciator = ECSParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.RouteSequenceFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
+            PrepareFailedAnnunciator = ECSParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.PrepareFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
+
+            r1ArmALocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.R1ArmALocID, substTrackerDictionary);
+            r1ArmBLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.R1ArmBLocID, substTrackerDictionary);
+            r1LocObserverArray = new[] { r1ArmALocObserver, r1ArmBLocObserver };
+
+            al1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.AL1LocID, substTrackerDictionary);
+            pm1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM1.LocID, substTrackerDictionary);
+            pm2LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM2.LocID, substTrackerDictionary);
+            pm3InputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM3.InputLocID, substTrackerDictionary);
+            pm3OutputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM3.OutputLocID, substTrackerDictionary);
+            pm4TransferLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM4.InputLocID, substTrackerDictionary);
+            pmRejectLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMReject.LocID, substTrackerDictionary);
+            pmAbortLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMAbort.LocID, substTrackerDictionary);
+            pmReturnLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMReturn.LocID, substTrackerDictionary);
 
             foreach (var processLocObserver in al1LocObserver.ConcatItems(pm1LocObserver, pm2LocObserver, pm3InputLocObserver, pm3OutputLocObserver, pm4TransferLocObserver, pmRejectLocObserver, pmAbortLocObserver, pmReturnLocObserver))
-                processLocObserverDictionary[processLocObserver.ID.Name] = processLocObserver;
+                processLocObserverWithTrackerDictionary[processLocObserver.ID.Name] = processLocObserver;
 
-            foreach (var locObserver in r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverDictionary.ValueArray))
+            foreach (var locObserver in r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray))
+            {
+                allLocObserverWithTrackerDictionary[locObserver.ID.Name] = locObserver;
                 allLocObserverDictionary[locObserver.ID.Name] = locObserver;
+            }
 
-            normalMoveFromLocSet = new HashSet<string>(r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverDictionary.ValueArray).Select(obs => obs.ID.Name));
+            foreach (var extraLocID in ECSParts.SRM.LPSlotLocIDArray)
+            {
+                allLocObserverDictionary[extraLocID.Name] = new E090SubstLocObserver(extraLocID.GetPublisher());
+            }
+
+            var locNameToPrepareKVPSet = new KeyValuePair<string, IPrepare<IProcessSpec, IProcessStepSpec>>[]
+                {
+                    KVP.Create(ECSParts.PM1.LocID.Name, ECSParts.PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM2.LocID.Name, ECSParts.PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM3.InputLocID.Name, ECSParts.PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM4.InputLocID.Name, ECSParts.PM4 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMAbort.LocID.Name, ECSParts.PMAbort as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMReject.LocID.Name, ECSParts.PMReject as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMReturn.LocID.Name, ECSParts.PMReturn as IPrepare<IProcessSpec, IProcessStepSpec>),
+                }
+                .Where(kvp => kvp.Value != null)
+                ;
+            locNameToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(locNameToPrepareKVPSet, onlyTakeFirst: false);
+
+            normalMoveFromLocSet = new HashSet<string>(r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray).Select(obs => obs.ID.Name));
         }
 
-        TestECSParts ECSPart { get; set; }
+        public string Name { get; private set; }
+        TestSubstrateSchedulerToolConfig ToolConfig { get; set; }
+        TestECSParts ECSParts { get; set; }
         Logging.ILogger Logger { get; set; }
+
+        E041.IANSource RouteSequenceFailedAnnunciator { get; set; }
+        E041.IANSource PrepareFailedAnnunciator { get; set; }
 
         /// <summary>Gives the INotifyable target that this tool is to attach to any Action it creates to notify the hosting part when the action completes</summary>
         public INotifyable HostingPartNotifier { get; set; }
 
         Dictionary<string, TestSubstrateAndProcessTracker> substTrackerDictionary = new Dictionary<string, TestSubstrateAndProcessTracker>();
         IListWithCachedArray<TestSubstrateAndProcessTracker> substTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
+        IListWithCachedArray<TestSubstrateAndProcessTracker> filteredSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
         SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker> r1ArmALocObserver, r1ArmBLocObserver;
+        SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>[] r1LocObserverArray;
         IClientFacet srmAction;
+        IListWithCachedArray<TestSubstrateAndProcessTracker> srmActionSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
         SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker> al1LocObserver, pm1LocObserver, pm2LocObserver, pm3InputLocObserver, pm3OutputLocObserver, pm4TransferLocObserver;
         SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker> pmRejectLocObserver, pmAbortLocObserver, pmReturnLocObserver;
 
-        IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> processLocObserverDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
-        IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> allLocObserverDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
+        IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> processLocObserverWithTrackerDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
+        IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> allLocObserverWithTrackerDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
+        IDictionaryWithCachedArrays<string, E090SubstLocObserver> allLocObserverDictionary = new IDictionaryWithCachedArrays<string, E090SubstLocObserver>();
+
+        public IDictionary<string, E090SubstLocObserver> AllLocObserverDictionary { get { return allLocObserverDictionary; } }
+
+        private IDictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>> locNameToPrepareDictionary;
 
         HashSet<string> normalMoveFromLocSet;
 
         IListWithCachedArray<TestSubstrateAndProcessTracker> trackersInProcessList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
-        IListWithCachedArray<TestSubstrateAndProcessTracker> movableSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
         public void Add(TestSubstrateAndProcessTracker substTracker)
         {
@@ -713,100 +1502,168 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             substTrackerList.Remove(substTracker);
         }
 
-        public IList<string> VerifyUseStateChange(IBaseState partBaseState, UseState requestedUseState, bool andInitialize = false)
+        /// <summary>
+        /// Allows the hosting part to inform the tool when a GoOnline Action is being performed.  
+        /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
+        /// </summary>
+        public string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv, Func<bool> hasStopBeenRequestedDelegate, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool)
         {
-            return null;
+            if (RouteSequenceFailedAnnunciator.ANState.IsSignaling)
+                RouteSequenceFailedAnnunciator.Clear(ipf.ToString(ToStringSelect.MesgAndDetail));
+
+            if (PrepareFailedAnnunciator.ANState.IsSignaling)
+                PrepareFailedAnnunciator.Clear(ipf.ToString(ToStringSelect.MesgAndDetail));
+
+            return string.Empty;
         }
 
-        TestSubstrateAndProcessTracker lastSTAtSource = null;
-        QpcTimer lastWaitForStartMessageTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true }.Start();
-
-        public int Service(bool recentTrackerChangeMayHaveOccurred, ref SubstrateStateTally substrateStateTally, IBaseState partBaseState)
+        /// <summary>
+        /// Allows the hosting part to inform the tool when a GoOffline Action is being performed.
+        /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
+        /// </summary>
+        public string PerformGoOfflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate)
         {
-            int deltaCount = UpdateObservers() * (!recentTrackerChangeMayHaveOccurred).MapToInt();
+            return string.Empty;
+        }
 
-            bool isFullyOnline = partBaseState.UseState.IsOnline(acceptAttemptOnline: false, acceptUninitialized: false, acceptOnlineFailure: false);
-            bool isPartiallyOnline = partBaseState.UseState.IsOnline(acceptAttemptOnline: true, acceptUninitialized: false, acceptOnlineFailure: false);
+        public string VerifyIdle()
+        {
+            if (RouteSequenceFailedAnnunciator.ANState.IsSignaling)
+                return "RouteSeqeunceFailedAnnunciator is signaling";
 
-            if (!isFullyOnline)
+            if (PrepareFailedAnnunciator.ANState.IsSignaling)
+                return "PrepareFailedAnnunciator is signaling";
+
+            if (substrateStateTally.stsAtWork > 0)
+                return "There are still substrates at work in the tool [{0}]".CheckedFormat(substrateStateTally);
+
+            var occupiedSLOs = r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray).Where(st => !st.UpdateInline().IsUnoccupied).ToArray();
+
+            if (occupiedSLOs.Length > 0)
+                return "One or more locations are not unoccupied: {0}".CheckedFormat(string.Join(",", occupiedSLOs.Select(slo => slo.ID.Name)));
+
+            if (srmActionSubstTrackerList.Count > 0)
+                return "There are still substrates in the SRM Action Subst Tracker list";
+
+            return "";
+        }
+
+        /// <summary>
+        /// This method returns a list of reasons why the scheduler cannot be transitioned from the current given <paramref name="stateToTool"/> using the given <paramref name="requestNVS"/> request specification.  (See comments for Service above and here below for details on supported request patterns)
+        /// This method will only be called if the request is not coming from the tool itself.  If the request is coming from the tool then the hosting part assumes that the tool has already determined that the change would be permitted.
+        /// </summary>
+        /// <remarks>
+        /// In addition to the supported patterns from the Service method above, the following are generally expected to be supported keywords and/or named value pairs:
+        ///     SetAutomatic - keyword (no value) - used to request that the hosting part can transition to a fully automatic state.  The hosting part typically indicates this to verify that it can GoOnline(true).
+        ///     GoOnline - keyword (no value) - used to request that the hosting part can transition to an online state.  The hosting part typically indicates this to verify that it can GoOnline(false).
+        ///     GoOffline - keyword (no value) - advisory - used to indicate that the hosting part is going to transition to the offline state by request.
+        /// </remarks>
+        public IList<string> VerifyStateChange(ISubstrateSchedulerPartStateToTool stateToTool, INamedValueSet requestNVS)
+        {
+            ServiceTrackersAndUpdateObservers(stateToTool, QpcTimeStamp.Now);
+
+            List<string> notReadyReasonList = new List<string>();
+
+            if (requestNVS.Contains("SetAutomatic"))
             {
-                foreach (var st in substTrackerList.Array)
+                foreach (var locObs in allLocObserverWithTrackerDictionary.ValueArray.Where(locObs => locObs.IsOccupied))
                 {
-                    var sjs = st.SubstrateJobState;
-                    if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart)
-                        st.SetSubstrateJobState(SubstrateJobState.Pausing, "Part is no longer online [{0}]".CheckedFormat(partBaseState));
+                    if (locObs.Tracker == null)
+                    {
+                        notReadyReasonList.Add("Found stranded substrate '{0}' [NoAssociatedSubstrateAndProcessTracker]".CheckedFormat(locObs.ContainsSubstInfo));
+                    }
+                    else if (locObs.ContainsSubstInfo.SPS.IsNeedsProcessing())
+                    {
+                        var srcLocInfo = new E090SubstLocInfo(locObs.ContainsSubstInfo.LinkToSrc.ToID.GetObject());
+
+                        if (srcLocInfo.IsOccupied)
+                            notReadyReasonList.Add("Found stranded substrate '{0}' [SrcLocIsOccupied]".CheckedFormat(locObs.ContainsSubstInfo));
+                        else if (srcLocInfo.NotAccessibleReason.IsNeitherNullNorEmpty())
+                            notReadyReasonList.Add("Found stranded substrate '{0}' [SrcLocIsNotAccessible:{1}]".CheckedFormat(locObs.ContainsSubstInfo, srcLocInfo.NotAccessibleReason));
+                    }
+                    else
+                    {
+                        var destLocInfo = new E090SubstLocInfo(locObs.ContainsSubstInfo.LinkToDest.ToID.GetObject());
+
+                        if (destLocInfo.IsOccupied)
+                            notReadyReasonList.Add("Found stranded substrate '{0}' [DestLocIsOccupied]".CheckedFormat(locObs.ContainsSubstInfo));
+                        else if (destLocInfo.NotAccessibleReason.IsNeitherNullNorEmpty())
+                            notReadyReasonList.Add("Found stranded substrate '{0}' [DestLocIsNotAccessible:{1}]".CheckedFormat(locObs.ContainsSubstInfo, destLocInfo.NotAccessibleReason));
+                    }
                 }
             }
 
-            var enabledBasicSJSStateChangeTriggers = (ServiceBasicSJSStateChangeTriggerFlags.All & ~ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart);
-            deltaCount += substTrackerList.Array.Sum(tracker => tracker.ServiceBasicSJSStateChangeTriggers(enabledBasicSJSStateChangeTriggers));
-            deltaCount += substTrackerList.Array.Sum(tracker => tracker.ServiceDropReasonAssertion());
+            return notReadyReasonList.MapEmptyToNull();
+        }
 
-            // make autostart more smart - look at first process requested location and wait until it is empty
-            bool enableAutoStart = isFullyOnline && (substrateStateTally.stsAtSource > 0 && substrateStateTally.sjsWaitingForStart > 0);
+        QpcTimer noteStrandedSubstratesTriggerHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 10.0, AutoReset = false };
 
-            if (enableAutoStart && substrateStateTally.stsAtSource > 0 && substTrackerList.Array.Length > 0)
+        List<SubstrateRoutingItemBase> srmActionItemBuilderList = new List<SubstrateRoutingItemBase>();
+        List<TestSubstrateAndProcessTracker> srmActionItemBuilderSubstTrackerList = new List<TestSubstrateAndProcessTracker>();
+
+        SubstrateStateTally substrateStateTally = new SubstrateStateTally();
+
+        HashSet<string> candidateSwapAtStationLocNameSet = new HashSet<string>();
+
+        /// <summary>
+        /// Called periodically to allow the tool to perform work.  Nominally this method is where the tool is given a repeated oportunity to create and start SRM and process actions.
+        /// This method returns a count of the number of change it made or observed to allow the caller to optimze its spin loop sleep behavior to increase responsiveness in relation to loosely coupled state transitions.
+        /// <param name="stateToTool">Gives the tool access to the state information that the hosting part provides to the tool in order to tell the tool what behavior is permitted and behavior is not.</param>
+        /// <param name="requestAndStatusOutFromTool">Allows the tool to pass a set of requests, and status information, back to the hosting part so that the hosting part can react and/or publish state accordingly.  Please see remarks below  and under VerityStateChange for details on standard request patterns.</param>
+        /// </summary>
+        public int Service(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool)
+        {
+            if (RouteSequenceFailedAnnunciator.ANState.IsSignaling)
             {
-                // Note: the current coding here does not support lookahead lanching where future wafers may not actually be blocked by the processing that is planned for the wafers that are already in the tool.
-                // however for simplicity of the logic below this issue will not be immediately addressed in this version of this code.
+                return ServiceRouteSequenceFailedAnnunciator(stateToTool, ref requestAndStatusOutFromTool);
+            }
 
-                var nextSTAtSource = substTrackerList.Array.FirstOrDefault(st => st.SubstObserver.Info.STS.IsAtSource());
+            bool isSubstrateLaunchEnabled = stateToTool.IsSubstrateLaunchEnabled();
+            bool isProcessMaterialMovementEnabled = stateToTool.IsProcessMaterialMovementEnabled();
+            bool isProcessStepExecutionEnabled = stateToTool.IsProcessStepExecutionEnabled();
+            bool isRecoveryMaterialMovementEnabled = stateToTool.IsRecoveryMaterialMovementEnabled();
 
-                if (nextSTAtSource != lastSTAtSource)
-                    lastWaitForStartMessageTimer.Reset();
+            int deltaCount = 0;
 
-                if (nextSTAtSource != null)
+            QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
+            deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
+
+            if (!isProcessStepExecutionEnabled)
+            {
+                noteStrandedSubstratesTriggerHoldoffTimer.StartIfNeeded();
+
+                if (!isRecoveryMaterialMovementEnabled || noteStrandedSubstratesTriggerHoldoffTimer.IsTriggered)
                 {
-                    var st = nextSTAtSource;
-                    string blockedReason = null;
-
-                    if (st.SubstrateJobState != SubstrateJobState.WaitingForStart || st.SubstrateJobRequestState != SubstrateJobRequestState.Run)
+                    foreach (var st in substTrackerList.Array)
                     {
-                        // This is likely a substrate that we just started but which has not left the FOUP yet - stop looking until it leaves.
-                        blockedReason = "Cannot issue AtSource {0} [{1} {2}]".CheckedFormat(st.SubstID.FullName, st.SubstrateJobState, st.SubstrateJobRequestState);
+                        var sjs = st.Info.SJS;
+                        if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart || sjs == SubstrateJobState.WaitingForPrepare)
+                            st.SetSubstrateJobState(SubstrateJobState.Stranded, "Part is no longer permitted to run process [{0}]".CheckedFormat(stateToTool));
                     }
+                }
+            }
+            else
+            {
+                noteStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
 
-                    // next check if the next location for this wafer is empty
-                    var nextLocList = st.NextLocNameList;
-
-                    if (blockedReason.IsNullOrEmpty() && nextLocList.IsNullOrEmpty())
+                if (substrateStateTally.sjsStranded > 0 && ToolConfig.EnableAutoResumeFromStranded)
+                {
+                    foreach (var st in substTrackerList.Array.Where(st => st.Info.SJS == SubstrateJobState.Stranded))
                     {
-                        // if we encounter an AtSource, WaitingForStart, Run substrate that that does not have any locations in its NextLocNameList then we stop issuing
-                        blockedReason = "Cannot issue AtSource {0} [NextLocNameList is empty]".CheckedFormat(st.SubstID.FullName);
-                    }
-
-                    var nextMoveToLocName = FindFirstUnoccupiedLoc(nextLocList);
-
-                    if (blockedReason.IsNullOrEmpty())
-                    {
-                        if (!nextMoveToLocName.IsNullOrEmpty())
-                        {
-                            st.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available)");
-                            deltaCount++;
-                        }
-                        else
-                        {
-                            blockedReason = "Cannot issue AtSource {0} [No empty PMs: {1}]".CheckedFormat(st.SubstID.FullName, string.Join(", ", nextLocList));
-                        }
-                    }
-
-                    if (!blockedReason.IsNullOrEmpty() && lastWaitForStartMessageTimer.IsTriggered)
-                    {
-                        Logger.Debug.Emit(blockedReason);
+                        if (st.Info.STS.IsAtSource())
+                            st.SetSubstrateJobState(SubstrateJobState.WaitingForStart, "Auto resuming held substrate [AtSource]");
+                        else if (st.Info.STS.IsAtWork())
+                            st.SetSubstrateJobState(SubstrateJobState.Running, "Auto resuming held substrate [AtWork:{0}]".CheckedFormat(st.Info.LocID));
                     }
                 }
             }
 
             foreach (var st in trackersInProcessList.Array)
             {
-                deltaCount += st.Service();
-
-                if (st.CurrentStationProcessICF == null && st.Info.LocID != ECSPart.PM4.OutputLocID.Name)
+                if (st.CurrentStationProcessICF == null && st.Info.LocID != ECSParts.PM4.OutputLocID.Name)
                 {
-                    trackersInProcessList.Remove(st);       // this is safe when iterating on the List.Array.
+                    trackersInProcessList.Remove(st);       // this is safe when iterating on the IListWithCachedArray.Array.
                     deltaCount++;
-
-                    Logger.Debug.Emit("{0} NextLocList is now [{1}]", st.SubstID.FullName, string.Join(", ", st.NextLocNameList));
                 }
             }
 
@@ -816,183 +1673,819 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 if (srmActionState.IsComplete)
                 {
-                    if (srmActionState.Failed)
-                        throw new SubstrateSchedulingException("{0} failed: {1}".CheckedFormat(srmAction.ToString(ToStringSelect.MesgAndDetail), srmActionState));
+                    srmActionSubstTrackerList.SafeTakeAll().DoForEach(st => st.IsInSRMAction = false);
 
-                    srmAction = null;
+                    if (srmActionState.Succeeded)
+                    {
+                        srmAction = null;
 
-                    deltaCount += UpdateObservers();
+                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
+                    }
+                    else
+                    {
+                        string reason = "Route action '{0}' failed: {1}".CheckedFormat(srmAction.ToString(ToStringSelect.MesgAndDetail), srmActionState.ResultCode);
+
+                        PostRouteSequenceFailedError(stateToTool, reason);
+
+                        UpdateRequestAndStatusOutFromTool(ref requestAndStatusOutFromTool);
+
+                        deltaCount += 1;
+
+                        srmAction = null;
+
+                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
+
+                        return deltaCount;
+                    }
                 }
             }
 
-            if (srmAction == null && isFullyOnline)
+            // update the filteredSubstTrackerList to contain the st instances that have at least one evaluation info flag set.  This should generaly be the set of wafers that are in the tool and one of the ones that is waiting for start.
+
+            if (filteredSubstTrackerList.Count > 0)
+                filteredSubstTrackerList.Clear();
+
+            if (substTrackerList.Count > 0)
+                filteredSubstTrackerList.AddRange(substTrackerList.Array.Where(st => st.evalInfo.flags.IsAnyFlagSet));
+
+            // when a substrate is not in an srmAction and it has been started and it can have its next process step started here now (aka it wants to be here) then start it.
+            if (isProcessStepExecutionEnabled && filteredSubstTrackerList.Count > 0)
             {
-                foreach (var pt in processLocObserverDictionary.ValueArray)
+                foreach (var st in filteredSubstTrackerList.Array.Where(st => !st.IsInSRMAction && st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.canStartProcessStepHereNow))
                 {
-                    var st = pt.Tracker;
-                    var substLocInfo = pt.Info;
-                    var containsSubstInfo = pt.ContainsSubstInfo;
+                    st.StartProcessAtCurrentLocation(ECSParts, HostingPartNotifier);
 
-                    if (st != null)
+                    if (st.CurrentStationProcessICF != null)
+                        trackersInProcessList.Add(st);
+
+                    deltaCount++;
+                }
+            }
+
+            if (srmAction == null && filteredSubstTrackerList.Count > 0)
+            {
+                srmActionItemBuilderList.Clear();
+                srmActionItemBuilderSubstTrackerList.Clear();
+
+                int numEmptyUsableArms = r1ArmALocObserver.IsUnoccupiedAndAccessible.MapToInt() + r1ArmBLocObserver.IsUnoccupiedAndAccessible.MapToInt();
+                int numOccupiedUsableArms = r1ArmALocObserver.IsOccupiedAndAccessible.MapToInt() + r1ArmBLocObserver.IsOccupiedAndAccessible.MapToInt();
+
+                bool anyCanBeMovedNow = filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.canBeMovedNow);
+                bool anyCanBeSwappedNow = filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.canBeSwappedNow);
+
+                // if there are no substrates that are ready to move now
+                // and there are 2 unoccupied arms 
+                // and there is at least one substrate that can be swapped now or that is almost available to be moved then 
+                // move that substrate onto one of the two arms.
+
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms >= 2 && !anyCanBeMovedNow)
+                {
+                    var stToMoveToArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && (st.evalInfo.flags.canBeSwappedNow || (!st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp))));
+                    if (stToMoveToArm != null)
                     {
-                        if (st.CurrentStationProcessICF == null && st.NextLocNameList.Contains(pt.ID.Name))
-                        {
-                            st.StartProcessAtCurrentLocation(ECSPart, HostingPartNotifier);
-                            deltaCount++;
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
 
-                            if (st.CurrentStationProcessICF != null)
-                                trackersInProcessList.Add(st);
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToMoveToArm.Info.LocID, waitUntilDone: false) { Comment = "ApproachGetSubstApproachAlmostAvailable" });
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToMoveToArm.SubstID, ECSParts.SRM.R1EitherArmName));
+
+                        if (stToMoveToArm.evalInfo.flags.canBeSwappedNow)
+                            srmActionItemBuilderList.Add(new ApproachLocationItem(stToMoveToArm.SubstID, stToMoveToArm.evalInfo.firstCanSwapAtStationEval.locInfo.ObjID.Name, waitUntilDone: true, mustSucceed: true));
+                        else if (stToMoveToArm.evalInfo.flags.havePossibleAlmostAvailableForApproach)
+                            srmActionItemBuilderList.Add(new ApproachLocationItem(stToMoveToArm.SubstID, stToMoveToArm.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.locInfo.ObjID.Name, waitUntilDone: true, mustSucceed: true));
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToMoveToArm);
+                    }
+                }
+
+                // if there is a substrate on the one arm and the other arm is empty and the substrate on the arm can be swapped then swap the wafer with the one at the target location.
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms > 0 && numOccupiedUsableArms > 0)
+                {
+                    var stOnArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeSwappedNow);
+
+                    if (stOnArm != null)
+                    {
+                        candidateSwapAtStationLocNameSet.Clear();
+
+                        filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.wantsToMove && st.evalInfo.currentLocObs != null).DoForEach(st => candidateSwapAtStationLocNameSet.SafeAddIfNeeded(st.evalInfo.currentLocObs.ID.Name));
+
+                        var swapAtStationEvalItem = stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableSwapTarget && candidateSwapAtStationLocNameSet.Contains(stationEval.locInfo.ObjID.Name)).FirstOrDefault();
+
+                        // change this to AttemptToSwapSubstrateToNextLocation
+                        if (swapAtStationEvalItem.IsValid)
+                            AttemptToMoveOrSwapSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyUsableArms, comment: "SwapOutboundSubstAtLocWithInboundOneOnArm");
+                    }
+                }
+
+                // if either substrate on the robot arm is available to be moved to its next location them move it (in some cases this creates and starts a pending process after the move is complete)
+                if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms >= 1 && anyCanBeMovedNow)
+                {
+                    foreach (var stOnArm in filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.readyToRun && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow))
+                    {
+                        foreach (var tryAvailableMoveTargetStationEval in stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableMoveTarget))
+                        {
+                            if (AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, tryAvailableMoveTargetStationEval, numEmptyUsableArms, comment: "PutSubstFromRobotAtNextLoc"))
+                                break;
+                        }
+
+                        if (srmActionItemBuilderList.Count > 0)
+                            break;
+                    }
+                }
+
+                // if there is a substrate that is not on the robot arm and it can move there and none of the next location names for the substrates that are already on an arm match any of the next location names for this one then move it to the first available arm
+                // Note: do not move a substrate onto the last available arm if that substrate needs to go to a location that is the output location for a pipelined PM.  This is because the pipelined PM output location can become occupied outside of the control of this logic.
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms > 0)
+                {
+                    UpdateHashSetOfLocationsRobotArmWafersCanGoToNext();
+
+                    bool atLeastTwoArmsAreEmpty = (numEmptyUsableArms >= 2);
+
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow && !st.evalInfo.nextLocNameList.Any(locName => hashSetOfSubstrateTrackerOnRobotNextLocNames.Contains(locName)) && (atLeastTwoArmsAreEmpty || !st.evalInfo.flags.nextStationEvalListIncludesPipelinedPMOutput));
+                    if (stToGet != null)
+                    {
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
+
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToGet.evalInfo.currentLocObs.ID.Name, waitUntilDone: false) { Comment = "GetMovableSubstToRobot"});
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToGet.SubstID, useArmLocName));
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToGet);
+                    }
+                }
+
+                // if there is a substrate that is going to PM4 and both arms are empty then move the substrate to an arm
+                if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms == 0)
+                {
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToRun && !st.evalInfo.flags.isOnRobotArm && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)) && st.evalInfo.firstCanMoveToStationEval.IsPipelinedPMOutputLocation);
+                    if (stToGet != null)
+                    {
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
+
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToGet.evalInfo.currentLocObs.ID.Name, waitUntilDone: false) { Comment = "GetNextPipelinedOutputPMLocSubstToEmptyRobot"});
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToGet.SubstID, useArmLocName));
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToGet.SubstID, ECSParts.PM4.InputLocID.Name, waitUntilDone: true));
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToGet);
+                    }
+                }
+
+                // if any logic above generated one or more srm items then start an srmAction to run them.
+                if (srmActionItemBuilderList.Count > 0)
+                {
+                    Logger.Debug.Emit("Creating SRM action [{0}]", srmActionItemBuilderList.First().Comment);
+
+                    srmAction = ECSParts.SRM.Sequence(srmActionItemBuilderList.ToArray()).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline();
+
+                    srmActionSubstTrackerList.AddRange(srmActionItemBuilderSubstTrackerList);
+                    srmActionSubstTrackerList.DoForEach(st => st.IsInSRMAction = true);
+
+                    deltaCount++;
+                }
+            }
+
+            if (pendingPrepareList.Count > 0)
+            {
+                var completedPrepareSet = pendingPrepareList.FilterAndRemove(icf => icf.ActionState.IsComplete).ToArray();
+                var failedPrepareSet = completedPrepareSet.Where(icf => icf.ActionState.Failed).ToArray();
+
+                if (!failedPrepareSet.IsNullOrEmpty())
+                {
+                    PostPrepareFailedError(stateToTool, "Prepare failed for one or more modules: [{0}]".CheckedFormat(string.Join(", ", failedPrepareSet.Select(icf => icf.ToString()))));
+
+                    pendingPrepareList.SafeTakeAll().DoForEach(icf => icf.RequestCancel());
+                }
+                else if (pendingPrepareList.Count  == 0 && PrepareFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndActionActive)
+                {
+                    string reason = "Retry completed normally: pending prepare operations succeeded";
+
+                    PrepareFailedAnnunciator.NoteActionCompleted(reason);
+                    PrepareFailedAnnunciator.Clear(reason);
+                }
+            }
+            else if (PrepareFailedAnnunciator.ANState.IsSignaling)
+            {
+                ServicePrepareFailedAnnunciator(stateToTool, ref requestAndStatusOutFromTool, ref deltaCount, ref qpcTimeStamp);
+
+                return deltaCount;
+            }
+
+            if (pendingPrepareList.Count == 0 && PrepareFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndActionActive)
+            {
+                string reason = "Retry completed unexpectedly: pending prepare list is empty";
+                PrepareFailedAnnunciator.NoteActionCompleted(reason);
+                PrepareFailedAnnunciator.Clear(reason);
+            }
+
+            bool useWaitingForPrepare = ToolConfig.UseWaitingForPrepare;
+
+            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling && useWaitingForPrepare)
+            {
+                var stReadyToPrepare = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToPrepare && (st.evalInfo.flags.haveAvailableMoveTarget || st.evalInfo.flags.haveAvailableSwapTarget));
+
+                if (stReadyToPrepare != null && substrateStateTally.stsAtWork == 0)
+                {
+                    qpcTimeStamp = QpcTimeStamp.Now;
+
+                    // If any step has a part that is not ready for the corresponding process then ask it to prepare. NOTE: this does not handle cases where multiple steps re-use the same process modules more than once or with different process step specs (that are not compatible)
+                    var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, stReadyToPrepare);
+
+                    var anyStationNotReady = stationStepTupleSet.Any(stepTuple => stepTuple.Item2.Any(locTuple => locTuple.Item4));
+
+                    if (anyStationNotReady && substrateStateTally.stsAtWork == 0)
+                    {
+                        foreach (var stepTuple in stationStepTupleSet)
+                        {
+                            var stepSpec = stepTuple.Item1;
+                            foreach (var locTuple in stepTuple.Item2.Where(locTuple => locTuple.Item4))
+                            {
+                                if (!locTuple.Item3.SummaryState.IsSet(QuerySummaryState.CanPrepare))
+                                {
+                                    pendingPrepareTracker = stReadyToPrepare;
+
+                                    PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
+
+                                    deltaCount++;
+                                    return deltaCount;
+                                }
+
+                                pendingPrepareList.Add(locTuple.Item2.PrepareForStep(stReadyToPrepare.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
+                            }
                         }
                     }
-                    else if (substLocInfo.IsOccupied)
-                    {
-                        if (containsSubstInfo.InferredSPS != SubstProcState.NeedsProcessing)
-                            ECSPart.E039TableUpdater.SetSubstProcState(containsSubstInfo, SubstProcState.Aborted);
 
-                        if (!containsSubstInfo.SJS.IsFinal())
-                            ECSPart.E039TableUpdater.SetSubstrateJobStates(containsSubstInfo, sjs: SubstrateJobState.Aborting);
+                    if (pendingPrepareList.Count > 0)
+                    {
+                        pendingPrepareTracker = stReadyToPrepare;
                     }
+                    else if (!anyStationNotReady)
+                    {
+                        stReadyToPrepare.SetSubstrateJobState(SubstrateJobState.Running, "Starting prepared substrate normally (next process location is available, or is almost available)");
+                        deltaCount++;
+                    }
+                    // else keep waiting - this path is generally triggered because the required prepare for the current substrate is blocked by other substrates that are still out in the tool.
                 }
             }
 
-            // clear and update the list of moveable substrates (those that have an assigned SJRS, are not at their destination, do not have an CurrentStationProcessICF and would like to be at a different next location than they are currently at).
-            movableSubstTrackerList.Clear();
-
-            if (srmAction == null && isPartiallyOnline)
+            if (srmAction == null && filteredSubstTrackerList.Count > 0 && substrateStateTally.sjsHeld == 0 && substrateStateTally.sjsWaitingForPrepare == 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
             {
-                UpdateObservers();
+                var stReadyToStart = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.readyToStart && (st.evalInfo.flags.haveAvailableMoveTarget || st.evalInfo.flags.haveAvailableSwapTarget || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
+                var anyStartedAtSource = (stReadyToStart != null) && filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
 
-                var moveableSet = substTrackerList
-                                .Where(tracker => (tracker.Info.SJRS != SubstrateJobRequestState.None) && (tracker.Info.STS != SubstState.AtDestination))
-                                .Where(tracker =>
-                                {
-                                    var nextLocNameList = tracker.NextLocNameList;
-                                    return (!nextLocNameList.IsNullOrEmpty() && !nextLocNameList.Contains(tracker.Info.LocID));
-                                });
-
-                movableSubstTrackerList.AddRange(moveableSet);
-            }
-
-            if (srmAction == null && isPartiallyOnline)
-            {
-                int numEmptyArms = r1ArmALocObserver.IsUnoccupied.MapToInt() + r1ArmBLocObserver.IsUnoccupied.MapToInt();
-
-                foreach (var st in movableSubstTrackerList.Array)
+                if (stReadyToStart != null && !anyStartedAtSource)
                 {
-                    if (!normalMoveFromLocSet.Contains(st.Info.LocID))
-                        continue;   // we cannot move this substrate from its current location in this condition trigger block.
+                    qpcTimeStamp = QpcTimeStamp.Now;
 
-                    var stInfo = st.Info;
-                    var currentLocName = stInfo.LocID;
-                    var stIsAlreadyOnArm = (currentLocName == ECSPart.SRM.R1ArmALocID.Name || currentLocName == ECSPart.SRM.R1ArmALocID.Name);
+                    // If any step has a part that is not ready for the corresponding process then ask it to prepare. NOTE: this does not handle cases where multiple steps re-use the same process modules more than once or with different process step specs (that are not compatible)
+                    var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, stReadyToStart);
 
-                    var nextLocList = (st != null) ? st.NextLocNameList : new ReadOnlyIList<string>(stInfo.LinkToSrc.ToID.Name);
+                    var anyStationNotReady = stationStepTupleSet.Any(stepTuple => stepTuple.Item2.Any(locTuple => locTuple.Item4));
 
-                    List<SubstrateRoutingItemBase> srmItemList = new List<SubstrateRoutingItemBase>();
-
-                    var nextMoveToLocName = FindFirstUnoccupiedLoc(nextLocList);
-                    var nextMoveToStation = ECSPart.GetStationEnum(nextMoveToLocName);
-
-                    var nextStationArray = nextLocList.Select(locName => ECSPart.GetStationEnum(locName)).ToArray();
-
-                    if ((nextMoveToStation == TestStationEnum.None) && nextStationArray.Contains(TestStationEnum.PM4))
+                    if (!useWaitingForPrepare)
                     {
-                        nextMoveToLocName = ECSPart.PM4.InputLocID.Name;
-                        nextMoveToStation = TestStationEnum.PM4;
-                    }
-
-                    switch (nextMoveToStation)
-                    {
-                        case TestStationEnum.AL1:
-                            if ((numEmptyArms > 0 || stIsAlreadyOnArm))
-                                srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
-                            break;
-
-                        case TestStationEnum.PM1:
-                        case TestStationEnum.PM2:
-                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
-                                srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
-                            break;
-
-                        case TestStationEnum.PM3Input:
-                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
+                        if (anyStationNotReady && substrateStateTally.stsAtWork == 0)
+                        {
+                            foreach (var stepTuple in stationStepTupleSet)
                             {
-                                srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
-                                srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
-                                srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
-                                if (st.CurrentStationProcessICF != null)
-                                    trackersInProcessList.Add(st);
-                            }
-                            break;
-
-                        case TestStationEnum.PM4:
-                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
-                            {
-                                // block moving a substrate onto the arms or swapping it with the pm4 transfer location if that location already has a substrate and we have already asked that substrate to be processed there.
-                                var pm4TransferLocST = pm4TransferLocObserver.Tracker;
-                                bool pm4TransferLocIsInProcess = (pm4TransferLocST != null) && (pm4TransferLocST.CurrentStationProcessICF != null);
-
-                                if (!stIsAlreadyOnArm && numEmptyArms >= 2 && !pm4TransferLocIsInProcess)
+                                var stepSpec = stepTuple.Item1;
+                                foreach (var locTuple in stepTuple.Item2.Where(locTuple => locTuple.Item4))
                                 {
-                                    // move the substrate to either robot arm
-                                    srmItemList.Add(new MoveSubstrateItem(st.SubstID, ECSPart.SRM.R1EitherArmName));
-                                }
-                                else if ((numEmptyArms >= 2 || (numEmptyArms >= 1 && stIsAlreadyOnArm)) && !pm4TransferLocIsInProcess)
-                                {
-                                    srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
-                                    srmItemList.Add(new MoveOrSwapSubstrateItem(st.SubstID, nextMoveToLocName));
-                                    srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
-                                    if (st.CurrentStationProcessICF != null)
-                                        trackersInProcessList.Add(st);
+                                    if (!locTuple.Item3.SummaryState.IsSet(QuerySummaryState.CanPrepare))
+                                    {
+                                        pendingPrepareTracker = stReadyToStart;
+
+                                        PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
+
+                                        deltaCount++;
+                                        return deltaCount;
+                                    }
+
+                                    pendingPrepareList.Add(locTuple.Item2.PrepareForStep(stReadyToStart.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
                                 }
                             }
-                            break;
+                        }
 
-                        default:
-                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && !nextMoveToLocName.IsNullOrEmpty())
-                                srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
-                            break;
+                        if (pendingPrepareList.Count > 0)
+                        {
+                            pendingPrepareTracker = stReadyToStart;
+                        }
+                        else if (!anyStationNotReady)
+                        {
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available, or is almost available)");
+                            deltaCount++;
+                        }
+                        // else keep waiting - this path is generally triggered because the required prepare for the current substrate is blocked by other substrates that are still out in the tool.
                     }
-
-                    if (srmItemList.Count > 0)
+                    else
                     {
-                        srmAction = ECSPart.SRM.Sequence(srmItemList.ToArray()).StartInline();
+                        if (!anyStationNotReady)
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.Running, "Starting substrate normally (next process location is available, or is almost available)");
+                        else
+                            stReadyToStart.SetSubstrateJobState(SubstrateJobState.WaitingForPrepare, "Starting substrate which needs to be prepared (next process location is available, or is almost available)");
 
                         deltaCount++;
-
-                        break;
                     }
                 }
             }
 
-            if (srmAction == null && isFullyOnline)
-            {
-                int numEmptyArms = r1ArmALocObserver.IsUnoccupied.MapToInt() + r1ArmBLocObserver.IsUnoccupied.MapToInt();
-
-                // Go through each of the substrates that are running at source to see if their first next location is available and either robot arm is empty.
-                // If any are found then move the first one to either available robot arm.
-                foreach (var availableToLaunch in movableSubstTrackerList.Array.Where(st => st.Info.STS.IsAtSource() && st.Info.SJS == SubstrateJobState.Running))
-                {
-                    var firstUnoccupiedLocNameInNextLocList = FindFirstUnoccupiedLoc(availableToLaunch.NextLocNameList);
-
-                    if (!firstUnoccupiedLocNameInNextLocList.IsNullOrEmpty() && numEmptyArms > 0)
-                    {
-                        srmAction = ECSPart.SRM.Sequence(new MoveSubstrateItem(availableToLaunch.SubstID, ECSPart.SRM.R1EitherArmName)).StartInline();
-                        deltaCount++;
-                        break;
-                    }
-                }
-            }
+            UpdateRequestAndStatusOutFromTool(ref requestAndStatusOutFromTool);
 
             return deltaCount;
         }
 
-        private int UpdateObservers()
+        private int ServiceRouteSequenceFailedAnnunciator(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool)
         {
-            int substDeltaCount = substTrackerList.Array.Sum(item => item.UpdateIfNeeded().MapToInt());
+            var anState = RouteSequenceFailedAnnunciator.ANState;
+
+            noteStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
+
+            string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
+
+            {
+                string currentContinueActionDisableReason = anState.ActionList["Continue"].GetActionDisableReason();
+
+                if (currentContinueActionDisableReason != autoActionDisableReason && !RouteSequenceFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                {
+                    PostRouteSequenceFailedError(stateToTool, "Continue action disable reason changed");
+
+                    UpdateRequestAndStatusOutFromTool(ref requestAndStatusOutFromTool);
+
+                    return 1;
+                }
+            }
+
+            string selectedActionName = anState.SelectedActionName.MapNullToEmpty();
+
+            switch (selectedActionName)
+            {
+                case "":
+                    requestAndStatusOutFromTool.ToolStatusFlags |= SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected;
+
+                    return 0;       // keep waiting.
+
+                case "Continue":
+                    {
+                        if (autoActionDisableReason.IsNeitherNullNorEmpty())
+                        {
+                            string reason = "{0} action selected while disabled".CheckedFormat(selectedActionName);
+
+                            Logger.Warning.Emit("{0}: {1} [{2}]", RouteSequenceFailedAnnunciator.ANSpec, reason, autoActionDisableReason);
+
+                            RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+                            RouteSequenceFailedAnnunciator.NoteActionFailed(reason);
+                            PostRouteSequenceFailedError(stateToTool, reason);
+                        }
+
+                        {
+                            string reason = "{0} action selected".CheckedFormat(selectedActionName);
+                            RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+
+                            var icf = ECSParts.SRM.RetractArmsAndReleaseAll();
+                            string ec = icf.Run();
+
+                            if (ec.IsNullOrEmpty())
+                            {
+                                RouteSequenceFailedAnnunciator.NoteActionCompleted(reason);
+                                RouteSequenceFailedAnnunciator.Clear("{0} action selected".CheckedFormat(selectedActionName));
+                            }
+                            else
+                            {
+                                RouteSequenceFailedAnnunciator.NoteActionFailed(icf.ToString(ToStringSelect.MesgAndDetail));
+                                PostRouteSequenceFailedError(stateToTool, "{0} failed: {1}".CheckedFormat(selectedActionName, icf.ToString(ToStringSelect.MesgAndDetail)));
+                            }
+                        }
+
+                        break;
+                    }
+
+                case "Return":
+                    {
+                        string reason = "{0} action selected".CheckedFormat(selectedActionName);
+
+                        RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+
+                        foreach (var st in substTrackerList.Array)
+                        {
+                            if (st.Info.STS == SubstState.AtWork)
+                                st.SubstrateJobRequestState = SubstrateJobRequestState.Return;
+                            else if (st.Info.STS == SubstState.AtSource)
+                                st.SubstrateJobRequestState = SubstrateJobRequestState.None;
+                        }
+
+                        RouteSequenceFailedAnnunciator.NoteActionCompleted(reason);
+                        RouteSequenceFailedAnnunciator.Clear(reason);
+
+                        requestAndStatusOutFromTool.RequestNVSFromTool = new NamedValueSet() { "SetRecovery", { "Reason", reason } };
+
+                        break;
+                    }
+
+                case "Hold":
+                    {
+                        string reason = "{0} action selected".CheckedFormat(selectedActionName);
+
+                        RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+
+                        foreach (var st in substTrackerList.Array)
+                        {
+                            if (st.Info.STS != SubstState.AtDestination)
+                                st.SubstrateJobRequestState = SubstrateJobRequestState.None;
+                        }
+
+                        RouteSequenceFailedAnnunciator.NoteActionCompleted(reason);
+                        RouteSequenceFailedAnnunciator.Clear(reason);
+
+                        requestAndStatusOutFromTool.RequestNVSFromTool = new NamedValueSet() { "SetService", { "Reason", reason } };
+
+                        break;
+                    }
+
+                default:
+                    {
+                        string reason = "{0} action was not recognized".CheckedFormat(selectedActionName);
+
+                        RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+                        RouteSequenceFailedAnnunciator.NoteActionFailed(reason);
+
+                        PostRouteSequenceFailedError(stateToTool, reason);
+
+                        break;
+                    }
+            }
+
+            UpdateRequestAndStatusOutFromTool(ref requestAndStatusOutFromTool);
+
+            return 1;
+        }
+
+        private void ServicePrepareFailedAnnunciator(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool, ref int deltaCount, ref QpcTimeStamp qpcTimeStamp)
+        {
+            var anState = PrepareFailedAnnunciator.ANState;
+
+            string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
+
+            {
+                string currentRetryActionDisableReason = anState.ActionList["Retry"].GetActionDisableReason();
+
+                if (currentRetryActionDisableReason != autoActionDisableReason && !PrepareFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                {
+                    PostPrepareFailedError(stateToTool, "Retry action disable reason changed");
+
+                    deltaCount++;
+                }
+            }
+
+            string selectedActionName = anState.SelectedActionName.MapNullToEmpty();
+
+            switch (selectedActionName)
+            {
+                case "":
+                    requestAndStatusOutFromTool.ToolStatusFlags |= SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected;
+                    break;
+
+                case "Retry":
+                    {
+                        if (autoActionDisableReason.IsNeitherNullNorEmpty())
+                        {
+                            string reason = "{0} action selected while disabled".CheckedFormat(selectedActionName);
+
+                            Logger.Warning.Emit("{0}: {1} [{2}]", PrepareFailedAnnunciator.ANSpec, reason, autoActionDisableReason);
+
+                            PrepareFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+                            PrepareFailedAnnunciator.NoteActionFailed(reason);
+                            PostPrepareFailedError(stateToTool, reason);
+                        }
+
+                        {
+                            string reason = "{0} action selected".CheckedFormat(selectedActionName);
+                            PrepareFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+
+                            if (pendingPrepareTracker != null)
+                            {
+                                // If any step has a part that is not ready for the corresponding process then ask it to prepare. NOTE: this does not handle cases where multiple steps re-use the same process modules more than once or with different process step specs (that are not compatible)
+                                var stationStepTupleSet = GeneratePrepareRelatedStationStepTupleSet(qpcTimeStamp, pendingPrepareTracker);
+
+                                foreach (var stepTuple in stationStepTupleSet)
+                                {
+                                    var stepSpec = stepTuple.Item1;
+                                    foreach (var locTuple in stepTuple.Item2.Where(locTuple => locTuple.Item4))
+                                    {
+                                        if (!locTuple.Item3.SummaryState.IsSet(QuerySummaryState.CanPrepare))
+                                        {
+                                            PostPrepareFailedError(stateToTool, "For Substrate {0}: Location '{1}' cannot prepare for step: {2}".CheckedFormat(pendingPrepareTracker.SubstID.Name, locTuple.Item1, stepSpec));
+
+                                            deltaCount++;
+                                            break;
+                                        }
+
+                                        pendingPrepareList.Add(locTuple.Item2.PrepareForStep(pendingPrepareTracker.ProcessSpec, stepSpec).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline());
+                                    }
+                                }
+
+                                if (pendingPrepareList.Count == 0)
+                                {
+                                    reason = "Prepare does is no longer required";
+                                    PrepareFailedAnnunciator.NoteActionCompleted(reason);
+                                    PrepareFailedAnnunciator.Clear(reason);
+                                }
+                            }
+                            else
+                            {
+                                Logger.Warning.Emit("Unable to process {0} {1}: there is no corresponding substrate to apply this request to", PrepareFailedAnnunciator.ANSpec.ANName, selectedActionName);
+                                PrepareFailedAnnunciator.NoteActionFailed("{0} [no applicable substrate found]".CheckedFormat(reason));
+
+                                PrepareFailedAnnunciator.Clear(reason);
+                            }
+                        }
+
+                        break;
+                    }
+
+                case "AbortJob":
+                case "StopJob":
+                case "PauseJob":
+                case "AbortJobs":
+                case "StopJobs":
+                case "PauseJobs":
+                    {
+                        string reason = "{0} action selected".CheckedFormat(selectedActionName);
+
+                        SubstrateJobRequestState targetSJRS = SubstrateJobRequestState.Abort;
+
+                        bool allJobs;
+
+                        switch (selectedActionName)
+                        {
+                            case "AbortJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Abort; break;
+                            case "StopJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Stop; break;
+                            case "PauseJob": allJobs = false; targetSJRS = SubstrateJobRequestState.Pause; break;
+                            default:
+                            case "AbortJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Abort; break;
+                            case "StopJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Stop; break;
+                            case "PauseJobs": allJobs = true; targetSJRS = SubstrateJobRequestState.Pause; break;
+                        }
+
+                        PrepareFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+
+                        if (pendingPrepareTracker != null)
+                        {
+                            ECSParts.E039TableUpdater.Update(new E039UpdateItem.SetAttributes(pendingPrepareTracker.SubstID, new NamedValueSet() { selectedActionName })).Run();
+
+                            pendingPrepareTracker.SubstrateJobRequestState = targetSJRS;
+                            string applyToSubstratesFromJobID = (pendingPrepareTracker.JobTrackerLinkage != null) ? pendingPrepareTracker.JobTrackerLinkage.ID : null;
+
+                            if (applyToSubstratesFromJobID.IsNeitherNullNorEmpty())
+                            {
+                                foreach (var st in substTrackerList)
+                                {
+                                    if (st.Info.STS == SubstState.AtDestination)
+                                        continue;
+
+                                    if (st.Info.SPS.IsProcessingComplete())
+                                        continue;
+
+                                    if (st.SubstrateJobRequestState == SubstrateJobRequestState.Abort || st.Info.SJS == SubstrateJobState.Aborting || st.Info.SJS == SubstrateJobState.Aborted)
+                                        continue;
+
+                                    if ((targetSJRS == SubstrateJobRequestState.Stop || targetSJRS == SubstrateJobRequestState.Pause) && (st.SubstrateJobRequestState == SubstrateJobRequestState.Stop || st.Info.SJS == SubstrateJobState.Stopping || st.Info.SJS == SubstrateJobState.Stopped))
+                                        continue;
+
+                                    if (targetSJRS == SubstrateJobRequestState.Pause && (st.SubstrateJobRequestState == SubstrateJobRequestState.Pause || st.Info.SJS == SubstrateJobState.Pausing || st.Info.SJS == SubstrateJobState.Paused))
+                                        continue;
+
+                                    var stJobID = (st.JobTrackerLinkage != null) ? st.JobTrackerLinkage.ID : null;
+                                    if (allJobs || (stJobID.IsNeitherNullNorEmpty() && stJobID == applyToSubstratesFromJobID))
+                                        st.SubstrateJobRequestState = targetSJRS;
+                                }
+                            }
+
+                            PrepareFailedAnnunciator.NoteActionCompleted(reason);
+                        }
+                        else
+                        {
+                            Logger.Warning.Emit("Unable to process {0} {1}: there is no corresponding substrate to apply this request to", PrepareFailedAnnunciator.ANSpec.ANName, selectedActionName);
+                            PrepareFailedAnnunciator.NoteActionFailed("{0} [no applicable substrate found]".CheckedFormat(reason));
+                        }
+
+                        PrepareFailedAnnunciator.Clear(reason);
+
+                        break;
+                    }
+
+                default:
+                    {
+                        string reason = "{0} action was not recognized".CheckedFormat(selectedActionName);
+
+                        PrepareFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
+                        PrepareFailedAnnunciator.NoteActionFailed(reason);
+
+                        PostPrepareFailedError(stateToTool, reason);
+
+                        break;
+                    }
+            }
+        }
+
+        private Tuple<ProcessStepSpecBase, Tuple<string, IPrepare<IProcessSpec, IProcessStepSpec>, PreparednessQueryResult<IProcessSpec, IProcessStepSpec>, bool>[]>[] GeneratePrepareRelatedStationStepTupleSet(QpcTimeStamp qpcTimeStamp, TestSubstrateAndProcessTracker stWaitingForStart)
+        {
+            var stationStepTupleSet = stWaitingForStart.ProcessSpec.Steps.Select(stepSpec => Tuple.Create(stepSpec, stepSpec.UsableLocNameList.Select(locName => Tuple.Create(locName, locNameToPrepareDictionary.SafeTryGetValue(locName)))
+                                                                                                                                              .Where(t => t.Item2 != null)
+                                                                                                                                              .Select(t => Tuple.Create(t.Item1, t.Item2, t.Item2.StatePublisher.Object.Query(stWaitingForStart.ProcessSpec, stepSpec, qpcTimeStamp)))
+                                                                                                                                              .Select(t => Tuple.Create(t.Item1, t.Item2, t.Item3, t.Item3.SummaryState.IsClear(QuerySummaryState.Ready)))
+                                                                                                                                              .ToArray())).ToArray();
+            return stationStepTupleSet;
+        }
+
+        private string GetAutoActionDisableReason(ISubstrateSchedulerPartState stateToTool)
+        {
+            string autoActionDisableReason = (!stateToTool.BehaviorEnableFlags.IsSet(BehaviorEnableFlags.Automatic) ? "Scheduling behavior is not currently set to Automatic [{0}]".CheckedFormat(stateToTool.BehaviorEnableFlags) : null)
+                                        ?? "";
+            return autoActionDisableReason;
+        }
+
+        private List<IClientFacet> pendingPrepareList = new List<IClientFacet>();
+        private TestSubstrateAndProcessTracker pendingPrepareTracker;
+
+        private HashSet<string> hashSetOfSubstrateTrackerOnRobotNextLocNames = new HashSet<string>();
+
+        private void UpdateHashSetOfLocationsRobotArmWafersCanGoToNext()
+        {
+            if (hashSetOfSubstrateTrackerOnRobotNextLocNames.Count > 0)
+                hashSetOfSubstrateTrackerOnRobotNextLocNames.Clear();
+
+            if (r1LocObserverArray.Any(slo => slo.IsOccupiedAndAccessible))
+                hashSetOfSubstrateTrackerOnRobotNextLocNames.SafeAddRange(r1LocObserverArray.Select(slo => slo.Tracker).WhereIsNotDefault().SelectMany(st => st.evalInfo.nextLocNameList));
+        }
+
+        private bool AttemptToMoveOrSwapSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stOnArm, TestSubstrateAndProcessTracker.StationEvaluationItem swapAtStationEvalItem, int numEmptyUsableArms, string comment = "")
+        {
+            switch (swapAtStationEvalItem.station)
+            {
+                case TestStationEnum.AL1:
+                case TestStationEnum.PM1:
+                case TestStationEnum.PM2:
+                case TestStationEnum.PMAbort:
+                case TestStationEnum.PMReject:
+                case TestStationEnum.PMReturn:
+                    {
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stOnArm.SubstID, swapAtStationEvalItem.locInfo.ObjID.Name, waitUntilDone: false) { Comment = comment });
+                        srmActionItemBuilderList.Add(new MoveOrSwapSubstrateItem(stOnArm.SubstID, swapAtStationEvalItem.locInfo.ObjID.Name));
+
+                        srmActionItemBuilderSubstTrackerList.AddRange(new[] { stOnArm, swapAtStationEvalItem.stAtLoc }.WhereIsNotDefault());
+
+                        return true;
+                    }
+
+                case TestStationEnum.PM3Input:
+                case TestStationEnum.PM4:
+                    // for both of these cases the other method already does a move or swap and generates and starts the corresponding process.
+                    return AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyUsableArms, comment);
+
+                default:
+                    {
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stOnArm.SubstID, swapAtStationEvalItem.locInfo.ObjID.Name, waitUntilDone: false) { Comment = comment });
+                        srmActionItemBuilderList.Add(new MoveOrSwapSubstrateItem(stOnArm.SubstID, swapAtStationEvalItem.locInfo.ObjID.Name));
+
+                        srmActionItemBuilderSubstTrackerList.AddRange(new[] { stOnArm, swapAtStationEvalItem.stAtLoc }.WhereIsNotDefault());
+
+                        return true;
+                    }
+            }
+        }
+
+        private bool AttemptToMoveSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stToMove, TestSubstrateAndProcessTracker.StationEvaluationItem toStationEvalItem, int numEmptyUsableArms, string comment = "")
+        {
+            string moveToLocName = toStationEvalItem.locInfo.ObjID.Name;
+
+            switch (toStationEvalItem.station)
+            {
+                case TestStationEnum.AL1:
+                case TestStationEnum.PM1:
+                case TestStationEnum.PM2:
+                case TestStationEnum.PMAbort:
+                case TestStationEnum.PMReject:
+                case TestStationEnum.PMReturn:
+                    {
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToMove.SubstID, moveToLocName, waitUntilDone: false) { Comment = comment });
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToMove.SubstID, moveToLocName));
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToMove);
+
+                        return true;
+                    }
+
+                case TestStationEnum.PM3Input:
+                    if (isProcessStepExecutionEnabled && numEmptyUsableArms > 0)
+                    {
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToMove.SubstID, moveToLocName, waitUntilDone: false) { Comment = comment });
+                        srmActionItemBuilderList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.AcquireAndAutoReleaseAtEndOfSequence, moveToLocName));
+                        srmActionItemBuilderList.Add(new MoveOrSwapSubstrateItem(stToMove.SubstID, moveToLocName));
+                        srmActionItemBuilderList.Add(new RunActionItem(icfFactoryDelegate: stToMove.GeneratePendingRunProcessActionAndCorrespondingDelegate(moveToLocName, HostingPartNotifier, autoReleaseKey: moveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
+                        if (stToMove.CurrentStationProcessICF != null)
+                            trackersInProcessList.Add(stToMove);
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToMove); // it is not easy to know which substrate might get pulled from the PM in this case however it will only end up on the arm which is not a suitable next processing location so there is no potential process start race condition created here
+
+                        return true;
+                    }
+                    break;
+
+                case TestStationEnum.PM4:
+                    if (isProcessStepExecutionEnabled && numEmptyUsableArms > 0)
+                    {
+                        // block moving a substrate onto the arms or swapping it with the pm4 transfer location if that location already has a substrate and we have already asked that substrate to be processed there.
+                        var pm4TransferLocST = pm4TransferLocObserver.Tracker;
+                        bool pm4TransferLocIsInProcess = (pm4TransferLocST != null) && (pm4TransferLocST.CurrentStationProcessICF != null);
+
+                        if (!pm4TransferLocIsInProcess)
+                        {
+                            srmActionItemBuilderList.Add(new ApproachLocationItem(stToMove.SubstID, moveToLocName, waitUntilDone: false) { Comment = comment });
+                            srmActionItemBuilderList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.AcquireAndAutoReleaseAtEndOfSequence, moveToLocName));
+                            srmActionItemBuilderList.Add(new MoveOrSwapSubstrateItem(stToMove.SubstID, moveToLocName));
+                            srmActionItemBuilderList.Add(new RunActionItem(icfFactoryDelegate: stToMove.GeneratePendingRunProcessActionAndCorrespondingDelegate(moveToLocName, HostingPartNotifier, autoReleaseKey: moveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
+                            if (stToMove.CurrentStationProcessICF != null)
+                                trackersInProcessList.Add(stToMove);
+
+                            srmActionItemBuilderSubstTrackerList.Add(stToMove); // it is not easy to know which substrate might get pulled from the PM in this case however it will only end up on the arm which is not a suitable next processing location so there is no potential process start race condition created here
+
+                            return true;
+                        }
+                    }
+                    break;
+
+                default:
+                    {
+                        // this case covers load ports
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToMove.SubstID, moveToLocName, waitUntilDone: false) { Comment = comment });
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToMove.SubstID, moveToLocName));
+
+                        srmActionItemBuilderSubstTrackerList.Add(stToMove);
+
+                        return true;
+                    }
+            }
+
+            return false;
+        }
+
+        private void PostRouteSequenceFailedError(ISubstrateSchedulerPartState stateToTool, string reason)
+        {
+            if (RouteSequenceFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                RouteSequenceFailedAnnunciator.NoteActionAborted("Aborting current action: Post called while action active [{0}]".CheckedFormat(reason));
+
+            string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
+
+            RouteSequenceFailedAnnunciator.Post(new NamedValueSet() { { "Continue", autoActionDisableReason }, {"Return", "" }, { "Hold", "" } }, reason);
+        }
+
+        private void PostPrepareFailedError(ISubstrateSchedulerPartState stateToTool, string reason)
+        {
+            if (PrepareFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                PrepareFailedAnnunciator.NoteActionAborted("Aborting current action: Post called while action active [{0}]".CheckedFormat(reason));
+
+            string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
+
+            PrepareFailedAnnunciator.Post(new NamedValueSet()
+            {
+                { "Retry", autoActionDisableReason },
+                { "AbortJob", "" },
+                { "StopJob", "" },
+                { "PauseJob", "" },
+                { "AbortJobs", "" },
+                { "StopJobs", "" },
+                { "PauseJobs", "" },
+            }, reason);
+        }
+
+        private void UpdateRequestAndStatusOutFromTool(ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool)
+        {
+            if (RouteSequenceFailedAnnunciator.ANState.IsSignaling)
+                requestAndStatusOutFromTool.ToolFaultReason = "RouteSequenceFailed Error is signaling";
+            else if (PrepareFailedAnnunciator.ANState.IsSignaling)
+                requestAndStatusOutFromTool.ToolFaultReason = "PrepareFailed Error is signaling";
+
+            if (RouteSequenceFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndWaiting || PrepareFailedAnnunciator.ANState.ANSignalState == ANSignalState.OnAndWaiting)
+                requestAndStatusOutFromTool.ToolStatusFlags |= SubstrateSchedulerPartStatusFlags.WaitingForActionToBeSelected;
+        }
+
+        private int ServiceTrackersAndUpdateObservers(ISubstrateSchedulerPartState stateToTool, QpcTimeStamp qpcTimeStamp)
+        {
+            bool alreadyFoundFirstWaitingForStartSubstrate = false;
+            int substDeltaCount = 0;
+
+            substrateStateTally.Clear();
+
+            foreach (var st in substTrackerList.Array)
+            {
+                substDeltaCount += st.Service(stateToTool: stateToTool, qpcTimeStamp: qpcTimeStamp, alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, sjsStateChangeTriggerFlags: ToolConfig.ServiceBasicSJSStateChangeTriggerFlags);
+
+                if (st.Info.SJS == SubstrateJobState.WaitingForStart)
+                    alreadyFoundFirstWaitingForStartSubstrate = true;
+
+                substrateStateTally.Add(st);
+            }
+
             int locDeltaCount = allLocObserverDictionary.ValueArray.Sum(item => item.Update().MapToInt());
             
-            return locDeltaCount;
+            return locDeltaCount + substDeltaCount;
         }
 
         string FindFirstUnoccupiedLoc(ReadOnlyIList<string> locList)
@@ -1009,7 +2502,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 } 
                 else
                 {
-                    E090SubstLocInfo substLocInfo = new E090SubstLocInfo(ECSPart.E039TableObserver.GetObject(new E039ObjectID(locName, E090.Constants.SubstrateLocationObjectType)));
+                    E090SubstLocInfo substLocInfo = new E090SubstLocInfo(ECSParts.E039TableObserver.GetObject(new E039ObjectID(locName, E090.Constants.SubstrateLocationObjectType)));
                     if (substLocInfo.IsUnoccupied)
                         return locName;
                 }
@@ -1036,11 +2529,14 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             ECSParts = other.ECSParts;
             NumLPSlots = other.NumLPSlots;
             NumLPWafers = other.NumLPWafers;
+            DisableR1ArmB = other.DisableR1ArmB;
         }
 
         public TestECSParts ECSParts { get; set; }
         public int NumLPSlots { get; set; }
         public int NumLPWafers { get; set; }
+
+        public bool DisableR1ArmB { get; set; }
 
         /// <summary>Makes and returns a clone/copy of this object</summary>
         public TestSRMConfig MakeCopyOfThis(bool deepCopy = true)
@@ -1088,8 +2584,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             robotArmALocObserver = observerSet[0];
             robotArmBLocObserver = observerSet[1];
+            robotArmLocObserverArray = new[] { robotArmALocObserver, robotArmBLocObserver };
 
             SetAllSubstLocObservers(observerSet.Concat(lpSlotLocObserverArray));
+
+            AddMainThreadStoppingAction(() => { Log.Info.Emit("Final {0}", Counters); });
+
+            if (config.DisableR1ArmB)
+            {
+                E039TableUpdater.SetSubstLocStates(robotArmBLocObserver, notAccessibleReasonParam: "This arm is disabled");
+            }
         }
 
         public E039ObjectID[] LPSlotLocIDArray { get; private set; }
@@ -1098,9 +2602,72 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         public E039ObjectID R1ArmBLocID { get; private set; }
         public E039ObjectID AL1LocID { get; private set; }
 
-
         private E090SubstLocObserver[] lpSlotLocObserverArray;
         private E090SubstLocObserver robotArmALocObserver, robotArmBLocObserver;
+        private E090SubstLocObserver [] robotArmLocObserverArray;
+
+        public struct CounterValues
+        {
+            public int approachCount;
+            public int moveCount;
+            public int swapCount;
+
+            public override string ToString()
+            {
+                return "Counter Values approach:{0} move:{1} swap:{2}".CheckedFormat(approachCount, moveCount, swapCount);
+            }
+        }
+
+        private CounterValues _counters;
+        public CounterValues Counters { get { return _counters; } }
+
+        #region injectable location specific holds 
+
+        public readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdAtGetFromSubstLocNameDict = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>();
+        public readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdAtPutToSubstLocNameDict = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>();
+
+        public bool IsWaiting { get; private set; }
+
+        private void WaitBeforeGetIfNeeded(string getFromSubstLocName)
+        {
+            WaitIfNeeded(getFromSubstLocName, holdAtGetFromSubstLocNameDict, "get from");
+        }
+
+        private void WaitBeforePutIfNeeded(string putToSubstLocName)
+        {
+            WaitIfNeeded(putToSubstLocName, holdAtPutToSubstLocNameDict, "put to");
+        }
+
+        private void WaitIfNeeded(string substLocName, System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdSubstLocNameDict, string opDescription)
+        {
+            if (holdSubstLocNameDict.IsEmpty || !holdSubstLocNameDict.ContainsKey(substLocName) || !holdSubstLocNameDict[substLocName])
+                return;
+
+            IsWaiting = true;
+            NotifyBaseStateNotifier();
+
+            Log.Debug.Emit("Waiting before {0} {1} [hold set: {2}]", opDescription, substLocName, string.Join(",", holdSubstLocNameDict.ToArray().Where(kvp => kvp.Value).Select(kvp => kvp.Key)));
+
+            while (!HasStopBeenRequested)
+            {
+                (0.01).FromSeconds().Sleep();
+
+                if (!holdSubstLocNameDict[substLocName])
+                    break;
+            }
+
+            Log.Debug.Emit("Done waiting before {0} {1} [hold set: {2}]", opDescription, substLocName, string.Join(",", holdSubstLocNameDict.ToArray().Where(kvp => kvp.Value).Select(kvp => kvp.Key)));
+
+            IsWaiting = false;
+            NotifyBaseStateNotifier();
+        }
+
+        #endregion
+
+        protected override string PerformRetractArms(IProviderFacet ipf)
+        {
+            return "";
+        }
 
         protected override string InnerPerformMoveSubstrate(IProviderFacet ipf, E090SubstObserver substObs, E090SubstLocObserver fromLocObs, E090SubstLocObserver toLocObs, string desc)
         {
@@ -1109,9 +2676,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (toLocName == R1EitherArmName)
             {
-                if (robotArmALocObserver.Info.IsUnoccupied)
+                if (robotArmALocObserver.IsUnoccupied && robotArmALocObserver.IsAccessible)
                     toLocName = robotArmALocObserver.ID.Name;
-                else if (robotArmBLocObserver.Info.IsUnoccupied)
+                else if (robotArmBLocObserver.IsUnoccupied && robotArmBLocObserver.IsAccessible)
                     toLocName = robotArmBLocObserver.ID.Name;
                 else
                     return "{0} failed: neither robot arm is available".CheckedFormat(desc);
@@ -1123,9 +2690,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 useArmObserver = robotArmALocObserver;
             else if (fromLocName == R1ArmBLocID.Name)
                 useArmObserver = robotArmBLocObserver;
-            else if (robotArmALocObserver.Info.IsUnoccupied)
+            else if (robotArmALocObserver.IsUnoccupied && robotArmALocObserver.IsAccessible)
                 useArmObserver = robotArmALocObserver;
-            else if (robotArmBLocObserver.Info.IsUnoccupied)
+            else if (robotArmBLocObserver.IsUnoccupied && robotArmBLocObserver.IsAccessible)
                 useArmObserver = robotArmBLocObserver;
             else
                 return "{0} failed: neither robot arm is available".CheckedFormat(desc);
@@ -1136,10 +2703,41 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 ec = AcquireLocationTransferPermissionForThisItemIfNeeded(ipf, fromLocObs.ID.Name, toLocObs.ID.Name);
 
             if (useArmObserver.ID.Name != fromLocName && ec.IsNullOrEmpty())
-                ec = E039TableUpdater.NoteSubstMoved(substObs, useArmObserver.ID);
+            {
+                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
+
+                if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == substObs.Info.LocID)
+                {
+                    ec = "Get {0} from {1} failed by request during move".CheckedFormat(substObs.ID.FullName, failNextGetFromLocName);
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextGetFromLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
+                    substObs.Update();
+                }
+
+                WaitBeforeGetIfNeeded(substObs.Info.LocID);
+
+                if (ec.IsNullOrEmpty())
+                    ec = E039TableUpdater.NoteSubstMoved(substObs, useArmObserver.ID);
+            }
 
             if (ec.IsNullOrEmpty() && !useArmObserver.ID.Equals(toLocObs.ID))
-                ec = E039TableUpdater.NoteSubstMoved(substObs, toLocObs.ID);
+            {
+                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValueA(rethrow: false);
+
+                if (ec.IsNullOrEmpty() && failNextPutToLocName.IsNeitherNullNorEmpty() && failNextPutToLocName == toLocObs.ID.Name)
+                {
+                    ec = "Put {0} to {1} failed by request during move".CheckedFormat(substObs.ID.FullName, failNextPutToLocName);
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextPutToLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
+                    substObs.Update();
+                }
+
+                WaitBeforePutIfNeeded(toLocObs.ID.Name);
+
+                if (ec.IsNullOrEmpty())
+                    ec = E039TableUpdater.NoteSubstMoved(substObs, toLocObs.ID);
+            }
+
+            if (ec.IsNullOrEmpty())
+                _counters.moveCount++;
 
             return ec;
         }
@@ -1151,7 +2749,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             E090SubstLocObserver fromArmObserver = null, toArmObserver = null;
 
-            if (substCurrentLocName == R1ArmALocID.Name && robotArmBLocObserver.Info.IsUnoccupied)
+            if (!robotArmALocObserver.IsAccessible || !robotArmBLocObserver.IsAccessible)
+            {
+                var unusableArmListStr = string.Join(", ", robotArmLocObserverArray.Where(obs => !obs.IsAccessible).Select(obs => "{0} is not accessible: {1}".CheckedFormat(obs.ID.Name, obs.Info.NotAccessibleReason)));
+                return "{0} failed: both robot arms must be accessible [{1}]".CheckedFormat(desc, unusableArmListStr);
+            }
+            else if (substCurrentLocName == R1ArmALocID.Name && robotArmBLocObserver.Info.IsUnoccupied)
             {
                 fromArmObserver = robotArmALocObserver;
                 toArmObserver = robotArmBLocObserver;
@@ -1177,19 +2780,66 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 ec = AcquireLocationTransferPermissionForThisItemIfNeeded(ipf, fromLocObs.ID.Name, swapAtLocObs.ID.Name);
 
             if (fromArmObserver.ID.Name != substCurrentLocName && ec.IsNullOrEmpty())
-                ec = E039TableUpdater.NoteSubstMoved(substObs, fromArmObserver.ID);
+            {
+                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
+
+                if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == substObs.Info.LocID)
+                {
+                    ec = "Get {0} from {1} failed by request during swap".CheckedFormat(substObs.ID.FullName, failNextGetFromLocName);
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextGetFromLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
+                    substObs.Update();
+                }
+
+                WaitBeforeGetIfNeeded(substObs.Info.LocID);
+
+                if (ec.IsNullOrEmpty())
+                    ec = E039TableUpdater.NoteSubstMoved(substObs, fromArmObserver.ID);
+            }
 
             if (ec.IsNullOrEmpty())
-                ec = E039TableUpdater.NoteSubstMoved(swapWithSubstObs, toArmObserver.ID);
+            {
+                string failNextGetFromLocName = swapWithSubstObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
+
+                if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == swapWithSubstObs.Info.LocID)
+                {
+                    ec = "Get {0} from {1} failed by request during swap".CheckedFormat(swapWithSubstObs.ID.FullName, failNextGetFromLocName);
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(swapWithSubstObs.ID, new NamedValueSet() { "FailNextGetFromLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
+                    swapWithSubstObs.Update();
+                }
+
+                WaitBeforeGetIfNeeded(swapWithSubstObs.Info.LocID);
+
+                if (ec.IsNullOrEmpty())
+                    ec = E039TableUpdater.NoteSubstMoved(swapWithSubstObs, toArmObserver.ID);
+            }
 
             if (ec.IsNullOrEmpty())
-                ec = E039TableUpdater.NoteSubstMoved(substObs, swapAtLocObs.ID);
+            {
+                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValueA(rethrow: false);
+
+                if (ec.IsNullOrEmpty() && failNextPutToLocName.IsNeitherNullNorEmpty() && failNextPutToLocName == swapAtLocObs.ID.Name)
+                {
+                    ec = "Put {0} to {1} failed by request during swap".CheckedFormat(substObs.ID.FullName, failNextPutToLocName);
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextPutToLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
+                    substObs.Update();
+                }
+
+                WaitBeforePutIfNeeded(swapAtLocObs.ID.Name);
+
+                if (ec.IsNullOrEmpty())
+                    ec = E039TableUpdater.NoteSubstMoved(substObs, swapAtLocObs.ID);
+            }
+
+            if (ec.IsNullOrEmpty())
+                _counters.swapCount++;
 
             return ec;
         }
 
         protected override string InnerPerformApproach(IProviderFacet ipf, ApproachLocationItem item, E090SubstLocObserver toLocObs, string desc)
         {
+            _counters.approachCount++;
+
             return "";
         }
 
@@ -1216,7 +2866,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     /// <summary>
     /// Interface for a simple single slot example ProcessModule engine
     /// </summary>
-    public interface ISimpleExampleProcessModuleEngine : IActivePartBase, ITransferPermissionRequest
+    public interface ISimpleExampleProcessModuleEngine : IActivePartBase, ITransferPermissionRequest, IPrepare<IProcessSpec, IProcessStepSpec>
     {
         IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null);
         E039ObjectID LocID { get; }
@@ -1227,14 +2877,22 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     /// </summary>
     public class SimpleExampleProcessModuleEngine : SimpleActivePartBase, ISimpleExampleProcessModuleEngine
     {
-        public SimpleExampleProcessModuleEngine(string partID, TestECSParts testECSParts, string pmLocName = null)
-            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.0333).FromSeconds()))
+        public SimpleExampleProcessModuleEngine(string partID, TestECSParts testECSParts, string pmLocName = null, bool enableAlmostAvailable = true)
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.01).FromSeconds(), simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion2.Build(addSimplePartBaseBehavior: SimplePartBaseBehavior.TreatPartAsOnlineFailureWhenOnlineOrOnlineBusyWithExplicitFailure)))
         {
             TestECSParts = testECSParts;
             E039TableUpdater = TestECSParts.E039TableUpdater;
 
             E039TableUpdater.CreateE090SubstLoc(pmLocName, ao => locObserver = new E090SubstLocObserver(ao.AddedObjectPublisher));
             LocID = locObserver.ID;
+
+            ProcessAlmostCompleteLeadPeriod = (0.05).FromSeconds();
+            EnableAlmostAvailable = enableAlmostAvailable;
+
+            transferPermissionStateIVA = Values.Instance.GetValueAccessor(PartID + ".TPS").Set(lastPublishedTransferPermissionState);
+
+            preparednessStateIVA = Values.Instance.GetValueAccessor(PartID + ".PreparednessState");
+            PublishPreparednessState();
         }
 
         public TestECSParts TestECSParts { get; private set; }
@@ -1244,44 +2902,96 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public E039ObjectID LocID { get; private set; }
 
+        public TimeSpan ProcessAlmostCompleteLeadPeriod { get; private set; }
+        public bool EnableAlmostAvailable { get; private set; }
+
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
+        {
+            switch (serviceName)
+            {
+                case "SetExplicitFaultReason":
+                    SetExplicitFaultReason(npv["Reason"].VC.GetValueA(rethrow: true));
+                    PerformMainLoopService();
+                    return string.Empty;
+
+                case "ReleaseHold":
+                    preparednessState.SummaryState &= ~QuerySummaryState.HoldInboundMaterial;
+                    preparednessState.Reason = serviceName;
+                    PublishPreparednessState();
+                    return string.Empty;
+
+                default:
+                    return base.PerformServiceActionEx(ipf, serviceName, npv);
+            }
+        }
+
+        #region ITransferPermissionRequest
+
         public IClientFacet TransferPermission(TransferPermissionRequestType requestType, string locName = "")
         {
             string desc = "{0}({1}{2})".CheckedFormat(CurrentMethodName, requestType, locName != null ? ", loc:{0}".CheckedFormat(locName) : "");
             return new BasicActionImpl(actionQ, ipf => PerformTransferPermission(ipf, requestType, locName), desc, ActionLoggingReference);
         }
 
-        public INotificationObject<ITokenSet<string>> TransferPermissionStatePublisher { get { return transferPermissionStatePublisher; } }
-        InterlockedNotificationRefObject<ITokenSet<string>> transferPermissionStatePublisher = new InterlockedNotificationRefObject<ITokenSet<string>>(TokenSet<string>.Empty);
+        public INotificationObject<ITransferPermissionState> TransferPermissionStatePublisher { get { return transferPermissionStatePublisher; } }
+        InterlockedNotificationRefObject<ITransferPermissionState> transferPermissionStatePublisher = new InterlockedNotificationRefObject<ITransferPermissionState>(TransferPermissionStateForPublication.Empty);
 
-        ITokenSet<string> lastPublishedTransferPermissionState = TokenSet<string>.Empty;
+        ITransferPermissionState lastPublishedTransferPermissionState = TransferPermissionStateForPublication.Empty;
 
-        TokenSet<string> transferPermisionState = new TokenSet<string>();
+        TransferPermissionState transferPermissionState = new TransferPermissionState();
+        bool isLocationLockedForTransfer;
 
-        private void PublishStateIfNeeded()
+        IValueAccessor transferPermissionStateIVA;
+
+        private void PublishTransferPermissionStateIfNeeded()
         {
-            if (!transferPermisionState.Equals(lastPublishedTransferPermissionState, compareReadOnly: false))
-                transferPermissionStatePublisher.Object = (lastPublishedTransferPermissionState = transferPermisionState.ConvertToReadOnly());
-        }
+            if (!transferPermissionState.Equals(lastPublishedTransferPermissionState))
+            {
+                bool justBecameAvailable = (transferPermissionState.IsAvailable() && !lastPublishedTransferPermissionState.IsAvailable());
 
-        bool isLocationLockedForTransfer = false;
+                transferPermissionStatePublisher.Object = (lastPublishedTransferPermissionState = new TransferPermissionStateForPublication(transferPermissionState));
+                transferPermissionStateIVA.Set(lastPublishedTransferPermissionState);
+
+                Log.Debug.Emit("Published {0}", lastPublishedTransferPermissionState);
+
+                if (justBecameAvailable && pendingAcquireKVPList.Count > 0)
+                {
+                    CompletePendingAcquireRequests(publish: false);
+
+                    transferPermissionStatePublisher.Object = (lastPublishedTransferPermissionState = new TransferPermissionStateForPublication(transferPermissionState));
+                    transferPermissionStateIVA.Set(lastPublishedTransferPermissionState);
+
+                    Log.Debug.Emit("Published {0} [after completing pending work]", lastPublishedTransferPermissionState);
+                }
+            }
+        }
 
         private string PerformTransferPermission(IProviderFacet ipf, TransferPermissionRequestType requestType, string locName)
         {
             switch (requestType)
             {
                 case TransferPermissionRequestType.Acquire:
-                    if (engineState != EngineState.Idle)
-                        return "Not valid in engine state {0}".CheckedFormat(engineState);
+                    if (transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable || transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Busy)
+                    {
+                        pendingAcquireKVPList.Add(KVP.Create(locName, ipf));
 
-                    transferPermisionState.Add(locName);
+                        Log.Debug.Emit("TransferPermission state is {0}: request '{1}' has been put into the pending list", transferPermissionState, ipf.ToString(ToStringSelect.MesgAndDetail));
+
+                        return null;
+                    }
+
+                    if (!transferPermissionState.SummaryStateCode.IsAvailable())
+                        return "TransferPermissionInterface is not available [{0}]".CheckedFormat(transferPermissionState);
+
+                    transferPermissionState.GrantedTokenSet.Add(locName);
                     break;
 
                 case TransferPermissionRequestType.Release:
-                    transferPermisionState.Remove(locName);
+                    transferPermissionState.GrantedTokenSet.Remove(locName);
                     break;
 
                 case TransferPermissionRequestType.ReleaseAll:
-                    transferPermisionState.Clear();
+                    transferPermissionState.GrantedTokenSet.Clear();
                     break;
 
                 default:
@@ -1293,13 +3003,88 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return "";
         }
 
+        List<KeyValuePair<string, IProviderFacet>> pendingAcquireKVPList = new List<KeyValuePair<string, IProviderFacet>>();
+
         private void UpdateTransferPermission(bool publish = true)
         {
-            isLocationLockedForTransfer = transferPermisionState.Count > 0;
+            isLocationLockedForTransfer = transferPermissionState.IsAnyGranted(checkAvailable: false);
 
             if (publish)
-                PublishStateIfNeeded();
+                PublishTransferPermissionStateIfNeeded();
         }
+
+        #endregion
+
+        #region IPrepare
+
+        public IClientFacet PrepareForStep(IProcessSpec processSpec, IProcessStepSpec processStepSpec)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformPrepareForStep(ipf, processSpec, processStepSpec), Fcns.CurrentMethodName, ActionLoggingReference, "Spec(s):{0}".CheckedFormat(processSpec.CombineRecipeNames(processStepSpec)));
+        }
+
+        public string FailNextPrepareForProcessStepSpecName { get; set; }
+
+        private string PerformPrepareForStep(IProviderFacet ipf, IProcessSpec processSpec, IProcessStepSpec processStepSpec)
+        {
+            PerformMainLoopService();
+
+            if (currentProcessTracker != null)
+                return "Not permitted while process is active";
+
+            if (locObserver.IsOccupied)
+                return "Not permitted while substrate is present [{0}]".CheckedFormat(locObserver.ContainsSubstInfo);
+
+            string ec = string.Empty;
+            if (BaseState.UseState != UseState.Online)
+                ec = OuterPerformGoOnlineAction(ipf, true, ipf.NamedParamValues);
+
+            string failNextPrepareForProcessStepSpecName = FailNextPrepareForProcessStepSpecName;
+            if (ec.IsNullOrEmpty() && failNextPrepareForProcessStepSpecName.IsNeitherNullNorEmpty() && processStepSpec.StepRecipeName == failNextPrepareForProcessStepSpecName)
+            {
+                FailNextPrepareForProcessStepSpecName = null;
+
+                ec = "Prepare failed by request";
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                preparednessState.ProcessSpec = processSpec;
+                preparednessState.ProcessStepSpec = processStepSpec;
+                preparednessState.SetSummaryState(QuerySummaryState.Ready | QuerySummaryState.CanPrepare, ipf.ToString(ToStringSelect.MesgAndDetail));
+            }
+            else
+            {
+                preparednessState.ProcessSpec = processSpec;
+                preparednessState.ProcessStepSpec = processStepSpec;
+                preparednessState.SetSummaryState(QuerySummaryState.CanPrepare, "{0} failed: {1}".CheckedFormat(ipf.ToString(ToStringSelect.MesgAndDetail), ec));
+            }
+
+            PublishPreparednessState();
+
+            return ec;
+        }
+
+        protected PreparednessState<IProcessSpec, IProcessStepSpec> preparednessState = new PreparednessState<IProcessSpec, IProcessStepSpec>();
+
+        protected IPreparednessState<IProcessSpec, IProcessStepSpec> lastPublishedPreparednessState;
+        protected IValueAccessor preparednessStateIVA;
+
+        public INotificationObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> PreparednessStatePublisher { get { return preparednessStatePublisher; } }
+
+        INotificationObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> IPrepare<IProcessSpec, IProcessStepSpec>.StatePublisher { get { return preparednessStatePublisher; } }
+        protected InterlockedNotificationRefObject<IPreparednessState<IProcessSpec, IProcessStepSpec>> preparednessStatePublisher = new InterlockedNotificationRefObject<IPreparednessState<IProcessSpec, IProcessStepSpec>>();
+
+        protected void PublishPreparednessState()
+        {
+            lastPublishedPreparednessState = preparednessState.MakeCopyOfThis();
+
+            Log.Debug.Emit("Publishing {0}", lastPublishedPreparednessState);
+
+            preparednessStatePublisher.Object = lastPublishedPreparednessState;
+            preparednessStateIVA.Set(new PreparednessStateForPublication(lastPublishedPreparednessState));
+        }
+
+        #endregion
 
         public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
         {
@@ -1329,19 +3114,25 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (autoAcquireTransferPermissionLocNameAtEnd != null && autoAcquireTransferPermissionLocNameAtEnd != LocID.Name && autoAcquireTransferPermissionLocNameAtEnd != "")
                 return "AutoAcquireTransferPermissionLocNameAtEnd value '{0}' is not a valid process output location".CheckedFormat(autoAcquireTransferPermissionLocNameAtEnd);
 
-            TimeSpan processTime = stepSpec.StepVariables["ProcessTime"].VC.GetValue<TimeSpan>(rethrow: false);
-
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
                 return "Part is not online [{0}]".CheckedFormat(BaseState);
 
+            if (!Object.ReferenceEquals(stepSpec, preparednessState.ProcessStepSpec))
+                return "Part has not been prepared for this process [{0}]".CheckedFormat(preparednessState);
+
+            if (!preparednessState.Query(stepSpec.ProcessSpec, stepSpec).SummaryState.IsSet(QuerySummaryState.Ready))
+                return "Part is not ready to perform this process [{0}]".CheckedFormat(preparednessState);
+
+            TimeSpan processTime = stepSpec.StepVariables["ProcessTime"].VC.GetValueTS(rethrow: false);
+
             if (autoReleaseTransferPermissionLocNameAtStart != null)
             {
-                transferPermisionState.Remove(autoReleaseTransferPermissionLocNameAtStart);
+                transferPermissionState.GrantedTokenSet.Remove(autoReleaseTransferPermissionLocNameAtStart);
                 UpdateTransferPermission();
             }
 
             if (isLocationLockedForTransfer)
-                return "Cannot run process: module is locked for transfer [{0}]".CheckedFormat(transferPermisionState);
+                return "Cannot run process: module is locked for transfer [{0}]".CheckedFormat(transferPermissionState);
 
             substID = substID.MapNullToEmpty();
 
@@ -1365,6 +3156,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 IPF = ipf,
                 SubstObserver = substObserver,
+                ProcssStepSpec = stepSpec,
                 ProcessTime = processTime,
                 AutoAcquireTransferPermissionLocNameAtEnd = autoAcquireTransferPermissionLocNameAtEnd,
                 BusyToken = CreateInternalBusyFlagHolderObject(flagName: "Running Process for {0}".CheckedFormat(substID.FullName)),
@@ -1381,6 +3173,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         {
             public IProviderFacet IPF { get; set; }
             public E090SubstObserver SubstObserver { get; set; }
+            public IProcessStepSpec ProcssStepSpec { get; set; }
             public TimeSpan ProcessTime { get; set; }
             public string AutoAcquireTransferPermissionLocNameAtEnd { get; set; }
             public IDisposable BusyToken { get; set; }
@@ -1415,10 +3208,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             Log.Debug.Emit("EngineState change to {0} [from:{1}, reason:{2}]", engineState, entryEngineState, reason);
 
-            if (entryEngineState == EngineState.RunningProcess && currentProcessTracker != null)
+            if (entryEngineState == EngineState.RunningProcess && nextEngineState != EngineState.RunningProcess && currentProcessTracker != null)
             {
                 var pendingSPS = currentProcessTracker.IPF.NamedParamValues["PendingSPS"].VC.GetValue(rethrow: false, defaultValue: SubstProcState.ProcessStepCompleted);
-                var resultCode = currentProcessTracker.IPF.NamedParamValues["ResultCode"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                var resultCode = currentProcessTracker.IPF.NamedParamValues["ResultCode"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                 var setSJRS = currentProcessTracker.IPF.NamedParamValues["SetSJRS"].VC.GetValue<SubstrateJobRequestState>(rethrow: false);
 
                 E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, pendingSPS);
@@ -1430,15 +3223,46 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 if (currentProcessTracker.AutoAcquireTransferPermissionLocNameAtEnd != null)
                 {
-                    transferPermisionState.Add(currentProcessTracker.AutoAcquireTransferPermissionLocNameAtEnd);
+                    transferPermissionState.GrantedTokenSet.Add(currentProcessTracker.AutoAcquireTransferPermissionLocNameAtEnd);
                     UpdateTransferPermission();
                 }
 
                 currentProcessTracker = null;
+
+                CompletePendingAcquireRequests();
             }
 
             if (engineState == EngineState.RunningProcess && currentProcessTracker != null)
+            {
                 E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, SubstProcState.InProcess);
+
+                var requestHoldForSubstrateID = currentProcessTracker.ProcssStepSpec.StepVariables["RequestHoldForSubstrateID"].VC.GetValueA(rethrow: false);
+
+                if (requestHoldForSubstrateID.IsNeitherNullNorEmpty() && requestHoldForSubstrateID == locObserver.ContainsSubstInfo.ObjID.Name)
+                {
+                    Log.Debug.Emit("Requesting hold at start of process for '{0}'", requestHoldForSubstrateID);
+
+                    preparednessState.SummaryState |= QuerySummaryState.HoldInboundMaterial;
+                    preparednessState.Reason = "RequestHoldForSubstrateID triggered";
+
+                    PublishPreparednessState();
+                }
+            }
+        }
+
+        private void CompletePendingAcquireRequests(bool publish = true, string resultCode = "")
+        {
+            if (pendingAcquireKVPList.Count > 0)
+            {
+                if (resultCode.IsNullOrEmpty())
+                    pendingAcquireKVPList.DoForEach(kvp => transferPermissionState.GrantedTokenSet.Add(kvp.Key));
+
+                UpdateTransferPermission(publish: publish);
+
+                pendingAcquireKVPList.DoForEach(kvp => kvp.Value.CompleteRequest(resultCode));
+
+                pendingAcquireKVPList.Clear();
+            }
         }
 
         protected override void PerformMainLoopService()
@@ -1449,17 +3273,56 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 Fail("Found current ProcessTracker is complete while {0}".CheckedFormat(engineState));
 
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
+            {
+                string baseStateFaultReason = BaseState.ExplicitFaultReason.MapEmptyToNull() ?? BaseState.Reason;
+                if (transferPermissionState.IsAvailable() || transferPermissionState.Reason != baseStateFaultReason)
+                {
+                    transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, baseStateFaultReason, emitter: Log.Debug);
+                    PublishTransferPermissionStateIfNeeded();
+                }
+
+                if (preparednessState.SummaryState != (QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare))
+                {
+                    preparednessState.SetSummaryState(QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare, "Part is not Online: {0}".CheckedFormat(BaseState));
+                    PublishPreparednessState();
+                }
+
                 return;
+            }
+            else if (preparednessState.SummaryState.IsSet(QuerySummaryState.NotAvailable))
+            {
+                preparednessState.SetSummaryState(QuerySummaryState.CanPrepare, "Part is Online now: {0}".CheckedFormat(BaseState));
+                PublishPreparednessState();
+            }
+
+            var engineStateAge = engineStateTS.Age;
 
             switch (engineState)
             {
                 case EngineState.Idle:
+                    if (!transferPermissionState.IsAvailable())
+                    {
+                        transferPermissionState.SetState(TransferPermissionSummaryStateCode.Available, engineState.ToString(), emitter: Log.Debug);
+                        PublishTransferPermissionStateIfNeeded();
+                    }
                     break;
 
                 case EngineState.RunningProcess:
                     if (currentProcessTracker != null)
                     {
-                        if (engineStateTS.Age >= currentProcessTracker.ProcessTime)
+                        if (transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Available)
+                        {
+                            transferPermissionState.SetState(TransferPermissionSummaryStateCode.Busy, engineState.ToString(), emitter: Log.Debug);
+                            PublishTransferPermissionStateIfNeeded();
+                        }
+
+                        if ((engineStateAge >= currentProcessTracker.ProcessTime - ProcessAlmostCompleteLeadPeriod) && transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Busy && EnableAlmostAvailable)
+                        {
+                            transferPermissionState.SetState(TransferPermissionSummaryStateCode.AlmostAvailable, engineState.ToString(), emitter: Log.Debug, estimatedAvailableAfterPeriod: ProcessAlmostCompleteLeadPeriod);
+                            PublishTransferPermissionStateIfNeeded();
+                        }
+
+                        if (engineStateAge >= currentProcessTracker.ProcessTime)
                             SetEngineState(EngineState.Idle, "Process complete");
                     }
                     else
@@ -1473,6 +3336,14 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         private void Fail(string reason)
         {
             SetBaseState(UseState.OnlineFailure, reason);
+
+            preparednessState.SetSummaryState(QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare, "Failed: {0}".CheckedFormat(reason));
+            PublishPreparednessState();
+
+            CompletePendingAcquireRequests(resultCode: reason);
+
+            transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, "{0}({1})".CheckedFormat(CurrentMethodName, reason), emitter: Log.Debug);
+            PublishTransferPermissionStateIfNeeded();
 
             if (currentProcessTracker != null)
             {
@@ -1516,19 +3387,21 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
     public class BeltExampleProcessModuleEngine : SimpleActivePartBase, IBeltExampleProcessModuleEngine
     {
-        public BeltExampleProcessModuleEngine(string partID, IE039TableUpdater e039TableUpdater, int numStations = 4, TimeSpan? beltMoveTime = null, string locBaseName = null, BeltExampleProcessModuleEngineType engineType = BeltExampleProcessModuleEngineType.Linear)
-            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.0333).FromSeconds()))
+        public BeltExampleProcessModuleEngine(string partID, IE039TableUpdater e039TableUpdater, int numStations = 4, TimeSpan? beltMoveTime = null, string locBaseName = null, BeltExampleProcessModuleEngineType engineType = BeltExampleProcessModuleEngineType.Linear, bool enableAlmostAvailable = true)
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.01).FromSeconds()))
         {
             EngineType = engineType;
 
             int minValidStation = IsCircular ? 2 : 3;
             if (numStations < minValidStation)
-                throw new System.ArgumentException(paramName: "numStations", message: "value must be {0} or larger for {1} engine".CheckedFormat(minValidStation, engineType));
+                new System.ArgumentException(paramName: "numStations", message: "value must be {0} or larger for {1} engine".CheckedFormat(minValidStation, engineType)).Throw();
 
             E039TableUpdater = e039TableUpdater;
             NumStations = numStations;
             BeltMoveTime = beltMoveTime ?? (0.1).FromSeconds();
+            BeltMoveAlmostCompleteLeadPeriod = (0.05).FromSeconds();
             NumProcessStations = IsCircular ? (NumStations - 1) : (NumStations - 2);
+            EnableAlmostAvailable = enableAlmostAvailable;
 
             stationLocObserverArray = Enumerable.Range(1, NumStations).Select(slotNum => { E090SubstLocObserver obs = null; e039TableUpdater.CreateE090SubstLoc("{0}.Station{1}".CheckedFormat(locBaseName, slotNum), ao => { obs = new E090SubstLocObserver(ao.AddedObjectPublisher); }, instanceNum: slotNum); return obs; }).ToArray();
             processStationsLocObserverArray = stationLocObserverArray.Skip(1).Take(NumProcessStations).ToArray();
@@ -1546,13 +3419,18 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 outputLocObserver = inputLocObserver;
             else
                 outputLocObserver = stationLocObserverArray.Last();
+
+            transferPermissionStateIVA = Values.Instance.GetValueAccessor(PartID + ".TPS").Set(lastPublishedTransferPermissionState);
         }
 
         public BeltExampleProcessModuleEngineType EngineType { get; private set; }
         public IE039TableUpdater E039TableUpdater { get; private set; }
         public int NumStations { get; private set; }
         public TimeSpan BeltMoveTime { get; private set; }
+        public TimeSpan BeltMoveAlmostCompleteLeadPeriod { get; private set; }
         public int NumProcessStations { get; private set; }
+
+        public bool EnableAlmostAvailable { get; private set; }
 
         bool IsCircular { get { return (EngineType == BeltExampleProcessModuleEngineType.Circular); } }
 
@@ -1574,18 +3452,37 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             return new BasicActionImpl(actionQ, ipf => PerformTransferPermission(ipf, requestType, locName), desc, ActionLoggingReference);
         }
 
-        public INotificationObject<ITokenSet<string>> TransferPermissionStatePublisher { get { return transferPermissionStatePublisher; } }
-        private InterlockedNotificationRefObject<ITokenSet<string>> transferPermissionStatePublisher = new InterlockedNotificationRefObject<ITokenSet<string>>(TokenSet<string>.Empty);
+        public INotificationObject<ITransferPermissionState> TransferPermissionStatePublisher { get { return transferPermissionStatePublisher; } }
+        private InterlockedNotificationRefObject<ITransferPermissionState> transferPermissionStatePublisher = new InterlockedNotificationRefObject<ITransferPermissionState>(TransferPermissionStateForPublication.Empty);
 
-        ITokenSet<string> lastPublishedTransferPermissionState = TokenSet<string>.Empty;
-        TokenSet<string> transferPermissionState = new TokenSet<string>();
+        ITransferPermissionState lastPublishedTransferPermissionState = TransferPermissionStateForPublication.Empty;
+        TransferPermissionState transferPermissionState = new TransferPermissionState();
+
+        IValueAccessor transferPermissionStateIVA;
 
         bool isInputLocationLockedForTransfer, isOutputLocationLockedForTransfer;
 
-        private void PublishStateIfNeeded()
+        private void PublishTransferPermissionStateIfNeeded()
         {
-            if (!transferPermissionState.Equals(lastPublishedTransferPermissionState, compareReadOnly: false))
-                transferPermissionStatePublisher.Object = lastPublishedTransferPermissionState = transferPermissionState.ConvertToReadOnly();
+            if (!transferPermissionState.Equals(lastPublishedTransferPermissionState))
+            {
+                bool justBecameAvailable = (transferPermissionState.IsAvailable() && !lastPublishedTransferPermissionState.IsAvailable());
+
+                transferPermissionStatePublisher.Object = (lastPublishedTransferPermissionState = new TransferPermissionStateForPublication(transferPermissionState));
+                transferPermissionStateIVA.Set(lastPublishedTransferPermissionState);
+
+                Log.Debug.Emit("Published {0}", lastPublishedTransferPermissionState);
+
+                if (justBecameAvailable && pendingAcquireKVPList.Count > 0)
+                {
+                    CompletePendingAcquireRequests(publish: false);
+
+                    transferPermissionStatePublisher.Object = (lastPublishedTransferPermissionState = new TransferPermissionStateForPublication(transferPermissionState));
+                    transferPermissionStateIVA.Set(lastPublishedTransferPermissionState);
+
+                    Log.Debug.Emit("Published {0} [after completing pending work]", lastPublishedTransferPermissionState);
+                }
+            }
         }
 
         public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.ProcessStepCompleted, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
@@ -1616,25 +3513,29 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             switch (requestType)
             {
                 case TransferPermissionRequestType.Acquire:
-                    if (engineState == EngineState.MovingBelt)
+                    if (transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.AlmostAvailable || transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Busy)
                     {
                         pendingAcquireKVPList.Add(KVP.Create(locName, ipf));
 
-                        Log.Debug.Emit("Belt is moving: put '{0}' in pending list", ipf.ToString(ToStringSelect.MesgAndDetail));
+                        Log.Debug.Emit("TransferPermission state is {0}: request '{1}' has been put into the pending list", transferPermissionState, ipf.ToString(ToStringSelect.MesgAndDetail));
 
                         return null;
                     }
 
-                    transferPermissionState.Add(locName);
+                    if (!transferPermissionState.SummaryStateCode.IsAvailable())
+                    {
+                        return "TransferPermissionInterface is not available [{0}]".CheckedFormat(transferPermissionState);
+                    }
+
+                    transferPermissionState.GrantedTokenSet.Add(locName);
                     break;
 
                 case TransferPermissionRequestType.Release:
-                    transferPermissionState.Remove(locName);
+                    transferPermissionState.GrantedTokenSet.Remove(locName);
                     break;
 
                 case TransferPermissionRequestType.ReleaseAll:
-                    while (transferPermissionState.Contains(locName))
-                        transferPermissionState.Remove(locName);
+                    transferPermissionState.GrantedTokenSet.Clear();
                     break;
 
                 default:
@@ -1650,11 +3551,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private void UpdateTransferPermissions(bool publish = true)
         {
-            isInputLocationLockedForTransfer = transferPermissionState.Contains(InputLocID.Name) || (IsCircular && transferPermissionState.Contains(""));
-            isOutputLocationLockedForTransfer = IsCircular ? isInputLocationLockedForTransfer : transferPermissionState.Contains(OutputLocID.Name);
+            isInputLocationLockedForTransfer = transferPermissionState.GrantedTokenSet.Contains(InputLocID.Name) || (IsCircular && transferPermissionState.GrantedTokenSet.Contains(""));
+            isOutputLocationLockedForTransfer = IsCircular ? isInputLocationLockedForTransfer : transferPermissionState.GrantedTokenSet.Contains(OutputLocID.Name);
 
             if (publish)
-                PublishStateIfNeeded();
+                PublishTransferPermissionStateIfNeeded();
         }
 
         private string PerformRunProcess(IProviderFacet ipf, E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS, string autoReleaseTransferPermissionLocNameAtStart, string autoAcquireTransferPermissionLocNameAtEnd)
@@ -1665,14 +3566,14 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (autoAcquireTransferPermissionLocNameAtEnd != null && autoAcquireTransferPermissionLocNameAtEnd != OutputLocID.Name && !(IsCircular && autoAcquireTransferPermissionLocNameAtEnd == ""))
                 return "AutoAcquireTransferPermissionLocNameAtEnd value '{0}' is not a valid process output location".CheckedFormat(autoAcquireTransferPermissionLocNameAtEnd);
 
-            TimeSpan stepInterval = stepSpec.StepVariables["StepInterval"].VC.GetValue<TimeSpan>(rethrow: false);
+            TimeSpan stepInterval = stepSpec.StepVariables["StepInterval"].VC.GetValueTS(rethrow: false);
 
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
                 return "Part is not online [{0}]".CheckedFormat(BaseState);
 
             if (autoReleaseTransferPermissionLocNameAtStart != null)
             {
-                transferPermissionState.Remove(autoReleaseTransferPermissionLocNameAtStart);
+                transferPermissionState.GrantedTokenSet.Remove(autoReleaseTransferPermissionLocNameAtStart);
                 UpdateTransferPermissions();
             }
 
@@ -1807,21 +3708,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         ptAtPickLoc.CompleteRequest("");
                         if (ptAtPickLoc.AutoAcquireTransferPermissionLocNameAtEnd != null)
                         {
-                            transferPermissionState.Add(ptAtPickLoc.AutoAcquireTransferPermissionLocNameAtEnd);
+                            transferPermissionState.GrantedTokenSet.Add(ptAtPickLoc.AutoAcquireTransferPermissionLocNameAtEnd);
                             UpdateTransferPermissions();
                         }
                     }
 
-                    if (pendingAcquireKVPList.Count > 0)
-                    {
-                        pendingAcquireKVPList.DoForEach(kvp => transferPermissionState.Add(kvp.Key));
-
-                        UpdateTransferPermissions();
-
-                        pendingAcquireKVPList.DoForEach(kvp => kvp.Value.CompleteRequest(""));
-
-                        pendingAcquireKVPList.Clear();
-                    }
+                    CompletePendingAcquireRequests();
                 }
             }
 
@@ -1842,6 +3734,20 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             }
         }
 
+        private void CompletePendingAcquireRequests(bool publish = true)
+        {
+            if (pendingAcquireKVPList.Count > 0)
+            {
+                pendingAcquireKVPList.DoForEach(kvp => transferPermissionState.GrantedTokenSet.Add(kvp.Key));
+
+                UpdateTransferPermissions(publish: publish);
+
+                pendingAcquireKVPList.DoForEach(kvp => kvp.Value.CompleteRequest(""));
+
+                pendingAcquireKVPList.Clear();
+            }
+        }
+
         protected override void PerformMainLoopService()
         {
             if (allLocObserverArray.Any(obs => obs.IsUpdateNeeded))
@@ -1857,7 +3763,15 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             }
 
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
+            {
+                if (transferPermissionState.IsAvailable() || transferPermissionState.Reason != BaseState.Reason)
+                {
+                    transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, BaseState.Reason, emitter: Log.Debug);
+                    PublishTransferPermissionStateIfNeeded();
+                }
+
                 return;
+            }
 
             int beltWaferCount = beltLocObserverArray.Count(obs => !obs.Info.IsUnoccupied);
             int stationWaferCount = stationLocObserverArray.Count(obs => !obs.Info.IsUnoccupied);
@@ -1882,9 +3796,17 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             else
                 processedSubstIDAtOutputLoc = E039ObjectID.Empty;
 
+            TimeSpan engineStateAge = engineStateTS.Age;
+
             switch (engineState)
             {
                 case EngineState.Waiting:
+                    if (!transferPermissionState.IsAvailable())
+                    {
+                        transferPermissionState.SetState(TransferPermissionSummaryStateCode.Available, engineState.ToString());
+                        PublishTransferPermissionStateIfNeeded();
+                    }
+
                     if (isInputLocationLockedForTransfer || isOutputLocationLockedForTransfer)
                         break;     // keep waiting until the load and unload stations have been released
 
@@ -1893,18 +3815,40 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                     SetEngineState(EngineState.MovingBelt, "Starting Belt move and then next process step");
 
+                    transferPermissionState.SetState(TransferPermissionSummaryStateCode.Busy, engineState.ToString());
+                    PublishTransferPermissionStateIfNeeded();
+
                     break;
 
                 case EngineState.MovingBelt:
-                    if (engineStateTS.Age >= BeltMoveTime)
+                    if (transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Available)
+                    {
+                        transferPermissionState.SetState(TransferPermissionSummaryStateCode.Busy, engineState.ToString());
+                        PublishTransferPermissionStateIfNeeded();
+                    }
+
+                    if ((engineStateAge >= BeltMoveTime - BeltMoveAlmostCompleteLeadPeriod) && (transferPermissionState.SummaryStateCode == TransferPermissionSummaryStateCode.Busy) && EnableAlmostAvailable)
+                    {
+                        transferPermissionState.SetState(TransferPermissionSummaryStateCode.AlmostAvailable, engineState.ToString(), estimatedAvailableAfterPeriod: BeltMoveAlmostCompleteLeadPeriod);
+                        PublishTransferPermissionStateIfNeeded();
+                    }
+
+                    if (engineStateAge >= BeltMoveTime)
                     {
                         beltPosition = (beltPosition + 1) % NumStations;
                         SetEngineState(EngineState.RunningProcess, "Belt move completed");
                     }
+ 
                     break;
 
                 case EngineState.RunningProcess:
-                    if (engineStateTS.Age >= maxStepInterval)
+                    if (!transferPermissionState.IsAvailable())
+                    {
+                        transferPermissionState.SetState(TransferPermissionSummaryStateCode.Available, engineState.ToString());
+                        PublishTransferPermissionStateIfNeeded();
+                    }
+
+                    if (engineStateAge >= maxStepInterval)
                     {
                         SetEngineState(EngineState.Waiting, "Process complete");
                     }
@@ -1915,6 +3859,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         private void Fail(string reason)
         {
             SetBaseState(UseState.OnlineFailure, reason);
+
+            transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, "{0}({1})".CheckedFormat(CurrentMethodName, reason), emitter: Log.Debug);
+            PublishTransferPermissionStateIfNeeded();
 
             ptBySubstFullNameDictionary.ValueArray.DoForEach(pt => pt.CompleteRequest(reason));
             ptBySubstFullNameDictionary.Clear();

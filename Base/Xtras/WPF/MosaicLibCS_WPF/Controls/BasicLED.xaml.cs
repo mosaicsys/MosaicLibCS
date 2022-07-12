@@ -93,7 +93,7 @@ namespace MosaicLib.WPF.Controls
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
         {
             if (e.Property == ColorSelectIndexProperty)
-                lastColorSelectIndex = ValueContainer.Create(e.NewValue, ContainerStorageType.I4).GetValue<int>(rethrow: false);
+                lastColorSelectIndex = ValueContainer.CreateFromObject(e.NewValue).GetValueI4(rethrow: false);
             else if (e.Property == ColorListProperty)
                 colorListArray = ParseColorList(colorListString = (string)e.NewValue);
             else if (e.Property == IsActiveProperty)

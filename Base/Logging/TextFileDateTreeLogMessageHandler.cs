@@ -30,6 +30,7 @@ using MosaicLib.Modular.Config;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib
 {
@@ -165,7 +166,7 @@ namespace MosaicLib
                     /// calls its UpdateFromModularConfig method to fill in its values from modular config.  Finally this method updates the localy stored
                     /// values from the updated FileRotationLoggingConfig contents and reconstructs the LineFormat
                     /// </summary>
-                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
+                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null, INamedValueSet preloadFromNVS = null)
                     {
                         FileRotationLoggingConfig frlConfig = new FileRotationLoggingConfig(Name, DirPath)
                         {
@@ -180,7 +181,7 @@ namespace MosaicLib
                             purgeRules = new FileRotationLoggingConfig.PurgeRules(PruneRules),
                             mesgQueueSize = MesgQueueSize,
                         };
-                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance);
+                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance, preloadFromNVS: preloadFromNVS);
 
                         DirPath = frlConfig.dirPath;
                         FileNamePrefix = frlConfig.fileNamePrefix;
@@ -358,7 +359,7 @@ namespace MosaicLib
                 /// This method attempts to setup the <see cref="MosaicLib.File.DirectoryFileRotationManager"/> to manage the ring of log files.  This must be comleted successfully
                 /// before this LMH can be used to write to any log file.
                 /// </summary>
-                /// <returns>True if the setup operation was successfull</returns>
+                /// <returns>True if the setup operation was successful</returns>
                 protected bool Setup()
                 {
                     lastSetupAttemptTime.SetToNow();
@@ -451,7 +452,7 @@ namespace MosaicLib
                         System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
 
                         // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
-                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                        System.IO.File.SetCreationTimeUtc(activeFilePath, DateTime.UtcNow);
                     }
 
                     // establish the open mode.  if we are supposed to advance to a new file
@@ -710,7 +711,7 @@ namespace MosaicLib
                 {
                     if (droppedMessageCount != lastLoggedDroppedMessageCount)
                     {
-                        logger.Error.Emit("DirMgr '{0}' dropped {1} messages since last successfull write", config.Name, droppedMessageCount - lastLoggedDroppedMessageCount);
+                        logger.Error.Emit("DirMgr '{0}' dropped {1} messages since last successful write", config.Name, droppedMessageCount - lastLoggedDroppedMessageCount);
 
                         lastLoggedDroppedMessageCount = droppedMessageCount;
                     }

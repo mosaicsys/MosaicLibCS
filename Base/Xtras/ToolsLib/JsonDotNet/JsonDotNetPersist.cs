@@ -29,7 +29,7 @@ using MosaicLib.Modular.Persist;
 using Newtonsoft.Json;
 using MosaicLib.Utils;
 
-namespace Mosaic.JsonDotNet
+namespace Mosaic.ToolsLib.JsonDotNet
 {
     #region DataContractJsonDotNetAdapter
 
@@ -49,7 +49,7 @@ namespace Mosaic.JsonDotNet
             JsonSerializerSettings jss = new JsonSerializerSettings()
             {
                 TypeNameHandling = TypeNameHandling.Auto,
-                TypeNameAssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Simple,
+                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
                 ObjectCreationHandling = ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
                 Formatting = Formatting.Indented,
             };
@@ -172,7 +172,7 @@ namespace Mosaic.JsonDotNet
             JsonSerializerSettings jss = new JsonSerializerSettings()
             {
                 TypeNameHandling = TypeNameHandling.Auto,
-                TypeNameAssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Simple,
+                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
                 ObjectCreationHandling = ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
                 Formatting = Formatting.Indented,
             };

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCS_WPF", "MosaicLibCS_WPF\MosaicLibCS_WPF.csproj", "{865BD965-5184-4758-A8B7-BD6189E46732}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase2010", "..\..\MosaicLibCSBase2010.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase", "..\..\MosaicLibCSBase.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

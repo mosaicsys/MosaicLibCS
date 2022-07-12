@@ -26,19 +26,20 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 
-using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-using MosaicLib.Time;
 using MosaicLib.Modular;
-using MosaicLib.Modular.Part;
-using MosaicLib.PartsLib.Helpers;
-using MosaicLib.Semi.E084;
-using MosaicLib.Semi.E087;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Part;
+using MosaicLib.PartsLib.Helpers;
+using MosaicLib.Semi.E084;
+using MosaicLib.Semi.E087;
+using MosaicLib.Semi.E090.SubstrateRouting;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Common.LPM
 {
@@ -52,7 +53,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// In addition to the formal requirments defined here, such PDO driver parts are also expected to support the following IVA names
     /// <para/>"LPMState": contains the last published ILPMState object for gui data binding use (et. al.)
     /// </remarks>
-    public interface ILPMPart : IActivePartBase
+    public interface ILPMPart : IActivePartBase, ITransferPermissionRequest
 	{
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to initialize the load port.  
@@ -220,31 +221,31 @@ namespace MosaicLib.PartsLib.Common.LPM
             PortUsageContextInfo = new PortUsageContextInfo();
         }
 
-        public LPMState(ILPMState rhs)
+        public LPMState(ILPMState other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public LPMState SetFrom(ILPMState rhs)
+        public LPMState SetFrom(ILPMState other)
         {
-            NVS = rhs.NVS.IsNullOrEmpty() ? null : new NamedValueSet(rhs.NVS);
+            NVS = other.NVS.IsNullOrEmpty() ? null : new NamedValueSet(other.NVS);
 
-            DeviceCapabilities = new DeviceCapabilities(rhs.DeviceCapabilities);
-            PodSensorValues = new PodSensorValues(rhs.PodSensorValues);
-            DecodedPodInfo = new DecodedPodInfo(rhs.DecodedPodInfo);
-            PositionState = new PositionState(rhs.PositionState);
+            DeviceCapabilities = new DeviceCapabilities(other.DeviceCapabilities);
+            PodSensorValues = new PodSensorValues(other.PodSensorValues);
+            DecodedPodInfo = new DecodedPodInfo(other.DecodedPodInfo);
+            PositionState = new PositionState(other.PositionState);
 
-            DisplayStateSetpoint = new DisplayState(rhs.DisplayStateSetpoint);
-            DisplayState = new DisplayState(rhs.DisplayState);
-            ButtonSet = new ButtonSet(rhs.ButtonSet);
+            DisplayStateSetpoint = new DisplayState(other.DisplayStateSetpoint);
+            DisplayState = new DisplayState(other.DisplayState);
+            ButtonSet = new ButtonSet(other.ButtonSet);
 
-            E84State = new E84State(rhs.E84State);
+            E84State = new E84State(other.E84State);
 
-            MapResults = new MapResults(rhs.MapResults);
+            MapResults = new MapResults(other.MapResults);
 
-            PartBaseState = new BaseState(rhs.PartBaseState);
+            PartBaseState = new BaseState(other.PartBaseState);
 
-            PortUsageContextInfo = new PortUsageContextInfo(rhs.PortUsageContextInfo);
+            PortUsageContextInfo = new PortUsageContextInfo(other.PortUsageContextInfo);
             
             return this;
         }
@@ -408,30 +409,30 @@ namespace MosaicLib.PartsLib.Common.LPM
         public PortUsageContextInfo()
         { }
 
-        public PortUsageContextInfo(IPortUsageContextInfo rhs)
+        public PortUsageContextInfo(IPortUsageContextInfo other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public PortUsageContextInfo SetFrom(IPortUsageContextInfo rhs)
+        public PortUsageContextInfo SetFrom(IPortUsageContextInfo other)
         {
-            AMS = rhs.AMS;
-            LTS = rhs.LTS;
-            LRS = rhs.LRS;
+            AMS = other.AMS;
+            LTS = other.LTS;
+            LRS = other.LRS;
 
-            Initializing = rhs.Initializing;
-            Error = rhs.Error;
-            Alarm = rhs.Alarm;
-            Busy = rhs.Busy;
-            Loading = rhs.Loading;
-            Unloading = rhs.Unloading;
-            E84LoadInProgress = rhs.E84LoadInProgress;
-            E84UnloadInProgress = rhs.E84UnloadInProgress;
+            Initializing = other.Initializing;
+            Error = other.Error;
+            Alarm = other.Alarm;
+            Busy = other.Busy;
+            Loading = other.Loading;
+            Unloading = other.Unloading;
+            E84LoadInProgress = other.E84LoadInProgress;
+            E84UnloadInProgress = other.E84UnloadInProgress;
 
-            APresentOrPlacementAlarmIsActive = rhs.APresentOrPlacementAlarmIsActive;
+            APresentOrPlacementAlarmIsActive = other.APresentOrPlacementAlarmIsActive;
 
-            Button1State = rhs.Button1State;
-            Button2State = rhs.Button2State;
+            Button1State = other.Button1State;
+            Button2State = other.Button2State;
 
             return this;
         }
@@ -589,16 +590,16 @@ namespace MosaicLib.PartsLib.Common.LPM
         public DeviceCapabilities()
         { }
 
-        public DeviceCapabilities(IDeviceCapabilities rhs)
+        public DeviceCapabilities(IDeviceCapabilities other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public DeviceCapabilities SetFrom(IDeviceCapabilities rhs)
+        public DeviceCapabilities SetFrom(IDeviceCapabilities other)
         {
-            TagReaderType = rhs.TagReaderType;
-            HasE84 = rhs.HasE84;
-            MapperCapabilities = rhs.MapperCapabilities;
+            TagReaderType = other.TagReaderType;
+            HasE84 = other.HasE84;
+            MapperCapabilities = other.MapperCapabilities;
 
             return this;
         }
@@ -615,7 +616,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public MapperCapabilities MapperCapabilities { get; set; }
 
-        /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
+        /// <summary>Returns true if this object has the same contents as the given <paramref name="other"/> one.</summary>
         public bool Equals(IDeviceCapabilities other)
         {
             return (other != null
@@ -653,6 +654,8 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool Failed { get; }
         /// <summary>This is true when the ResultCode is the empty string.  This is the same as what is normally called Succeeded, except that it does not tell you anything about the contents of the SlotMap itself.</summary>
         bool IsValid { get; }
+        /// <summary>This is true when the map operation failed because the current pod type cannot be mapped by the mapper hardware.</summary>
+        bool PodTypeNotSupported { get; }
 
         SlotState[] SlotMap { get; }
         string ResultCode { get; }
@@ -666,20 +669,21 @@ namespace MosaicLib.PartsLib.Common.LPM
     {
         public MapResults() { }
 
-        public MapResults(IMapResults rhs)
+        public MapResults(IMapResults other)
         {
-            SetFrom(rhs.ResultCode, rhs.SlotMap);
+            SetFrom(other.ResultCode, other.SlotMap, other.PodTypeNotSupported);
         }
 
-        public MapResults SetFrom(IMapResults rhs)
+        public MapResults SetFrom(IMapResults other)
         {
-            return SetFrom(rhs.ResultCode, rhs.SlotMap);
+            return SetFrom(other.ResultCode, other.SlotMap, other.PodTypeNotSupported);
         }
 
-        public MapResults SetFrom(string resultCode, SlotState[] slotStateArray = null)
+        public MapResults SetFrom(string resultCode, SlotState[] slotStateArray = null, bool podTypeNotSupported = false)
         {
             ResultCode = resultCode;
             SlotMap = (slotStateArray.IsNullOrEmpty() ? emptySlotMap : new List<SlotState>(slotStateArray).ToArray());
+            PodTypeNotSupported = podTypeNotSupported;
 
             return this;
         }
@@ -697,6 +701,8 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool Failed { get { return !ResultCode.IsNullOrEmpty(); } }
         /// <summary>This is true when the ResultCode is the empty string.  This is the same as what is normally called Succeeded, except that it does not tell you anything about the contents of the SlotMap itself.</summary>
         public bool IsValid { get { return ResultCode == string.Empty; } }
+        /// <summary>This is true when the map operation failed because the current pod type cannot be mapped by the mapper hardware.</summary>
+        public bool PodTypeNotSupported { get; set; }
 
         [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public SlotState[] SlotMap { get { return slotMap; } set { slotMap = value ?? emptySlotMap; } }
@@ -711,6 +717,7 @@ namespace MosaicLib.PartsLib.Common.LPM
             return (other != null
                     && SlotMap.IsEqualTo(other.SlotMap)
                     && ResultCode == other.ResultCode
+                    && PodTypeNotSupported == other.PodTypeNotSupported
                     );
         }
 
@@ -738,7 +745,15 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     public interface IPodSensorValues : IEquatable<IPodSensorValues>
     {
+        /// <summary>Returns MappedPresentPlaced ?? PresentPlacedSensorValues</summary>
         PresentPlaced PresentPlaced { get; }
+
+        /// <summary>Reports the (raw) sensor reported values for PresentPlaced from the LPM/PDO hardware.</summary>
+        PresentPlaced PresentPlacedSensorValues { get; }
+
+        /// <summary>If the DecodedPodInfo indicates that an OCA is installed and it does not have sensor mapping disabled then this will be assigned the mapped PresentPlaced state.  Otherwise this will be null.</summary>
+        PresentPlaced? MappedPresentPlaced { get; }
+
         bool PresenceSensor { get; }
         bool PlacementSensor { get; }
         bool IsProperlyPlaced { get; }
@@ -763,20 +778,30 @@ namespace MosaicLib.PartsLib.Common.LPM
         public PodSensorValues() 
         { }
 
-        public PodSensorValues(IPodSensorValues rhs)
+        public PodSensorValues(IPodSensorValues other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public PodSensorValues SetFrom(IPodSensorValues rhs)
+        public PodSensorValues SetFrom(IPodSensorValues other)
         {
-            PresentPlaced = rhs.PresentPlaced;
-            InfoPads = rhs.InfoPads;
+            PresentPlacedSensorValues = other.PresentPlacedSensorValues;
+            MappedPresentPlaced = other.MappedPresentPlaced;
+            InfoPads = other.InfoPads;
             return this;
         }
 
+        public PresentPlaced PresentPlaced 
+        {
+            get { return MappedPresentPlaced ?? PresentPlacedSensorValues; } 
+            set { PresentPlacedSensorValues = value; } 
+        }
+
         [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
-        public PresentPlaced PresentPlaced { get; set; }
+        public PresentPlaced PresentPlacedSensorValues { get; set; }
+
+        [DataMember(Order = 110, IsRequired = false, EmitDefaultValue = false)]
+        public PresentPlaced ? MappedPresentPlaced { get; set; }
 
         public bool PresenceSensor { get { return PresentPlaced.IsSet(PresentPlaced.Present); } }
         public bool PlacementSensor { get { return PresentPlaced.IsSet(PresentPlaced.Placed); } }
@@ -798,6 +823,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         {
             return (other != null
                     && PresentPlaced == other.PresentPlaced
+                    && MappedPresentPlaced == other.MappedPresentPlaced
                     && InfoPads == other.InfoPads
                     );
         }
@@ -811,7 +837,10 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
-            return "Sensors:{0} InfoPads:{1}".CheckedFormat(PresentPlaced, InfoPads);
+            if (MappedPresentPlaced == null || MappedPresentPlaced == PresentPlacedSensorValues)
+                return "Sensors:{0} InfoPads:{1}".CheckedFormat(PresentPlacedSensorValues, InfoPads);
+            else
+                return "Sensors:{0} Mapped:{1} InfoPads:{2}".CheckedFormat(PresentPlacedSensorValues, MappedPresentPlaced, InfoPads);
         }
     }
 
@@ -821,7 +850,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// </summary>
     [DataContract]
     [Flags]
-    public enum PresentPlaced
+    public enum PresentPlaced : int
     {
         /// <summary>Neither Presence nor Placement sensors are active</summary>
         [EnumMember]
@@ -846,7 +875,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// </summary>
     [DataContract]
     [Flags]
-    public enum InfoPads
+    public enum InfoPads : int
     {
         /// <summary>No InfoPad is currently active.  0x00</summary>
         [EnumMember]
@@ -873,11 +902,16 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #region IDecodedPodInfo, DecodedPodInfo, related enums
 
-    public interface IDecodedPodInfo : IEquatable<IDecodedPodInfo>
+    public interface IDecodedPodInfo : IEquatable<IDecodedPodInfo>, ICopyable<IDecodedPodInfo>
     {
+        /// <summary>Contains summary information about the carrier type that this pod is, or contains</summary>
         CarrierType CarrierType { get; }
 
+        /// <summary>Contains summary information about any OCA (Open Cassette Adapter) that has been detected and is in use in addition to some state information about it (clamped, docked and/or opened)</summary>
         OCA OCA { get; }
+
+        /// <summary>May be used to carry additional custom information about the decoded pod, carrier and/or the OCA.</summary>
+        INamedValueSet NVS { get; }
 
         [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IDecodedPodInfo rhs);
@@ -886,18 +920,21 @@ namespace MosaicLib.PartsLib.Common.LPM
     [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class DecodedPodInfo : IDecodedPodInfo
     {
-        public DecodedPodInfo() 
+        public static IDecodedPodInfo Default { get { return new DecodedPodInfo(); } }
+
+        public DecodedPodInfo()
         { }
 
-        public DecodedPodInfo(IDecodedPodInfo rhs)
+        public DecodedPodInfo(IDecodedPodInfo other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public DecodedPodInfo SetFrom(IDecodedPodInfo rhs)
+        public DecodedPodInfo SetFrom(IDecodedPodInfo other)
         {
-            CarrierType = rhs.CarrierType;
-            OCA = rhs.OCA;
+            CarrierType = other.CarrierType;
+            OCA = other.OCA;
+            _NVS = other.NVS.ConvertToReadOnly().MapEmptyToNull();
 
             return this;
         }
@@ -908,11 +945,20 @@ namespace MosaicLib.PartsLib.Common.LPM
         [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public OCA OCA { get; set; }
 
+        public NamedValueSet NVS { get { return _NVS.MapNullToEmpty(); } set { _NVS = value.MapEmptyToNull(); } }
+
+        [DataMember(Name = "NVS", Order = 400, IsRequired = false, EmitDefaultValue = false)]
+        private NamedValueSet _NVS = null;
+
+        INamedValueSet IDecodedPodInfo.NVS { get { return _NVS.ConvertToReadOnly(); } }
+
+        /// <summary>Returns true if this object's contents are equal to the contents of the given <paramref name="other"/> object.</summary>
         public bool Equals(IDecodedPodInfo other)
         {
             return (other != null
                     && CarrierType == other.CarrierType
                     && OCA == other.OCA
+                    && NVS.IsEqualTo(other.NVS, compareReadOnly: false)
                     );
         }
 
@@ -925,75 +971,126 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
-            return "CarrierType:{0} OCA:{1}".CheckedFormat(CarrierType, OCA);
+            if (_NVS == null)
+                return "CarrierType:{0} OCA:{1}".CheckedFormat(CarrierType, OCA);
+            else
+                return "CarrierType:{0} OCA:{1} {2}".CheckedFormat(CarrierType, OCA, _NVS.ToStringSML());
+        }
+
+        /// <summary>
+        /// Makes and returns a copy of this object.
+        /// </summary>
+        public IDecodedPodInfo MakeCopyOfThis(bool deepCopy = true)
+        {
+            var copy = (DecodedPodInfo)MemberwiseClone();
+
+            copy._NVS = copy._NVS.ConvertToReadOnly(mapNullToEmpty: false);
+
+            return copy;
         }
     }
 
     /// <summary>
-    /// Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26) and WaferSize (100, 125, 150, 200, 300, 450 mm)
-    /// <para/>None (0x00), FOUP (0x01), FOSB (0x02), FOSB_NoDoor (0x04), Cassette (0x08), Other (0x80), Slot_25 (0x100), Slot_13 (0x200), Slot_26 (0x400),
-    /// Size_100mm (0x10000), Size_125mm (0x20000), Size_150mm (0x40000), Size_200mm (0x80000), Size_300mm (0x100000), Size_450mm (0x200000)
+    /// Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26, 1, 12) and Size (100, 125, 150, 200, 300, 450 mm, other)
+    /// <para/>None (0x00), FOUP (0x01), FOSB (0x02), NoDoor (0x04), Cassette (0x08), Magazine (0x10), Other (0x80), FOSB_NoDoor (0x06) 
+    /// Slots_25 (0x0100), Slots_13 (0x0200), Slots_26 (0x0400), Slots_1 (0x0800), Slots_13Tall (0x1000), Slots_Other (0x2000)
+    /// Size_100mm (0x10000), Size_125mm (0x20000), Size_150mm (0x40000), Size_200mm (0x80000), Size_300mm (0x100000), Size_450mm (0x200000), Size_Other (0x400000), Size_360mm (0x800000)
+    /// TypeBitsMaks (0xff), SlotsBitMask (0xff00), SizeBitsMaks (0xff0000),
     /// </summary>
     [DataContract]
     [Flags]
-    public enum CarrierType
+    public enum CarrierType : int
     {
         /// <summary>There is currently no Carrier detected of any type.  0x00</summary>
         [EnumMember]
         None = 0x00,
+
         /// <summary>A FOUP has been detected.  0x01</summary>
         [EnumMember]
         FOUP = 0x01,
         /// <summary>A FOSB has been detected.  0x02</summary>
         [EnumMember]
         FOSB = 0x02,
-        /// <summary>A FOSB has been detected which has its door removed prior to placement.  0x04</summary>
+        /// <summary>The current carrier has had its door removed prior to placement.  0x04</summary>
         [EnumMember]
-        FOSB_NoDoor = 0x04,
+        NoDoor = 0x04,
         /// <summary>A Cassette has been detected (typically placed in an OCA).  0x08</summary>
         [EnumMember]
         Cassette = 0x08,
-        /// <summary>A generic Carrier has been detected (details must be determined through other means.  0x80</summary>
+        /// <summary>A Magazine has been detected.  0x10</summary>
+        [EnumMember]
+        Magazine  = 0x10,
+        /// <summary>A generic Carrier has been detected (details must be determined through other means).  0x80</summary>
         [EnumMember]
         Other = 0x80,
+        /// <summary>A FOSB has been detected which has its door removed prior to placement.  0x04</summary>
+        [EnumMember]
+        FOSB_NoDoor = (FOSB | NoDoor),
 
-        /// <summary>The Carrier has 25 slots.  0x100</summary>
+        /// <summary>Mask for the bits used to define the Carrier "type" [0xff]</summary>
         [EnumMember]
-        Slots_25 = 0x100,
-        /// <summary>The Carrier has 13 slots.  0x200</summary>
-        [EnumMember]
-        Slots_13 = 0x200,
-        /// <summary>The Carrier has 26 slots.  0x400</summary>
-        [EnumMember]
-        Slots_26 = 0x400,
+        TypeBitsMask = 0xff,
 
-        /// <summary>The Carrier contains 100mm round substrates.  0x010000</summary>
+        /// <summary>The Carrier has 25 slots.  This is the default when not explicitly indicated.  0x0100</summary>
+        [EnumMember]
+        Slots_25 = 0x0100,
+        /// <summary>The Carrier has 13 slots.  0x0200</summary>
+        [EnumMember]
+        Slots_13 = 0x0200,
+        /// <summary>The Carrier has 26 slots.  0x0400</summary>
+        [EnumMember]
+        Slots_26 = 0x0400,
+        /// <summary>The Carrier has 1 slot.  0x0800</summary>
+        [EnumMember]
+        Slots_1 = 0x0800,
+        /// <summary>The Carrier has 13 slots using tall pitch.  [0x1000]</summary>
+        [EnumMember]
+        Slots_13Tall = 0x1000,
+        /// <summary>The Carrier has some other configuration/number of slots.  [0x2000]</summary>
+        [EnumMember]
+        Slots_Other = 0x2000,
+
+        /// <summary>Mask for the bits used to defined the number of slots [0xff00]</summary>
+        [EnumMember]
+        SlotsBitsMask = 0xff00,
+
+        /// <summary>The Carrier contains 100mm substrates.  0x010000</summary>
         [EnumMember]
         Size_100mm = 0x010000,
-        /// <summary>The Carrier contains 125mm round substrates.  0x020000</summary>
+        /// <summary>The Carrier contains 125mm substrates.  0x020000</summary>
         [EnumMember]
         Size_125mm = 0x020000,
-        /// <summary>The Carrier contains 150mm round substrates.  0x040000</summary>
+        /// <summary>The Carrier contains 150mm substrates.  0x040000</summary>
         [EnumMember]
         Size_150mm = 0x040000,
-        /// <summary>The Carrier contains 200mm round substrates.  0x080000</summary>
+        /// <summary>The Carrier contains 200mm substrates.  0x080000</summary>
         [EnumMember]
         Size_200mm = 0x080000,
-        /// <summary>The Carrier contains 300mm round substrates.  0x100000</summary>
+        /// <summary>The Carrier contains 300mm substrates.  0x100000</summary>
         [EnumMember]
         Size_300mm = 0x100000,
-        /// <summary>The Carrier contains 450mm round substrates.  0x200000</summary>
+        /// <summary>The Carrier contains 450mm substrates.  0x200000</summary>
         [EnumMember]
-        Size_400mm = 0x200000,
+        Size_450mm = 0x200000,
+        /// <summary>The Carrier contains substrates of unknown size (details to be determined through other means).  0x400000</summary>
+        [EnumMember]
+        Size_Other = 0x400000,
+        /// <summary>The Carrier contains 360mm substrates.  0x800000</summary>
+        [EnumMember]
+        Size_360mm = 0x800000,
+
+        /// <summary>Mask for the bits used to defined the Substrate Size that can be carrier in this carrier [0xff0000]</summary>
+        [EnumMember]
+        SizeBitsMask = 0xff0000,
     }
 
     /// <summary>
     /// Flag enumeration that gives information about OCA (if any)
-    /// <para/>None (0x00), Installed (0x01), Open (0s02), Locked (0x04)
+    /// <para/>None (0x00), Installed (0x01), Open (0s02), Locked (0x04), Clamped (0x08), HasCover (0x10), DisableSensorMapping (0x20)
     /// </summary>
     [DataContract]
     [Flags]
-    public enum OCA
+    public enum OCA : int
     {
         /// <summary>No OCA is currently installed.  0x00</summary>
         [EnumMember]
@@ -1007,9 +1104,24 @@ namespace MosaicLib.PartsLib.Common.LPM
         [EnumMember]
         Open = 0x02,
 
-        /// <summary>The OCA is Locked (for devices that can recognize this state).  0x04</summary>
+        /// <summary>The OCA is Locked - User cannot open cover to access cassette. (for devices that can recognize this state).  0x04</summary>
         [EnumMember]
         Locked = 0x04,
+
+        /// <summary>The OCA is Clamped to the PDO, usually using the PDO's existing clamp actuator. (for devices that can recognize this state).  0x08</summary>
+        [EnumMember]
+        Clamped = 0x08,
+
+        /// <summary>When set this indicates that the given OCA has a cover (which may or may not support locking).  Otherwise the OCA is simply an adpter plate.  [0x10]</summary>
+        [EnumMember]
+        HasCover = 0x10,
+
+        /// <summary>
+        /// When set for an OCA this indicates that the presence and placement signals operates without mapping.  
+        /// Normally OCAs block, or intermittantly block, the pressence sensor and may partially trigger the placement sensor.  As such these signals are typically replaced with the placement signal when these devices are known to be present on a Load Port/PDO.
+        /// </summary>
+        [EnumMember]
+        DisableSensorMapping = 0x20,
     }
 
     #endregion
@@ -1062,14 +1174,14 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsValid { get; }
 
         /// <summary>
-        /// LPM position is safe to access (detailed meaning is device specific).  
-        /// Generally this means that the carrier is present, the position is valid, docked, and the door is open and down.
+        /// LPM position is safe for the Carrier to be accessed through its open door, typically by an EFEM robot. (detailed meaning is device specific)
+        /// Generally this means that the position is valid and immobile, the PDO is clamped and docked, and the door is open and down.
         /// </summary>
         bool IsSafeToAccess { get; }
 
         /// <summary>
         /// LPM position is safe for the Carrier to be manually placed or removed.  
-        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// Generally this means that the position is valid and immobile, the door is up and closed, and the PDO is undocked and unclamped.
         /// </summary>
         bool IsSafeForManualCarrierHandoff { get; }
 
@@ -1117,17 +1229,28 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// <summary>
     /// Represents the standard set of positions that a LPM part can physically be in.
     /// </summary>
-    public enum PositionSummary
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
+    public enum PositionSummary : int
     {
+        [EnumMember]
         UndockedUnclamped,
+        [EnumMember]
         Undocked,
-        UndockedClamped,        
+        [EnumMember]
+        UndockedClamped,
+        [EnumMember]
         DockedDoorLatched,      // or door not present
+        [EnumMember]
         DockedDoorUnlatched,
+        [EnumMember]
         DockedDoorOpen,
+        [EnumMember]
         DockedCarrierOpen,
+        [EnumMember]
         InMotion,
+        [EnumMember]
         ServoOff,
+        [EnumMember]
         Other,
     }
 
@@ -1137,30 +1260,30 @@ namespace MosaicLib.PartsLib.Common.LPM
         public PositionState()
         { }
 
-        public PositionState(IPositionState rhs)
+        public PositionState(IPositionState other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public PositionState SetFrom(IPositionState rhs)
+        public PositionState SetFrom(IPositionState other)
         {
-            ClampState = rhs.ClampState;
-            DockState = rhs.DockState;
-            VacState = rhs.VacState;
-            DoorKeysState = rhs.DoorKeysState;
-            DoorOpenState = rhs.DoorOpenState;
-            DoorDownState = rhs.DoorDownState;
-            IsReferenced = rhs.IsReferenced;
-            IsServoOn = rhs.IsServoOn;
-            MotionILockSensorIsTripped = rhs.MotionILockSensorIsTripped;
-            ProtrusionSensorIsTripped = rhs.ProtrusionSensorIsTripped;
-            IsCarrierDoorDetected = rhs.IsCarrierDoorDetected;
-            IsCarrierOpen = rhs.IsCarrierOpen;
-            IsCarrierClosed = rhs.IsCarrierClosed;
-            IsValid = rhs.IsValid;
-            IsSafeToAccess = rhs.IsSafeToAccess;
-            IsSafeForManualCarrierHandoff = rhs.IsSafeForManualCarrierHandoff;
-            ExplicitInMotionReason = rhs.ExplicitInMotionReason;
+            ClampState = other.ClampState;
+            DockState = other.DockState;
+            VacState = other.VacState;
+            DoorKeysState = other.DoorKeysState;
+            DoorOpenState = other.DoorOpenState;
+            DoorDownState = other.DoorDownState;
+            IsReferenced = other.IsReferenced;
+            IsServoOn = other.IsServoOn;
+            MotionILockSensorIsTripped = other.MotionILockSensorIsTripped;
+            ProtrusionSensorIsTripped = other.ProtrusionSensorIsTripped;
+            IsCarrierDoorDetected = other.IsCarrierDoorDetected;
+            IsCarrierOpen = other.IsCarrierOpen;
+            IsCarrierClosed = other.IsCarrierClosed;
+            IsValid = other.IsValid;
+            IsSafeToAccess = other.IsSafeToAccess;
+            IsSafeForManualCarrierHandoff = other.IsSafeForManualCarrierHandoff;
+            ExplicitInMotionReason = other.ExplicitInMotionReason;
             
             return this;
         }
@@ -1236,12 +1359,16 @@ namespace MosaicLib.PartsLib.Common.LPM
         [DataMember(Order = 1400, IsRequired = false, EmitDefaultValue = false)]
         public bool IsValid { get; set; }
 
+        /// <summary>
+        /// LPM position is safe for the Carrier to be accessed through its open door, typically by an EFEM robot. (detailed meaning is device specific)
+        /// Generally this means that the position is valid and immobile, the PDO is clamped and docked, and the door is open and down.
+        /// </summary>
         [DataMember(Order = 1500, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeToAccess { get; set; }
 
         /// <summary>
         /// LPM position is safe for the Carrier to be manually placed or removed.  
-        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// Generally this means that the position is valid and immobile, the door is up and closed, and the PDO is undocked and unclamped.
         /// </summary>
         [DataMember(Order = 1600, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeForManualCarrierHandoff { get; set; }
@@ -1385,10 +1512,12 @@ namespace MosaicLib.PartsLib.Common.LPM
             string motionILockStr = (MotionILockSensorIsTripped ? " MotILock" : "");
             string wsoStr = (ProtrusionSensorIsTripped ? " WSO" : "");
             string vacYN = ((IsVacEnabled && IsCarrierDoorDetected) ? "Yes" : "No");
+            string safeForAccess = (IsSafeToAccess ? "Y" : "N");
+            string safeForManualHandoff = (IsSafeForManualCarrierHandoff ? "Y" : "N");
 
             switch (posSummary)
             {
-                default: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);
+                default: return "{0} vac:{1}{2}{3} accessOk:{4} manualHandoffOk:{5}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr, safeForAccess, safeForManualHandoff);
                 case PositionSummary.InMotion: return "InMotion:{0} vac:{1}{2}{3}".CheckedFormat(InMotionReason, vacYN, motionILockStr, wsoStr);
                 case PositionSummary.ServoOff:
                 case PositionSummary.Other: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);
@@ -1422,19 +1551,19 @@ namespace MosaicLib.PartsLib.Common.LPM
             DoorDownState = new ActuatorState();
         }
 
-        public ActuatorStates(IActuatorStates rhs)
+        public ActuatorStates(IActuatorStates other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public ActuatorStates SetFrom(IActuatorStates rhs)
+        public ActuatorStates SetFrom(IActuatorStates other)
         {
-            ClampState = new ActuatorState(rhs.ClampState);
-            DockState = new ActuatorState(rhs.DockState);
-            VacState = new ActuatorState(rhs.VacState);
-            DoorKeysState = new ActuatorState(rhs.DoorKeysState);
-            DoorOpenState = new ActuatorState(rhs.DoorOpenState);
-            DoorDownState = new ActuatorState(rhs.DoorDownState);
+            ClampState = new ActuatorState(other.ClampState);
+            DockState = new ActuatorState(other.DockState);
+            VacState = new ActuatorState(other.VacState);
+            DoorKeysState = new ActuatorState(other.DoorKeysState);
+            DoorOpenState = new ActuatorState(other.DoorOpenState);
+            DoorDownState = new ActuatorState(other.DoorDownState);
 
             return this;
         }
@@ -1505,15 +1634,15 @@ namespace MosaicLib.PartsLib.Common.LPM
             AllItemArray = PanelItemArray.Concat(ButtonItemArray).ToArray();
         }
 
-        public DisplayState(IDisplayState rhs)
+        public DisplayState(IDisplayState other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public DisplayState SetFrom(IDisplayState rhs)
+        public DisplayState SetFrom(IDisplayState other)
         {
-            PanelItemArray = rhs.PanelItemArray.Select(item => new DisplayItemState(item)).ToArray();
-            ButtonItemArray = rhs.ButtonItemArray.Select(item => new DisplayItemState(item)).ToArray();
+            PanelItemArray = other.PanelItemArray.Select(item => new DisplayItemState(item)).ToArray();
+            ButtonItemArray = other.ButtonItemArray.Select(item => new DisplayItemState(item)).ToArray();
             AllItemArray = PanelItemArray.Concat(ButtonItemArray).ToArray();
             return this;
         }
@@ -1571,18 +1700,18 @@ namespace MosaicLib.PartsLib.Common.LPM
     {
         public ButtonSet() { }
 
-        public ButtonSet(IButtonSet rhs)
+        public ButtonSet(IButtonSet other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public ButtonSet SetFrom(IButtonSet rhs)
+        public ButtonSet SetFrom(IButtonSet other)
         {
-            Button1 = rhs.Button1;
-            Button2 = rhs.Button2;
+            Button1 = other.Button1;
+            Button2 = other.Button2;
 
-            Button1ChangeCount = rhs.Button1ChangeCount;
-            Button2ChangeCount = rhs.Button2ChangeCount;
+            Button1ChangeCount = other.Button1ChangeCount;
+            Button2ChangeCount = other.Button2ChangeCount;
 
             return this;
         }
@@ -1654,13 +1783,19 @@ namespace MosaicLib.PartsLib.Common.LPM
     public class DisplayItemState : IDisplayItemState
     {
         /// <summary>Represents the different states that an individual LPM physical annunciator (LED) can be set to</summary>
-        public enum OnOffFlashState
+        [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
+        public enum OnOffFlashState : int
         {
             /// <summary>LED is in inactive state.  0</summary>
+            [EnumMember]
             Off = 0,
+
             /// <summary>LED is in active state.  1</summary>
+            [EnumMember]
             On = 1,
+
             /// <summary>LED is in cycling between and passive and active state.  2</summary>
+            [EnumMember]
             Flash = 2,
         };
 
@@ -1691,26 +1826,26 @@ namespace MosaicLib.PartsLib.Common.LPM
             }
         }
 
-        public DisplayItemState(IDisplayItemState rhs)
+        public DisplayItemState(IDisplayItemState other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public DisplayItemState SetFrom(IDisplayItemState rhs, bool includeItemIdx = true, bool includeState = true)
+        public DisplayItemState SetFrom(IDisplayItemState other, bool includeItemIdx = true, bool includeState = true)
         {
-            IsButton = rhs.IsButton;
+            IsButton = other.IsButton;
             if (includeItemIdx)
-                ItemIdx = rhs.ItemIdx;
-            Text = rhs.Text;
-            BorderColor = rhs.BorderColor;
-            OffBackgroundColor = rhs.OffBackgroundColor;
-            OnBackgroundColor = rhs.OnBackgroundColor;
+                ItemIdx = other.ItemIdx;
+            Text = other.Text;
+            BorderColor = other.BorderColor;
+            OffBackgroundColor = other.OffBackgroundColor;
+            OnBackgroundColor = other.OnBackgroundColor;
             if (includeState)
-                State = rhs.State;
-            LastLampCmdState = rhs.LastLampCmdState;
-            IsInternal = rhs.IsInternal;
-            IsInstalled = rhs.IsInstalled;
-            FlashStateIsOn = rhs.FlashStateIsOn;
+                State = other.State;
+            LastLampCmdState = other.LastLampCmdState;
+            IsInternal = other.IsInternal;
+            IsInstalled = other.IsInstalled;
+            FlashStateIsOn = other.FlashStateIsOn;
 
             return this;
         }
@@ -1833,20 +1968,20 @@ namespace MosaicLib.PartsLib.Common.LPM
             SetFrom(null);
         }
 
-        public E84State(IE84State rhs)
+        public E84State(IE84State other)
         {
-            SetFrom(rhs);
+            SetFrom(other);
         }
 
-        public E84State SetFrom(IE84State rhs)
+        public E84State SetFrom(IE84State other)
         {
-            if (rhs != null)
+            if (other != null)
             {
-                StateCode = rhs.StateCode;
-                StateCodeReason = rhs.StateCodeReason;
-                OutputSetpoint = new PassiveToActivePinsState(rhs.OutputSetpoint);
-                OutputReadback = new PassiveToActivePinsState(rhs.OutputReadback);
-                Inputs = new ActiveToPassivePinsState(rhs.Inputs);
+                StateCode = other.StateCode;
+                StateCodeReason = other.StateCodeReason;
+                OutputSetpoint = new PassiveToActivePinsState(other.OutputSetpoint);
+                OutputReadback = new PassiveToActivePinsState(other.OutputReadback);
+                Inputs = new ActiveToPassivePinsState(other.Inputs);
             }
             else
             {
@@ -1921,6 +2056,222 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #endregion
 
+    #region DecodedPodInfoAndPodSensorModel (IDecodedPodInfo and IPodSensorValues decoding helper)
+
+    public class DecodedPodInfoAndPodSensorModel
+    {
+        public DecodedPodInfoAndPodSensorModel(string carrierTypeSpecStr = "", CarrierType customCarrierType = CarrierType.None, OCA customOCA = OCA.None, InfoPads customInfoPads = InfoPads.None, int customNumSlots = 0, double customPitch = 0.0)
+        {
+            Setup(carrierTypeSpecStr, customCarrierType, customOCA, customInfoPads, customNumSlots, customPitch);
+        }
+
+        public virtual void Setup(string carrierTypeSpecStr = "", CarrierType customCarrierType = CarrierType.None, OCA customOCA = OCA.None, InfoPads customInfoPads = InfoPads.None, int customNumSlots = 0, double customPitch = 0.0)
+        {
+            CarrierTypeSpecStr = carrierTypeSpecStr.MapNullToEmpty();
+            setupErrorCode = string.Empty;
+
+            StringScanner ss = new StringScanner(CarrierTypeSpecStr);
+
+            CarrierTypeToken = ss.ExtractToken();
+
+            SetupInfoPads = default(InfoPads);
+            var selectedInfoPadValues = default(InfoPads);
+            if (ss.ParseXmlAttribute<InfoPads>("InfoPads", out selectedInfoPadValues))
+                SetupInfoPads = selectedInfoPadValues;
+
+            if (customCarrierType == CarrierType.None)
+            {
+                switch (CarrierTypeToken)
+                {
+                    case "": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOUP": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOUP25": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOUP13": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_13 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOUP13Tall": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_13Tall | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOUP25_200mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOUP | CarrierType.Slots_25 | CarrierType.Size_200mm, OCA = OCA.None }; break;
+
+                    case "FOSB": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOSB | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOSBNoDoor": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOSB_NoDoor | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+                    case "FOSB_NoDoor": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.FOSB_NoDoor | CarrierType.Slots_25 | CarrierType.Size_300mm, OCA = OCA.None }; break;
+
+                    case "OCA": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor, OCA = OCA.Installed | OCA.HasCover }; break;
+                    case "OCA200mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_200mm, OCA = OCA.Installed | OCA.HasCover }; break;
+                    case "OCA150mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_150mm, OCA = OCA.Installed | OCA.HasCover }; break;
+                    case "OCA125mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_125mm, OCA = OCA.Installed | OCA.HasCover }; break;
+                    case "OCA100mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_100mm, OCA = OCA.Installed | OCA.HasCover }; break;
+
+                    case "AdapterPlate": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor, OCA = OCA.Installed }; break;
+                    case "Adapter200mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_200mm, OCA = OCA.Installed }; break;
+                    case "Adapter150mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_150mm, OCA = OCA.Installed }; break;
+                    case "Adapter125mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_125mm, OCA = OCA.Installed }; break;
+                    case "Adapter100mm": SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Cassette | CarrierType.NoDoor | CarrierType.Slots_25 | CarrierType.Size_100mm, OCA = OCA.Installed }; break;
+                    default:
+                        SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = CarrierType.Other, OCA = OCA.None };
+                        setupErrorCode = "CarrierType {0} is not recognized".CheckedFormat(CarrierTypeToken);
+                        break;
+                }
+                CustomNumSlots = 0;
+                CustomPitch = 0;
+            }
+            else
+            {
+                CarrierTypeToken = "Custom";
+                SetupInfoPads = customInfoPads;
+                SetupDecodedPodInfo = new DecodedPodInfo() { CarrierType = customCarrierType, OCA = customOCA };
+                CustomNumSlots = customNumSlots;
+                CustomPitch = customPitch;
+            }
+
+            DecodedPodInfo = new DecodedPodInfo(SetupDecodedPodInfo);
+            AdjustedPodSensorValues = new PodSensorValues();
+            _ErrorCode = string.Empty;
+        }
+
+        public string CarrierTypeSpecStr { get; protected set; }
+        public string CarrierTypeToken { get; protected set; }
+
+        public InfoPads SetupInfoPads { get; protected set; }
+        public DecodedPodInfo SetupDecodedPodInfo { get; protected set; }
+        protected string setupErrorCode;
+        public int CustomNumSlots { get; protected set; }
+        public double CustomPitch { get; protected set; }
+
+        public DecodedPodInfo DecodedPodInfo { get; protected set; }
+        public string ErrorCode { get { return setupErrorCode ?? _ErrorCode ?? string.Empty; } set { _ErrorCode = value; } }
+        protected string _ErrorCode;
+        public bool IsValid { get { return ErrorCode.IsNullOrEmpty(); } }
+
+        public virtual void Service(IPodSensorValues podSensorValues, IPositionState posState = null, OCA ocaStateIn = OCA.None, CarrierType ocaCassetteTypeBitsIn = CarrierType.None)
+        {
+            ErrorCode = string.Empty;
+
+            if (AdjustedPodSensorValues.InfoPads != podSensorValues.InfoPads)
+                AdjustedPodSensorValues.InfoPads = podSensorValues.InfoPads;
+
+            if (SetupInfoPads != podSensorValues.InfoPads)
+            {
+                ErrorCode = "InfoPads no longer match [{0} != {1}]".CheckedFormat(SetupInfoPads, podSensorValues.InfoPads);
+                return;
+            }
+
+            var initialOCAInstalled = SetupDecodedPodInfo.OCA.IsInstalled();
+            var ocaStateInIsInstalled = ocaStateIn.IsInstalled();
+            var enableOCASensorMapping = ((ocaStateIn & OCA.DisableSensorMapping) == 0);
+
+            AdjustedPodSensorValues.PresentPlacedSensorValues = podSensorValues.PresentPlaced;
+            AdjustedPodSensorValues.MappedPresentPlaced = null;
+
+            if (!initialOCAInstalled)
+            {
+                switch (DecodedPodInfo.CarrierType & CarrierType.TypeBitsMask)
+                {
+                    case CarrierType.FOUP:
+                    case CarrierType.FOSB:
+                    case CarrierType.FOSB_NoDoor:
+                        break;
+                    case CarrierType.Cassette:
+                    case CarrierType.Other:
+                        if (enableOCASensorMapping)
+                            AdjustedPodSensorValues.MappedPresentPlaced = podSensorValues.IsProperlyPlaced ? podSensorValues.PresentPlaced : PresentPlaced.None;
+                        break;
+                    default:
+                        ErrorCode = "Unknown CarrierType: {0}".CheckedFormat(DecodedPodInfo.CarrierType);
+                        break;
+                }
+
+                if (ocaStateIn != OCA.None)
+                {
+                    ErrorCode = "Invalid service OCA state {0} when OCA use has not been configured".CheckedFormat(ocaStateIn);
+                    AdjustedPodSensorValues.MappedPresentPlaced = PresentPlaced.None;
+                }
+            }
+            else
+            {
+                if (!ocaStateInIsInstalled)
+                {
+                    ErrorCode = "OCA use has been configured but OCA has not been installed yet";
+                    AdjustedPodSensorValues.MappedPresentPlaced = PresentPlaced.None;
+                }
+
+                DecodedPodInfo.OCA = SetupDecodedPodInfo.OCA | ocaStateIn;
+
+                var cassettePlaced = podSensorValues.PlacementSensor;       // when an OCA is installed we typically ignore the presence sensor as it is always triggered.
+
+                if (enableOCASensorMapping)
+                    AdjustedPodSensorValues.MappedPresentPlaced = cassettePlaced ? (PresentPlaced.Present | PresentPlaced.Placed) : PresentPlaced.None;
+            }
+        }
+        
+        public PodSensorValues AdjustedPodSensorValues { get; protected set; }
+
+        public virtual int NumSlots
+        {
+            get
+            {
+                if (CustomNumSlots != 0)
+                    return CustomNumSlots;
+
+                return DecodedPodInfo.CarrierType.GetNumSlots();
+            }
+        }
+
+        public virtual double NominalPitchInMM
+        {
+            get
+            {
+                if (CustomPitch != 0.0)
+                    return CustomPitch;
+
+                var carrierType = DecodedPodInfo.CarrierType;
+                var typeBits = carrierType & CarrierType.TypeBitsMask;
+                var waferSizeBits = carrierType & CarrierType.SizeBitsMask;
+                var slotBits = carrierType & CarrierType.SlotsBitsMask;
+
+                // first handle all FOUP/FOSB and 300mm or 450mm carriers here -> 10 or 20mm pitch
+                if (((typeBits & (CarrierType.FOUP | CarrierType.FOSB | CarrierType.FOSB_NoDoor)) != 0)
+                    || ((waferSizeBits & (CarrierType.Size_300mm | CarrierType.Size_450mm)) != 0))
+                {
+                    switch (slotBits)
+                    {
+                        case CarrierType.Slots_25: return 10.0;
+                        case CarrierType.Slots_13: return 10.0;
+                        case CarrierType.Slots_13Tall: return 20.0;
+                        case CarrierType.Slots_1:
+                        case CarrierType.Slots_26:  // there are currently no 26 slot FOUPs or FOSBs or 300 mm or 450 mm cassettes
+                        default: return 0.0;
+                    }
+                }
+
+                switch (waferSizeBits)
+                {
+                    case CarrierType.Size_200mm:
+                        switch (slotBits)
+                        {
+                            case CarrierType.Slots_25:
+                            case CarrierType.Slots_26: return 6.35; // 0.25"
+                            case CarrierType.Slots_13:
+                            case CarrierType.Slots_13Tall: return 12.7; // 0.5"
+                            default: return 0.0;
+                        }
+                    case CarrierType.Size_150mm:
+                    case CarrierType.Size_125mm:
+                    case CarrierType.Size_100mm:
+                        switch (slotBits)
+                        {
+                            case CarrierType.Slots_25:
+                            case CarrierType.Slots_26: return 4.76; // 3/16"
+                            case CarrierType.Slots_13:
+                            case CarrierType.Slots_13Tall: return 9.52; // 3/8"
+                            default: return 0.0;
+                        }
+                    default: return 0.0;
+                }
+            }
+        }
+    }
+
+    #endregion
+
     #region Common extension methods
 
     public static partial class ExtensionMethods
@@ -1934,12 +2285,29 @@ namespace MosaicLib.PartsLib.Common.LPM
         public static bool IsMap(this MotionAction value) { return value == MotionAction.Map; }
         public static bool IsInitialize(this MotionAction value) { return value == MotionAction.Initialize; }
 
+        /// <summary>returns (<paramref name="value"/> == PresentPlaced.None)</summary>
         public static bool IsNeitherPresentNorPlaced(this PresentPlaced value) { return (value == PresentPlaced.None); }
-        public static bool IsPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present); }
-        public static bool IsPlaced(this PresentPlaced value) { return value.IsSet(PresentPlaced.Placed); }
+
+        /// <summary>returns ((<paramref name="value"/> &amp; PresentPlaced.Present) != 0)</summary>
+        public static bool IsPresent(this PresentPlaced value) { return ((value & PresentPlaced.Present) != 0); }
+
+        /// <summary>returns ((<paramref name="value"/> &amp; PresentPlaced.Placed) != 0)</summary>
+        public static bool IsPlaced(this PresentPlaced value) { return ((value & PresentPlaced.Placed) != 0); }
+
+        /// <summary>returns ((<paramref name="value"/> &amp; PresentPlaced.PartiallyPlaced) != 0)</summary>
+        public static bool IsPartiallyPlaced(this PresentPlaced value) { return ((value & PresentPlaced.PartiallyPlaced) != 0); }
+
+        /// <summary>returns true if <paramref name="value"/> has both Present and PartiallyPlaced bits set</summary>
+        public static bool IsPresentAndPartiallyPlaced(this PresentPlaced value) { return value.Matches(PresentPlaced.Present | PresentPlaced.PartiallyPlaced, PresentPlaced.Present | PresentPlaced.PartiallyPlaced); }
+
+        /// <summary>returns true if <paramref name="value"/> has both Present and Placed bits set.</summary>
         public static bool IsProperlyPlaced(this PresentPlaced value) { return value.Matches(PresentPlaced.Present | PresentPlaced.Placed, PresentPlaced.Present | PresentPlaced.Placed); }
-        public static bool DoesPlacedEqualPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) == value.IsSet(PresentPlaced.Placed); }
-        public static bool IsPlacedOrPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) || value.IsSet(PresentPlaced.Placed); }
+
+        /// <summary>returns (<paramref name="value"/>.IsPresent() == <paramref name="value"/>.IsPlaced())</summary>
+        public static bool DoesPlacedEqualPresent(this PresentPlaced value) { return (value.IsPresent() == value.IsPlaced()); }
+
+        /// <summary>returns (<paramref name="value"/>.IsPresent() || <paramref name="value"/>.IsPlaced())</summary>
+        public static bool IsPlacedOrPresent(this PresentPlaced value) { return (value.IsPresent() || value.IsPlaced()); }
 
         public static bool IsSet(this MotionAction value, MotionAction test) { return value.Matches(test, test); }
         public static bool IsSet(this PresentPlaced value, PresentPlaced test) { return value.Matches(test, test); }
@@ -1952,6 +2320,57 @@ namespace MosaicLib.PartsLib.Common.LPM
         public static bool Matches(this InfoPads testValue, InfoPads mask, InfoPads expectedValue) { return ((testValue & mask) == expectedValue); }
         public static bool Matches(this CarrierType testValue, CarrierType mask, CarrierType expectedValue) { return ((testValue & mask) == expectedValue); }
         public static bool Matches(this OCA testValue, OCA mask, OCA expectedValue) { return ((testValue & mask) == expectedValue); }
+
+        /// <summary>returns true if the given <paramref name="oca"/> has its Installed bit set</summary>
+        public static bool IsInstalled(this OCA oca) { return ((oca & OCA.Installed) != 0); }
+
+        /// <summary>returns true if the given <paramref name="oca"/> has its HasCover bit set.</summary>
+        public static bool HasCover(this OCA oca) { return (oca & OCA.HasCover) != 0; }
+
+        /// <summary>returns true if the given <paramref name="oca"/> IsInstalled() and HasCover()</summary>
+        public static bool IsInstalledWithCover(this OCA oca) { return oca.IsInstalled() && oca.HasCover(); }
+
+        /// <summary>
+        /// Decodes the SlotsBitMask from the given <paramref name="carrierType"/> and returns the corresponding number of slots, or 0 if the value is not recognized.
+        /// CarrierType.None is handled the same as CarrierType.Slots_25.
+        /// </summary>
+        public static int GetNumSlots(this CarrierType carrierType)
+        {
+            switch (carrierType & CarrierType.SlotsBitsMask)
+            {
+                case CarrierType.Slots_1: return 1;
+                case CarrierType.Slots_13: return 13;
+                case CarrierType.Slots_13Tall: return 13;
+                case CarrierType.Slots_25: return 25;
+                case CarrierType.Slots_26: return 26;
+                case CarrierType.None: return 25;
+                default: return 0;
+            }
+        }
+
+        /// <summary>Returns true if the given <paramref name="carrierType"/>'s CarrierType.NoDoor bit is clear (aka !carrierType.HasNoDoor()).</summary>
+        public static bool HasDoor(this CarrierType carrierType) { return !carrierType.HasNoDoor(); }
+
+        /// <summary>Returns true if the given <paramref name="carrierType"/>'s CarrierType.NoDoor bit is set.</summary>
+        public static bool HasNoDoor(this CarrierType carrierType) { return ((carrierType & CarrierType.NoDoor) != 0); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_450mm.</summary>
+        public static bool Is450mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_450mm); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_300mm.</summary>
+        public static bool Is300mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_300mm); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_200mm.</summary>
+        public static bool Is200mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_200mm); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_150mm.</summary>
+        public static bool Is150mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_150mm); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_125mm.</summary>
+        public static bool Is125mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_125mm); }
+
+        /// <summary>Returns true if the CarrierType.SizeBitsMask portion of the given <paramref name="carrierType"/> is CarrierType.Size_100mm.</summary>
+        public static bool Is100mm(this CarrierType carrierType) { return ((carrierType & CarrierType.SizeBitsMask) == CarrierType.Size_100mm); }
     }
 
     #endregion

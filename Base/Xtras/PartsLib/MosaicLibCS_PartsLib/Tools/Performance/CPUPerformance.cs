@@ -89,7 +89,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             Config = new CPUPerformancePartConfig(config);
             this.mdrfWriter = mdrfWriter;
 
-            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, new NamedValueSet() { { "noMDRF" } });
+            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, Defaults.PerfLoggerDefaultNVS);
 
             sampleIntervalTimer = new QpcTimer() { TriggerInterval = config.SampleInterval, AutoReset = true }.Start();
             aggregationIntervalTimer = new QpcTimer() { TriggerInterval = config.AggregationInterval, AutoReset = true }.Start();

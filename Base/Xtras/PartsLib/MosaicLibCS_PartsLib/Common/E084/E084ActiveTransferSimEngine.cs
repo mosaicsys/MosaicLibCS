@@ -107,7 +107,7 @@ namespace MosaicLib.PartsLib.Common.E084
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
 
             //This part is a simulated primary part
-            PrivateBaseState = new BaseState(true, true) { ConnState = ConnState.NotApplicable };
+            PrivateBaseState = new BaseState(true, true) { PartID = PartID, ConnState = ConnState.NotApplicable };
 
             this.lpmSimPart = lpmSimPart;
 
@@ -305,7 +305,7 @@ namespace MosaicLib.PartsLib.Common.E084
             currentActivity = activity;
 
             privateState.StateStr = (Utils.Fcns.CheckedFormat("{0} [{1}]", activity, reason));
-            privateState.IsCycling = (enableAutoLoadIVA.Update().VC.GetValue<bool>(false) && enableAutoUnloadIVA.Update().VC.GetValue<bool>(false));
+            privateState.IsCycling = (enableAutoLoadIVA.Update().VC.GetValueBo(false) && enableAutoUnloadIVA.Update().VC.GetValueBo(false));
 
             privateState.NotReadyReason = ((currentActivity == ActivitySelect.Ready) ? "" : currentActivity.ToString());
             UpdateReadyToLoadAndUnload(true, false);
@@ -484,10 +484,10 @@ namespace MosaicLib.PartsLib.Common.E084
             {
                 // clear the enable auto load and enable auto unload values
 
-                if (enableAutoLoadIVA.Update().VC.GetValue<bool>(false))
+                if (enableAutoLoadIVA.Update().VC.GetValueBo(false))
                     enableAutoLoadIVA.Set(false);
 
-                if (enableAutoUnloadIVA.Update().VC.GetValue<bool>(false))
+                if (enableAutoUnloadIVA.Update().VC.GetValueBo(false))
                     enableAutoUnloadIVA.Set(false);
 
                 IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
@@ -573,7 +573,7 @@ namespace MosaicLib.PartsLib.Common.E084
             {
                 PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().VC.GetValue<PresentPlaced>(false);
 
-                if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().VC.GetValue<bool>(false))
+                if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().VC.GetValueBo(false))
                 {
                     if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {
@@ -581,7 +581,7 @@ namespace MosaicLib.PartsLib.Common.E084
                         loadUnloadStartHoldoffTimer.Stop();
                     }
                 }
-                else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().VC.GetValue<bool>(false))
+                else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().VC.GetValueBo(false))
                 {
                     if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {

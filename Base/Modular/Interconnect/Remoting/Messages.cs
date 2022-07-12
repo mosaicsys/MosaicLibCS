@@ -21,13 +21,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Linq;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Remoting.Buffers;
-using MosaicLib.Modular.Part;
-using MosaicLib.Semi.E005.Data;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -107,12 +103,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             switch (state)
             {
                 case MessageState.Initial:
+                    ReturnBuffersToPool(qpcTimeStamp, "Message.State set to Initial");
+                    break;
                 case MessageState.Released:
-                    ReturnBuffersToPool(qpcTimeStamp);
+                    ReturnBuffersToPool(qpcTimeStamp, "Message.State set to Released");
                     break;
                 case MessageState.Delivered:
                     if (autoReleaseByState)
-                        ReturnBuffersToPool(qpcTimeStamp);
+                        ReturnBuffersToPool(qpcTimeStamp, "Message.State set to Deliverd and autoReleaseByState is true");
                     break;
                 case MessageState.Failed:
                     emitterToUse = IssueEmitter;
@@ -135,7 +133,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
         {
             get
             {
-                int byteCount = bufferList.Where(buffer => buffer != null).Sum(buffer => buffer.byteArraySize - buffer.header.Length);
+                int bufferListCount = bufferList.Count;
+                int byteCount = 0;
+
+                for (int bufferListIdx = 0; bufferListIdx < bufferListCount; bufferListIdx++)
+                {
+                    var buffer = bufferList[bufferListIdx];
+                    if (buffer != null)
+                        byteCount += (buffer.byteArraySize - buffer.header.Length);
+                }
+
                 return byteCount;
             }
         }
@@ -161,7 +168,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
         public Message SetContents(QpcTimeStamp qpcTimeStamp, byte[] byteArray, int offset, int count)
         {
-            ReturnBuffersToPool(qpcTimeStamp);
+            ReturnBuffersToPool(qpcTimeStamp, "Message.SetContents called");
 
             if (count > 0)
             {
@@ -288,16 +295,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
         public Message Clear(QpcTimeStamp qpcTimeStamp)
         {
-            SetState(qpcTimeStamp, MessageState.Initial, Fcns.CurrentMethodName);
+            SetState(qpcTimeStamp, MessageState.Initial, "Clear");
 
             return this;
         }
 
-        public void ReturnBuffersToPool(QpcTimeStamp qpcTimeStamp)
+        public void ReturnBuffersToPool(QpcTimeStamp qpcTimeStamp, string reason = null)
         {
-            if (bufferList.Count > 0)
+            var bufferListCount = bufferList.Count;
+            if (bufferListCount > 0)
             {
-                bufferList.DoForEach(buffer => buffer.ReturnToPool(qpcTimeStamp));
+                for (int index = 0; index < bufferListCount; index++)
+                    bufferList[index].ReturnToPool(qpcTimeStamp, reason);
+
                 bufferList.Clear();
             }
         }
@@ -338,7 +348,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             public override int Read(byte[] buffer, int offset, int count)
             {
                 if (!buffer.IsSafeIndex(offset, length: count))
-                    throw new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count));
+                    new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 
                 int putToOffset = offset;
 
@@ -399,7 +409,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             {
                 this.message = message;
                 bufferList = message.bufferList ?? new List<Buffers.Buffer>();
-                currentBuffer = bufferList.LastOrDefault();
+
+                var bufferListCount = bufferList.Count;
+
+                currentBuffer = (bufferListCount > 0) ? bufferList[bufferListCount - 1] : null;
             }
 
             Messages.Message message;
@@ -423,7 +436,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             public override void Write(byte[] buffer, int offset, int count) 
             {
                 if (!buffer.IsSafeIndex(offset, length: count))
-                    throw new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count));
+                    new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 
                 Buffers.BufferPool useBufferPool = message.bufferSourcePool ?? fallbackDefaultBufferPool;
 
@@ -440,7 +453,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
                         currentBuffer = useBufferPool.Acquire(tsNow);
 
                         if (currentBuffer == null)
-                            throw new System.OutOfMemoryException("Unable to acquire a buffer from the message bufferPool");
+                            new System.OutOfMemoryException("Unable to acquire a buffer from the message bufferPool").Throw();
 
                         bufferList.Add(currentBuffer);
 

@@ -19,21 +19,14 @@
  * limitations under the License.
  */
 
-using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Runtime.Serialization;
-
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Persist;
 
-using Newtonsoft.Json;
-
-namespace Mosaic.JsonDotNet
+namespace Mosaic.ToolsLib.JsonDotNet
 {
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvider obtained by using a DataContractPersistentJsonDotNetTextFileRingStorageAdapter based on the ConfigKeyStore file format.
+    /// Provides a type of DictionaryConfigKeyProvider obtained by using a DataContractPersistentJsonDotNetTextFileRingStorageAdapter based on the ConfigKeyStore file format.
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>

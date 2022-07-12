@@ -33,18 +33,34 @@ namespace MosaicLib.Utils
     public static class Dates
 	{
         /// <summary>
-        /// This method converts the given dt DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// This method converts the given <paramref name="dt"/> DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// <para/>This is based on the existing DateTime.ToFileTimeUtc() method which automatically converts the given <paramref name="dt"/> to UTC before converting the date to a FTIME value.
         /// </summary>
-        public static double GetUTCTimeSince1601(this DateTime dt)
+        public static double GetUTCTimeSince1601(this DateTime dt, bool mapZero = true)
         {
-            return dt.ToFileTimeUtc() * 0.0000001;
+            if (dt.IsZero() && mapZero)
+                return 0.0;
+            else
+                return dt.ToFileTimeUtc() * 0.0000001;
         }
 
         /// <summary>
-        /// This method converts the given utcTimeSince1601 into a UTC DateTime value.
+        /// This method converts the given <paramref name="utcTimeSince1601"/> into a UTC DateTime value.  
+        /// <paramref name="utcTimeSince1601"/> is a double in units of seconds (UTC) since  00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// <para/>If the given <paramref name="utcTimeSince1601"/> is either infinity and <paramref name="mapInfinities"/> is given as true (the default)
+        /// Then this method returns DateTime.MaxValue for PositiveInfinity and DateTime.MinValue for NegativeInfinity.
         /// </summary>
-        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601)
+        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601, bool mapInfinities = true, bool mapZero = true)
         {
+            if (utcTimeSince1601 == 0.0 && mapZero)
+            {
+                return default(DateTime);
+            }
+            else if (utcTimeSince1601.IsInfinity() && mapInfinities)
+            {
+                return (utcTimeSince1601 > 0) ? DateTime.MaxValue : DateTime.MinValue;
+            }
+
             long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
 
             return DateTime.FromFileTimeUtc(utcFTime);
@@ -58,8 +74,14 @@ namespace MosaicLib.Utils
 			/// <summary>Enum value when format should look like 1970-01-01 00:00:00.000</summary>
 			LogDefault = 0,
 
+            /// <summary>Enum value when format should look like 19700101_000000</summary>
+            Short,
+
 			/// <summary>Enum value when format should look like 19700101_000000.000</summary>
 			ShortWithMSec,
+
+            /// <summary>Enum value when format should look like </summary>
+            RoundTrip,
 		}
 
 		/// <summary>Converts the given DateTime value to a string using the given summary desired format</summary>
@@ -68,23 +90,23 @@ namespace MosaicLib.Utils
 		/// <returns>The DateTime converted to a string based on the desired format.</returns>
 		public static string CvtToString(ref DateTime dt, DateTimeFormat dtFormat)
 		{
-			string result = string.Empty;
+			string result;
 
 			switch (dtFormat)
 			{
 				default:
 				case DateTimeFormat.LogDefault:
-					result = Fcns.CheckedFormat("{0}-{1}-{2} {3}:{4}:{5}.{6}", 
-													dt.Year.ToString("D4"), dt.Month.ToString("D2"), dt.Day.ToString("D2"),
-													dt.Hour.ToString("D2"), dt.Minute.ToString("D2"), dt.Second.ToString("D2"), 
-													dt.Millisecond.ToString("D3")); 
+                    result = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
 					break;
+                case DateTimeFormat.Short:
+                    result = dt.ToString("yyyyMMdd_HHmmss");
+                    break;
 				case DateTimeFormat.ShortWithMSec:
-					result = Fcns.CheckedFormat("{0}{1}{2}_{3}{4}{5}.{6}", 
-													dt.Year.ToString("D4"), dt.Month.ToString("D2"), dt.Day.ToString("D2"),
-													dt.Hour.ToString("D2"), dt.Minute.ToString("D2"), dt.Second.ToString("D2"), 
-													dt.Millisecond.ToString("D3"));
+                    result = dt.ToString("yyyyMMdd_HHmmss.fff");
 					break;
+                case DateTimeFormat.RoundTrip:
+                    result = dt.ToString("o");
+                    break;
 			}
 
 			return result;

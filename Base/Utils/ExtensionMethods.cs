@@ -92,7 +92,7 @@ namespace MosaicLib.Utils
         #region Array, IList, List and String access extension methods (IsSafeIndex, SafeAccess, SafeSubArray, SafePut, SafeLast, SafeCopyFrom)
 
         /// <summary>
-        /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length
+        /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length - (<paramref name="length"/> - 1)
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex, int length = 1)
         {
@@ -100,7 +100,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count
+        /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count - (<paramref name="length"/> - 1)
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex, int length = 1)
         {
@@ -279,7 +279,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array, IList, List, IEnumerable, and ICollection related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems, ConditionalAddItems, SafeContains)
+        #region Other Array, IList, List, IEnumerable, and ICollection related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeTakeAll, SafeAddSet, SafeAddItems, ConditionalAddItems, SafeContains)
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -446,7 +446,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given <paramref name="set"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="set"/>.
         /// If the <paramref name="set"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
-        /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
         public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
@@ -459,7 +459,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given <paramref name="collection"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="collection"/>.
         /// If the <paramref name="collection"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
-        /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
         public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
@@ -508,11 +508,11 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is empty
+        /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
         public static ItemType SafeTakeFirst<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
-            if (itemList.Count <= 0)
+            if (itemList.IsNullOrEmpty())
                 return defaultValue;
 
             ItemType item = itemList[0];
@@ -522,11 +522,11 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is empty
+        /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
         public static ItemType SafeTakeLast<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
-            if (itemList.Count <= 0)
+            if (itemList.IsNullOrEmpty())
                 return defaultValue;
 
             int takeFromIdx = (itemList.Count - 1);
@@ -535,6 +535,21 @@ namespace MosaicLib.Utils
 
             return item;
         }
+
+        /// <summary>
+        /// Extension method to "safely" take (remove) and return an array of all of the items that were taken from given list.  Returns the empty array if the given list is null or empty.
+        /// </summary>
+        public static ItemType [] SafeTakeAll<ItemType>(this IList<ItemType> itemList, ItemType [] defaultValue = default(ItemType []))
+        {
+            if (itemList.IsNullOrEmpty())
+                return EmptyArrayFactory<ItemType>.Instance;
+
+            var itemArray = itemList.ToArray();
+            itemList.Clear();
+
+            return itemArray;
+        }
+
 
         /// <summary>
         /// Extension method to make a copy of the given <paramref name="array"/>.  
@@ -597,6 +612,26 @@ namespace MosaicLib.Utils
             return list;
         }
 
+        /// <summary>Adds the given <paramref name="fromList"/> set of items to the given <paramref name="intoList"/> and returns it (to support call chaining)</summary>
+        public static List<TItemType> SafeAddItems<TItemType>(this List<TItemType> intoList, IList<TItemType> fromList, int startAtOffset = 0, int maxItemsToAdd = -1)
+        {
+            if (fromList != null && intoList != null)
+            {
+                var numAvailableItemsInFromList = fromList.Count - startAtOffset;
+                var numItemsToAdd = (maxItemsToAdd == -1) ? numAvailableItemsInFromList : Math.Min(maxItemsToAdd, numAvailableItemsInFromList);
+
+                var finalIntoListCount = intoList.Count + numItemsToAdd;
+                if (intoList.Capacity < finalIntoListCount)
+                    intoList.Capacity = finalIntoListCount;
+
+                var finalOffset = startAtOffset + numItemsToAdd;
+                for (var index = startAtOffset; index < finalOffset; index++)
+                    intoList.Add(fromList[index]);
+            }
+
+            return intoList;
+        }
+
         [Obsolete("This method is being replaced with similarly named SafeAddItems nomenclature now used with params itemsArray.  Please convert to using the new naming. (2017-11-01)")]
         public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, ItemType item, params ItemType[] itemSetArray)
         {
@@ -651,7 +686,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects
+        #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects, SetToString
 
         /// <summary>
         /// Non-generic IEnumerable centric method to allow IEnumerable contents to be injected into other LINQ expressions.
@@ -689,8 +724,52 @@ namespace MosaicLib.Utils
                 if (obj is TItemType || itemTypeIsObject)
                     yield return ((TItemType) obj);
             }
+        }
 
-            yield break;
+        /// <summary>
+        /// Iterative transform method that takes each item from the given <paramref name="set"/> and returns the item converted to a string using the SafeToString method.
+        /// </summary>
+        public static IEnumerable<string> SafeSetToString<TItemType>(this IEnumerable<TItemType> set, string mapNullItemTo = "", ExceptionFormat caughtExceptionToStringFormat = ExceptionFormat.TypeAndMessage)
+        {
+            foreach (var item in set ?? Collections.EmptyArrayFactory<TItemType>.Instance)
+            {
+                yield return item.SafeToString(mapNullTo: mapNullItemTo, caughtExceptionToStringFormat: caughtExceptionToStringFormat);
+            }
+        }
+
+        #endregion
+
+        #region ICollection methods (SafeAddItems, SafeAddRange)
+
+        /// <summary>Adds the given <paramref name="firstItem"/> and any following <paramref name="moreItemsArray"/> to the given <paramref name="collection"/> and returns it (to support call chaining)</summary>
+        public static TCollection SafeAddItems<TCollection, TItem>(this TCollection collection, TItem firstItem, params TItem[] moreItemsArray)
+            where TCollection : ICollection<TItem>
+        {
+            if (collection != null)
+            {
+                collection.Add(firstItem);
+
+                if (!moreItemsArray.IsNullOrEmpty())
+                {
+                    foreach (var item in moreItemsArray)
+                        collection.Add(item);
+                }
+            }
+
+            return collection;
+        }
+
+        /// <summary>Adds the given <paramref name="itemSet"/> set of items to the given <paramref name="collection"/> and returns it (to support call chaining)</summary>
+        public static TCollection SafeAddRange<TCollection, TItem>(this TCollection collection, IEnumerable<TItem> itemSet)
+            where TCollection : ICollection<TItem>
+        {
+            if (collection != null)
+            {
+                foreach (var item in itemSet.MapNullToEmpty())
+                    collection.Add(item);
+            }
+
+            return collection;
         }
 
         #endregion
@@ -703,8 +782,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static TValue SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue fallbackValue = default(TValue))
         {
-            TValue value = default(TValue);
-
+            TValue value;
             if (dict != null && !Object.ReferenceEquals(key, null) && dict.TryGetValue(key, out value))
                 return value;
 
@@ -713,7 +791,22 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region byte arrays as bit masks
+        #region Queue related (SafeTryDequeue)
+
+        /// <summary>
+        /// Safe Extension method version of Queue.Dequeue that returns the next item from <paramref name="fromQueue"/> if it is non-empty or <paramref name="fallbackValue"/> if it is null or empty.
+        /// </summary>
+        public static TItemType SafeTryDequeue<TItemType>(this Queue<TItemType> fromQueue, TItemType fallbackValue = default(TItemType))
+        {
+            if (fromQueue != null && fromQueue.Count > 0)
+                return fromQueue.Dequeue();
+            else
+                return fallbackValue;
+        }
+
+        #endregion
+
+        #region byte arrays as bit masks (byteArray.SetBit, byteArray.GetBit)
 
         /// <summary>
         /// Extension method to support setting an indicated bitIdx to the given value using the given byteArray as a packed bit vector.
@@ -901,6 +994,30 @@ namespace MosaicLib.Utils
         {
             return ((value != 0.0f) ? (1.0f / value) : fallbackValue);
         }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        public static bool IsNaN(this double value) { return double.IsNaN(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        public static bool IsNaN(this float value) { return float.IsNaN(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        public static bool IsInfinity(this double value) { return double.IsInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        public static bool IsInfinity(this float value) { return float.IsInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsPositiveInfinity(this double value) { return double.IsPositiveInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsPositiveInfinity(this float value) { return float.IsPositiveInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsNegativeInfinity(this double value) { return double.IsNegativeInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsNegativeInfinity(this float value) { return float.IsNegativeInfinity(value); }
 
         #endregion
 
@@ -1319,6 +1436,18 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Variant of TimeSpan.FromSeconds that derives the time span from the recriprocal of the given <paramref name="hz"/> value measured in Hertz (cycles per second) as a TimeSpan.
+        /// If the given <paramref name="hz"/> value is zero then this method returns the given fallbackValue.
+        /// </summary>
+        public static TimeSpan FromHz(this double hz, TimeSpan fallbackValue = default(TimeSpan))
+        {
+            if (hz != 0.0 && !hz.IsNaN() && !hz.IsInfinity())
+                return (1.0 / hz).FromSeconds();
+            else
+               return fallbackValue;
+        }
+
+        /// <summary>
         /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
         /// </summary>
         public static bool IsZero(this TimeSpan timeSpan)
@@ -1344,6 +1473,20 @@ namespace MosaicLib.Utils
         public static void Sleep(this TimeSpan timeSpan)
         {
             System.Threading.Thread.Sleep(timeSpan);
+        }
+
+        /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is not null</summary>
+        public static void SleepIfNotNull(this TimeSpan ? timeSpan)
+        {
+            if (timeSpan != null)
+                System.Threading.Thread.Sleep(timeSpan ?? TimeSpan.Zero);
+        }
+
+        /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is greater than zero.</summary>
+        public static void ConditionalSleep(this TimeSpan timeSpan)
+        {
+            if (timeSpan > TimeSpan.Zero)
+                System.Threading.Thread.Sleep(timeSpan);
         }
 
         #endregion
@@ -1434,7 +1577,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Linq extensions (DoForEach, Concat, FilterAndRemove, WhereIsNotDefault)
+        #region Linq extensions (DoForEach, Concat, FilterAndRemove, WhereIsNotDefault, Repeat, ZipWithIndex)
 
         /// <summary>
         /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
@@ -1484,7 +1627,7 @@ namespace MosaicLib.Utils
             return InnerConcat(item, set ?? EmptyArrayFactory<TItem>.Instance);
         }
 
-        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/></summary>
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/> where the null <paramref name="array"/> is handled as if it is empty.</summary>
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, TItem [] array)
         {
             return InnerConcat(item, array ?? EmptyArrayFactory<TItem>.Instance);
@@ -1565,7 +1708,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Linq type extension method that uses the given <paramref name="filterPredicate"/> to select which items in the given list are to be placed in the output set, removes them from the list
+        /// Linq style extension method that uses the given <paramref name="filterPredicate"/> to select which items in the given list are to be placed in the output set, removes them from the list
         /// and yields them.  If <paramref name="consecutive"/> is set to true then the filter will end as soon as the filter yields at least one element and then finds a following non-matching element.
         /// If <paramref name="fromFront"/> is set to true then the filter will end as soon as the first non-matching element is found.
         /// If <paramref name="filterPredicate"/> is null and <paramref name="mapNullFilterPredicateToAll"/> is true then this method will remove and return all of the elements in the list.
@@ -1603,21 +1746,105 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Linq type extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
-        /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/> if the caller does not explicitly provide a non-default <paramref name="eqCmp"/> instance to use.
+        /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
         /// </summary>
-        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp = null)
+        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set)
         {
-            eqCmp = eqCmp ?? EqualityComparer<TItemType>.Default;
+            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(WhereIsNotDefaultHelperClass<TItemType>.IsNotEqualToDefaultValueDelegate);
+        }
 
-            var defaultForTItemType = default(TItemType);
+        /// <summary>
+        /// Private helper class allows the static class constructor to pre-initialize a number of helper values and types for use in the WhereIsNotDefault EMs.
+        /// </summary>
+        /// <typeparam name="TItemType"></typeparam>
+        private static class WhereIsNotDefaultHelperClass<TItemType>
+        {
+            /// <summary>Gives the default value for {TItemType}</summary>
+            public static readonly TItemType DefaultValue = default(TItemType);
 
-            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, defaultForTItemType));
+            /// <summary>Gives the default equality comparer for {TItemType}</summary>
+            public static readonly IEqualityComparer<TItemType> DefaultEqualiyComparer = EqualityComparer<TItemType>.Default;
+
+            /// <summary>
+            /// Returns true if the given <paramref name="item"/> is equal to its default valueu using the default equality comparer
+            /// </summary>
+            public static bool DoesNotEqualDefaultValue(TItemType item)
+            {
+                return !DefaultEqualiyComparer.Equals(item, DefaultValue);
+            }
+
+            public static readonly Func<TItemType, bool> IsNotEqualToDefaultValueDelegate = DoesNotEqualDefaultValue;
+        }
+
+        /// <summary>
+        /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
+        /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/>.
+        /// </summary>
+        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp)
+        {
+            if (eqCmp == null)
+                return set.WhereIsNotDefault();
+            else
+                return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, WhereIsNotDefaultHelperClass<TItemType>.DefaultValue));
+        }
+
+        /// <summary>
+        /// Linq type extension method that generates an IEnumerable that produces the given <paramref name="item"/> repeated <paramref name="repeatCount"/> times.
+        /// </summary>
+        public static IEnumerable<TItemType> Repeat<TItemType>(this TItemType item, int repeatCount)
+        {
+            for (int index = 0; index < repeatCount; index++)
+            {
+                yield return item;
+            }    
+        }
+
+        /// <summary>
+        /// Variant of Linq Enumerable.Zip extension method that passes the index of the current items being zipped to the <paramref name="zipFunc"/>.  
+        /// This is in the mode of the Select variant that accepts the current item with its index in the sequence.
+        /// </summary>
+        public static IEnumerable<TResultType> ZipWithIndex<TInputTypeA, TInputTypeB, TResultType>(this IEnumerable<TInputTypeA> aEnum, IEnumerable<TInputTypeB> bEnum, Func<TInputTypeA, TInputTypeB, int, TResultType> zipFunc)
+        {
+            using (var ae = aEnum.GetEnumerator())
+            using (var be = bEnum.GetEnumerator())
+            {
+                for (int index = 0; ae.MoveNext() && be.MoveNext(); index++)
+                {
+                    yield return zipFunc(ae.Current, be.Current, index);
+                }
+            }
         }
 
         #endregion
 
-        #region Type related extension methods
+        #region Type related extension methods (SafeGetDeclaredExpressionType, TypeHelper, SafeGetInstanceType)
+
+        /// <summary>
+        /// Obtains and returns the declared type of given <paramref name="expression"/>.
+        /// <para/>returns <see cref="TypeHelper{TItemType}.Type"/> without regard to any actual target instance that the given <paramref name="expression"/> refers to.
+        /// </summary>
+        public static Type SafeGetDeclaredExpressionType<TItemType>(this TItemType expression)
+        {
+            return TypeHelper<TItemType>.Type;
+        }
+
+        /// <summary>
+        /// Type helper class.  Contains a single static <see cref="Type"/> field that is initialized to the typeof(<typeparamref name="TItemType"/>).
+        /// </summary>
+        public static class TypeHelper<TItemType>
+        {
+            /// <summary>Initialized to typeof(<typeparamref name="TItemType"/>)</summary>
+            public static readonly Type Type = typeof(TItemType);
+        }
+
+        /// <summary>
+        /// Attempts to obtain and return the <see cref="System.Type"/> from the given <paramref name="instance"/> using its GetType method.
+        /// If the given <paramref name="instance"/> is null then this method returns the given <paramref name="mapNullTo"/> value in its place.
+        /// </summary>
+        public static Type SafeGetInstanceType(this object instance, Type mapNullTo = null)
+        {
+            return (instance != null) ? instance.GetType() : mapNullTo;
+        }
 
         /// <summary>
         /// returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)
@@ -1637,7 +1864,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string GetTypeDigestName(this Type type, bool recursive = true)
         {
-            return type.ToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
+            return type.SafeToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
         }
 
         /// <summary>
@@ -1745,13 +1972,15 @@ namespace MosaicLib.Utils
 
         #region FileSystemInfo, FileInfo EMs (SafeGetOldestDateTimeUtc, SafeGetCreationAge, SafeExists, SafeLength)
 
-        /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, last modified time, and last accessed time, in UTC.</summary>
-        public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime))
+        /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, its last modified time, and (optionally) its last access time, in UTC.</summary>
+        public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime), bool includeLastAccess = true)
         {
-            if (fsi.SafeExists())
+            if (!fsi.SafeExists())
+                return fallbackValue;
+            else if (includeLastAccess)
                 return fsi.CreationTimeUtc.Min(fsi.LastWriteTimeUtc).Min(fsi.LastAccessTimeUtc);
             else
-                return fallbackValue;
+                return fsi.CreationTimeUtc.Min(fsi.LastWriteTimeUtc);
         }
 
         /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a TimeSpan (returns zero if the given <paramref name="fsi"/> instance is null)</summary>
@@ -1763,7 +1992,7 @@ namespace MosaicLib.Utils
                 return fallbackValue;
         }
 
-        /// <summary>Returns true if the given <paramref name="fsi"/> is not null and it Exists</summary>
+        /// <summary>Returns true if the given <paramref name="fsi"/> is not null and fsi.Exists is true</summary>
         public static bool SafeExists(this FileSystemInfo fsi)
         {
             return (fsi != null && fsi.Exists);
@@ -1831,7 +2060,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Exception related methods (ToString)
+        #region Exception related methods (System.Exeception.ToString(ExceptionFormat), System.Exception.Throw())
 
         /// <summary>
         /// Exception formatting helper extension method.  Accepts a given System.Exception and a ExceptionFormat parameter
@@ -1848,6 +2077,13 @@ namespace MosaicLib.Utils
                     return string.Format("{0}", ex);
 
                 StringBuilder sb = new StringBuilder("Exception");
+
+                var aex = ex as System.AggregateException;
+                if (aex != null && aex.InnerExceptions.Count == 1)
+                {
+                    sb.Append(" Aggregate.Only");
+                    ex = aex.InnerExceptions[0];
+                }
 
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeType))
                     sb.AppendFormat(" Type:{0}", ex.GetType());
@@ -1876,6 +2112,17 @@ namespace MosaicLib.Utils
         }
 
         private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
+
+        /// <summary>
+        /// Exception throw helper extension method.  This method throws the given System.Exception <paramref name="ex"/>.  
+        /// This method can be used to improve the ability of the calling method to support being inlined.
+        /// </summary>
+        /// <exception cref="System.Exception">Throws the given System.Execption</exception>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public static void Throw(this System.Exception ex)
+        {
+            throw ex;
+        }
 
         #endregion
 
@@ -1922,6 +2169,90 @@ namespace MosaicLib.Utils
             node = null;
 
             return linkedList;
+        }
+
+        #endregion
+
+        #region ICopyable EMs (SafeMakeCopyOfThis)
+
+        /// <summary>
+        /// Returns the result of calling <paramref name="item"/>.MakeCopyOfThis(<paramref name="deepCopy"/>) is <paramref name="item"/> is not null.  Otherwise returns <paramref name="fallbackValue"/>
+        /// </summary>
+        public static TItemType SafeMakeCopyOfThis<TItemType>(this TItemType item, bool deepCopy = true, TItemType fallbackValue = default(TItemType)) 
+            where TItemType : ICopyable<TItemType>
+        {
+            if (item != null)
+                return item.MakeCopyOfThis(deepCopy: deepCopy);
+
+            return fallbackValue;
+        }
+
+        #endregion
+
+        #region IEquatable EMs (SafeEquals, SafeGetHashCode)
+
+        /// <summary>
+        /// If <paramref name="item"/> is not null, then returns the results of calling <paramref name="item"/>.Equals(<paramref name="other"/>), or returns true if <paramref name="other"/> is also null, or returns false otherwise.
+        /// </summary>
+        public static bool SafeEquals<TItemType>(this TItemType item, TItemType other) where TItemType : IEquatable<TItemType>
+        {
+            if (item != null)
+                return EqualityComparer<TItemType>.Default.Equals(item, other);
+
+            return (other == null);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="item"/> is not null then this method returns the result of calling <paramref name="item"/>.GetHashCode, otherwise this method returns the given <paramref name="hashCodeForNull"/>.
+        /// </summary>
+        public static int SafeGetHashCode<TItemType>(this TItemType item, int hashCodeForNull = -1)
+        {
+            if (item != null)
+                return EqualityComparer<TItemType>.Default.GetHashCode(item);
+
+            return hashCodeForNull;
+        }
+
+        #endregion
+
+        #region Path operations (MakeRelativePath)
+
+        /// <summary>
+        /// Removes the <paramref name="rootDirPathToRemove"/> directory path prefix from the given <paramref name="path"/> if the <paramref name="path"/>
+        /// is rooted from (aka is prefixed with) the given <paramref name="rootDirPathToRemove"/>.
+        /// </summary>
+        public static string MakeRelativePath(this string path, string rootDirPathToRemove)
+        {
+            if (!System.IO.Path.IsPathRooted(path))
+               path = System.IO.Path.GetFullPath(path);
+
+            if (!System.IO.Path.IsPathRooted(rootDirPathToRemove))
+                rootDirPathToRemove = System.IO.Path.GetFullPath(rootDirPathToRemove);
+
+            char[] directorySeperatorDelimiters = new char[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.VolumeSeparatorChar };
+
+            bool rootDirPathEndsInPathDelimiter = directorySeperatorDelimiters.Contains(rootDirPathToRemove.LastOrDefault());
+
+            path = path.RemovePrefixIfNeeded(rootDirPathToRemove);
+
+            if (!rootDirPathEndsInPathDelimiter && directorySeperatorDelimiters.Contains(path.FirstOrDefault()))
+                path = path.Substring(1);
+
+            return path;
+        }
+
+        #endregion
+
+        #region Task related (StartTaskInline)
+
+        /// <summary>
+        /// This EM calls Start on the given <paramref name="task"/> instance and then returns it to support a call-chained version of Task.Start().
+        /// </summary>
+        /// <remarks>Note that attempt to use Task.StartInline for this method name caused collision with the ICF.StateInline version.</remarks>
+        public static TTaskType StartTaskInline<TTaskType>(this TTaskType task) where TTaskType : System.Threading.Tasks.Task
+        {
+            task.Start();
+            return task;
         }
 
         #endregion
@@ -1978,7 +2309,7 @@ namespace MosaicLib.Utils
     {
         #region general static [] comparison methods
 
-        /// <summary>Returns true if both arrays, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both arrays, a and b, have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
         {
             if (a == null && b == null)
@@ -1988,17 +2319,19 @@ namespace MosaicLib.Utils
             if (a.Length != b.Length)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Length;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 
             return true;
         }
 
-        /// <summary>Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both the array and the list have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -2008,17 +2341,19 @@ namespace MosaicLib.Utils
             if (a.Length != b.Count)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Length;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 
             return true;
         }
 
-        /// <summary>Returns true if both of the lists, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        /// <summary>Returns true if both of the lists, a and b, have the same length and contents (using EqualityComparer{ItemType}.Default.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(IList<ItemType> a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -2028,10 +2363,12 @@ namespace MosaicLib.Utils
             if (a.Count != b.Count)
                 return false;
 
+            var defaultEQ = EqualityComparer<ItemType>.Default;
+
             int n = a.Count;
             for (int idx = 0; idx < n; idx++)
             {
-                if (!object.Equals(a[idx], b[idx]))
+                if (!defaultEQ.Equals(a[idx], b[idx]))
                     return false;
             }
 
@@ -2159,6 +2496,77 @@ namespace MosaicLib.Utils
                 }
             }
         }
+
+        #endregion
+
+        #region Linq enumeration helper Functions (methods)
+
+        /// <summary>
+        /// This method returns an IEnumerable{double} that enumerates the values from 0.0 to 1.0 in <paramref name="n"/> steps.
+        /// If <paramref name="oneInclusive"/> is true then the range ends at 1.0 otherwise it ends at the step before 1.0.
+        /// If <paramref name="n"/> is less than or equal to zero then the resulting enumerable range will be the empty set.
+        /// If <paramref name="n"/> is 1 then the resulting enumerable will a single 0.0 value (!<paramref name="oneInclusive"/>) or a single 1.0 value (otherwise)
+        /// </summary>
+        public static IEnumerable<double> F8UnitRangeEnumerable(int n, bool oneInclusive = false)
+        {
+            if (n <= 0)
+            {
+                return f8ReadOnlyListEmpty;
+            }
+            else if (n == 1)
+            {
+                return !oneInclusive ? f8ReadOnlyList0 : f8ReadOnlyList1;
+            }
+            else if (!oneInclusive)
+            {
+                var stepInterval = ((double)n).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => posIdx * stepInterval);
+            }
+            else
+            {
+                var nMinusOne = (n - 1);
+                var stepInterval = ((double)nMinusOne).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => (posIdx == nMinusOne) ? 1.0 : posIdx * stepInterval);
+            }
+        }
+
+        private static readonly ReadOnlyIList<double> f8ReadOnlyListEmpty = new ReadOnlyIList<double>();
+        private static readonly ReadOnlyIList<double> f8ReadOnlyList0 = new ReadOnlyIList<double>(0.0);
+        private static readonly ReadOnlyIList<double> f8ReadOnlyList1 = new ReadOnlyIList<double>(1.0);
+
+
+        /// <summary>
+        /// This method returns an IEnumerable{float} that enumerates the values from 0.0 to 1.0 in <paramref name="n"/> steps.
+        /// If <paramref name="oneInclusive"/> is true then the range ends at 1.0 otherwise it ends at the step before 1.0.
+        /// If <paramref name="n"/> is less than or equal to zero then the resulting enumerable range will be the empty set.
+        /// If <paramref name="n"/> is 1 then the resulting enumerable will a single 0.0 value (!<paramref name="oneInclusive"/>) or a single 1.0 value (otherwise)
+        /// </summary>
+        public static IEnumerable<float> F4UnitRangeEnumerable(int n, bool oneInclusive = false)
+        {
+            if (n <= 0)
+            {
+                return f4ReadOnlyListEmpty;
+            }
+            else if (n == 1)
+            {
+                return !oneInclusive ? f4ReadOnlyList0 : f4ReadOnlyList1;
+            }
+            else if (!oneInclusive)
+            {
+                var stepInterval = ((float)n).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => posIdx * stepInterval);
+            }
+            else
+            {
+                var nMinusOne = (n - 1);
+                var stepInterval = ((float)nMinusOne).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => (posIdx == nMinusOne) ? 1.0f : posIdx * stepInterval);
+            }
+        }
+
+        private static readonly ReadOnlyIList<float> f4ReadOnlyListEmpty = new ReadOnlyIList<float>();
+        private static readonly ReadOnlyIList<float> f4ReadOnlyList0 = new ReadOnlyIList<float>(0.0f);
+        private static readonly ReadOnlyIList<float> f4ReadOnlyList1 = new ReadOnlyIList<float>(1.0f);
 
         #endregion
     }

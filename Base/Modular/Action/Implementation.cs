@@ -68,7 +68,7 @@ namespace MosaicLib.Modular.Action
             return "Done:{0} Error:{1} State:{2} Update:{3}{4}".CheckedFormat(DoneMesgType, ErrorMesgType, StateMesgType, UpdateMesgType, (ActionLoggingStyleSelect == Action.ActionLoggingStyleSelect.None) ? "" : " {0}".CheckedFormat(ActionLoggingStyleSelect));
         }
 
-        /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
+        /// <summary>Gives the Logging.MesgType that is to be used for successful Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
 
         /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages (including failed Action Completion messages).</summary>
@@ -95,6 +95,9 @@ namespace MosaicLib.Modular.Action
         /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
         public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
 
+        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Debug_Debug_Debug_Debug { get { return debug_debug_debug_debug; } }
+
         /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
         public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
 
@@ -111,10 +114,25 @@ namespace MosaicLib.Modular.Action
         private static readonly ActionLoggingConfig info_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig info_info_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Info, Logging.MesgType.Trace, Logging.MesgType.Trace);
+        private static readonly ActionLoggingConfig debug_debug_debug_debug = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig debug_debug_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig debug_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig trace_trace_trace_trace = new ActionLoggingConfig(Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig none_none_none_none = new ActionLoggingConfig(Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None);
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns a new ActionLoggingConfig instance with the specified (non-null) properties updated.
+        /// </summary>
+        public static ActionLoggingConfig Update(this ActionLoggingConfig other, Logging.MesgType? doneMesgType = null, Logging.MesgType? errorMesgType = null, Logging.MesgType? stateMesgType = null, Logging.MesgType? updateMesgType = null, ActionLoggingStyleSelect? actionLoggingStyleSelect = null)
+        {
+            return new ActionLoggingConfig(other, doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: actionLoggingStyleSelect);
+        }
     }
 
     /// <summary>
@@ -245,7 +263,7 @@ namespace MosaicLib.Modular.Action
                     UpdateEmitters();
                 else
                 {
-                    Logging.IMesgEmitter emitter = null;
+                    Logging.IMesgEmitter emitter;
                     if (value.TryGetValue("Done", out emitter)) 
                         Done = emitter ?? Logging.NullEmitter;
                     if (value.TryGetValue("Error", out emitter)) 
@@ -508,10 +526,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Passthough override method include to prevent warnings due to custom Equals implementation
         /// </summary>
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
+        public override int GetHashCode() { return base.GetHashCode(); }
 
         #endregion
 
@@ -547,6 +562,7 @@ namespace MosaicLib.Modular.Action
     /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState.
     /// This class is also used as the source/destination class for all DataContract serialization/deserialization of an IActionState's contents.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
     [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateCopy : ActionStateImplBase
     {
@@ -702,10 +718,10 @@ namespace MosaicLib.Modular.Action
             }
         }
 
-        /// <summary>Method sets the volatile isCancelRequested value</summary>
-        public void SetCancelRequested()
+        /// <summary>Method sets the volatile isCancelRequested to the given <paramref name="value"/> (which defaults to true)</summary>
+        public void SetCancelRequested(bool value = true)
         {
-            isCancelRequested = true;
+            isCancelRequested = value;
         }
 
         /// <summary>Attempts to change the contained StateCode to ActionStateCode.Started.</summary>
@@ -897,7 +913,7 @@ namespace MosaicLib.Modular.Action
     /// <para/>Use MosaicLib.Modular.Common.NullObj in place of the ParamType or ResultType if that capability is not needed for this action implementation type.
 	/// </summary>
 	/// <typeparam name="ParamType">Defines the type of the Parameter value that may be provided with this Action.</typeparam>
-	/// <typeparam name="ResultType">Defines the type of the Result value that may be provided by the Part on successfull completion of this Action.</typeparam>
+	/// <typeparam name="ResultType">Defines the type of the Result value that may be provided by the Part on successful completion of this Action.</typeparam>
 	public class ActionImplBase<ParamType, ResultType> 
 		: IClientFacetWithParamAndResult<ParamType, ResultType>
 		, IProviderActionBase<ParamType, ResultType>
@@ -953,7 +969,8 @@ namespace MosaicLib.Modular.Action
         public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging loggingIn, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 		{
 			this.actionQ = actionQ;
-			this.method = method;
+            this.actionStateMutex = ((actionQ != null) ? actionQ.SharedActionStateMutex : null) ?? new object();
+            this.method = method;
 
             var cloneLogging = !doNotCloneLogging;
 
@@ -990,16 +1007,16 @@ namespace MosaicLib.Modular.Action
 		#region private and protected fields and properties
 
 		private volatile bool isCancelRequestActive = false;
-		private ActionQueue actionQ = null;
-		private FullActionMethodDelegate<ParamType, ResultType> method = null;
-		private ActionLogging logging;
-		private readonly object actionStateMutex = new object();
-		private ActionStateImpl actionState = new ActionStateImpl();
+		private readonly ActionQueue actionQ;
+        private readonly object actionStateMutex;
+        private readonly FullActionMethodDelegate<ParamType, ResultType> method;
+		private readonly ActionLogging logging;
+		private readonly ActionStateImpl actionState = new ActionStateImpl();
         private IActionState iActionState = null;
-        private BasicNotificationList notifyOnComplete = new BasicNotificationList();
-        private BasicNotificationList notifyOnUpdate = new BasicNotificationList();
+        private readonly BasicNotificationList notifyOnComplete = new BasicNotificationList();
+        private readonly BasicNotificationList notifyOnUpdate = new BasicNotificationList();
         private ParamType paramValue;
-		private bool paramValueIsFixed;
+		private readonly bool paramValueIsFixed;
 		private ResultType resultValue = default(ResultType);
 
         /// <summary>Protected property that reports the ActionLogging instance that this Action is using for its logging.</summary>
@@ -1007,11 +1024,13 @@ namespace MosaicLib.Modular.Action
 
         IActionLogging IProviderFacet.Logging { get { return logging; } }
 
+
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
         protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
 
         /// <summary>Private static SingletonHelper used to create and manage the standard Action's SharedWaitEventNotifierSet</summary>
-        private static Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
+        private static readonly Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
 
 		#endregion
 
@@ -1159,24 +1178,28 @@ namespace MosaicLib.Modular.Action
         /// Client invokes this to request that the current action be canceled.  This is only meaningfull when action has been successfully started and is not complete.
         /// Provider may invoke this to internally indicate that the action should be canceled.
         /// </summary>
+        /// <remarks>
+        /// NOTE: this method is callable by both the client and the provider.  It is intentionally written as being asynchronous.  
+        /// If both the client and the provider request cancelation simultaniously it may produce unexpected log output but it will otherwise accomplish its essential purpose.
+        /// </remarks>
         public void RequestCancel()
 		{
-			if (!isCancelRequestActive)
-			{
-				isCancelRequestActive = true;
+            if (!isCancelRequestActive)
+            {
+                isCancelRequestActive = true;
                 actionState.SetCancelRequested();
 
-				ActionQueue aq = actionQ;
-				IActionState ias = ActionState;
+                ActionQueue aq = actionQ;
+                IActionState ias = ActionState;
 
-				if (aq != null && ias.IsStarted)
-				{
-					aq.NoteCancelHasBeenRequestedOnRelatedAction();
-					aq.ServiceCancelRequests();
-				}
+                if (aq != null && ias.IsStarted)
+                {
+                    aq.NoteCancelHasBeenRequestedOnRelatedAction();
+                    aq.ServiceCancelRequests();
+                }
 
-				EmitActionEvent("Cancel has been requested", ActionState.StateCode);
-			}
+                EmitActionEvent("Cancel has been requested", ActionState.StateCode);
+            }
 		}
 
         /// <summary>Property gives access to the dynamically updating IActionState for this action</summary>
@@ -1237,14 +1260,14 @@ namespace MosaicLib.Modular.Action
 					{
 						EmitActionError("Preventing attempt to update fixed paramValue", actionState.StateCode);
 
-						throw new System.FieldAccessException("Action.ParamValue set failed: value is fixed");
+						new System.FieldAccessException("Action.ParamValue set failed: value is fixed").Throw();
 					}
 
 					if (!actionState.CanStart)
 					{
 						EmitActionError("Preventing attempt to update paramValue", actionState.StateCode);
 
-						throw new System.FieldAccessException("Action.ParamValue can only be set while action is Idle");
+						new System.FieldAccessException("Action.ParamValue can only be set while action is Idle").Throw();
 					}
 
 					paramValue = value;
@@ -1305,7 +1328,7 @@ namespace MosaicLib.Modular.Action
 		#region IProviderActionBase<ParamType, ResultType> (et. al.)
 
         /// <summary>
-        /// Gives the provider get/set access to set the ParamValue - getter simple returns the stored value as last set by the client or the provider.  Setter locks the actionState, sets the value and Emits an action event
+        /// Gives the provider get/set access to set the ParamValue - getter simply returns the stored value as last set by the client or the provider.  Setter locks the actionState, sets the value and Emits an action event
         /// </summary>
         ParamType IProviderActionBase<ParamType, ResultType>.ParamValue
         {
@@ -1340,14 +1363,24 @@ namespace MosaicLib.Modular.Action
 			CompleteRequest(resultCode);
 		}
 
+        /// <summary>
+        /// Sets the state to <see cref="ActionStateCode.Issued"/>.  Used internally and by unit test code.
+        /// </summary>
+        public void SetStateIssued()
+        {
+            lock (actionStateMutex)
+            {
+                actionState.SetStateIssued(logging);
+                NoteActionStateUpdated();
+            }
+
+            notifyOnUpdate.Notify();
+        }
+
         /// <summary>Provider invokes this to dispatch the mark the action as issued and invoke its delegate method.</summary>
         public void IssueAndInvokeAction()
 		{
-			lock (actionStateMutex) 
-			{ 
-				actionState.SetStateIssued(logging);
-                NoteActionStateUpdated();
-			}
+            SetStateIssued();
 
 			if (IsCancelRequestActive)
 			{
@@ -1409,6 +1442,8 @@ namespace MosaicLib.Modular.Action
                 actionState.UpdateNamedValues(namedValueSet, logging);
                 NoteActionStateUpdated();
             }
+
+            notifyOnUpdate.Notify();
         }
 
         /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
@@ -1438,7 +1473,8 @@ namespace MosaicLib.Modular.Action
                 NoteActionStateUpdated();
             }
 
-			notifyOnComplete.Notify();
+            notifyOnUpdate.Notify();
+            notifyOnComplete.Notify();
         }
 
 		#endregion
@@ -1490,11 +1526,13 @@ namespace MosaicLib.Modular.Action
                 return "{0}[{1}] state:{2}".CheckedFormat(mesg, eMesgDetail, ActionState);
         }
 
-        /// <summary>Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.</summary>
+        /// <summary>
+        /// Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.
+        /// <para/>Note: this method no longer calls Notify on the notifyOnUpdate list as that operation must only be done while not owning the action state mutex.
+        /// </summary>
         protected void NoteActionStateUpdated()
         {
             iActionState = null;
-            notifyOnUpdate.Notify();
         }
 
         /// <summary>
@@ -1539,7 +1577,7 @@ namespace MosaicLib.Modular.Action
         /// the ActionQueue object that the Part will use for this Action.
         /// </summary>
         /// <exception cref="System.InvalidCastException">Thown if paramProvided is true and given paramValueObj cannot be casted to this implementation's ParamType.</exception>
-        public string Start(object paramValueObj, bool paramProvided)
+        public string Start(object paramValueObj, bool paramProvided, string nullQueueResultCode = "The ActionQ is null")
 		{
 			lock (actionStateMutex)
 			{
@@ -1548,11 +1586,19 @@ namespace MosaicLib.Modular.Action
 
 				if (!actionState.CanStart)
 				{
-					string ec = "Action.Start failed: action is not Idle";
+					string ec = "Action.Start failed: action state code is neither Ready nor Complete";
 
 					EmitActionError(ec, actionState.StateCode);
 					return ec;
 				}
+
+                if (isCancelRequestActive || actionState.IsCancelRequested)
+                {
+                    isCancelRequestActive = false;
+                    actionState.SetCancelRequested(false);
+
+                    EmitActionEvent("prior Cancel Request has been cleared by Start", actionState.StateCode);
+                }
 
                 if (paramProvided)
 				{
@@ -1562,14 +1608,17 @@ namespace MosaicLib.Modular.Action
 
                 CaptureClientNamedParamValues();
 
-                isCancelRequestActive = false;
-
                 actionState.SetStateStarted(logging);
                 NoteActionStateUpdated();
 			}
 
-			return actionQ.Enqueue(this);
-		}
+            notifyOnUpdate.Notify();
+
+            if (actionQ != null)
+    			return actionQ.Enqueue(this);
+            else
+                return nullQueueResultCode;
+        }
 
 
 		#endregion

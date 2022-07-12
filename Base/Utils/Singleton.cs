@@ -243,7 +243,7 @@ namespace MosaicLib.Utils
             this.instanceConstructionDelegate = instanceConstructionDelegate;
 
             if (instanceConstructionDelegate == null && behavior.IsAutoConstructBehavior())
-                throw new SingletonException("Attempt to use a null instanceConstructionDelegate with {0} behavior".CheckedFormat(behavior));
+                new SingletonException("Attempt to use a null instanceConstructionDelegate with {0} behavior".CheckedFormat(behavior)).Throw();
         }
 
         /// <summary>
@@ -307,7 +307,7 @@ namespace MosaicLib.Utils
                 if (value == null)
                 {
                     if (IsDisposed)
-                        throw new SingletonException("Attempt to get Instance after SingletonHelper has been disposed");
+                        new SingletonException("Attempt to get Instance after SingletonHelper has been disposed").Throw();
 
                     lock (instanceMutex)
                     {
@@ -317,7 +317,7 @@ namespace MosaicLib.Utils
                         {
                             if (recursiveConstructionCount.Increment() != 1)
                             {
-                                throw new SingletonException("Invalid Recursive using of SingletonHelper.Instance property, likely within the constructor for the instance.");
+                                new SingletonException("Invalid Recursive using of SingletonHelper.Instance property, likely within the constructor for the instance.").Throw();
 
                                 //Warning: the above exception has taken some time to discover the need for.  
                                 // This code guards against a singleton object's constructor using other entities that may accidentally
@@ -329,7 +329,7 @@ namespace MosaicLib.Utils
                             value = instanceConstructionDelegate();
 
                             if (value == null)
-                                throw new SingletonException("instanceConstructionDelegate returned null.");
+                                new SingletonException("instanceConstructionDelegate returned null.").Throw();
 
                             recursiveConstructionCount.Decrement();
 
@@ -339,7 +339,7 @@ namespace MosaicLib.Utils
                     }
 
                     if (value == null && !Behavior.DoesBehaviorPermitInstanceGetterToReturnNull())
-                        throw new SingletonException("Attempt to get Instance from {0} SingletonHelper before Instance was assigned to a non-null value".CheckedFormat(Behavior));
+                        new SingletonException("Attempt to get Instance from {0} SingletonHelper before Instance was assigned to a non-null value".CheckedFormat(Behavior)).Throw();
                 }
 
                 return value;
@@ -350,16 +350,16 @@ namespace MosaicLib.Utils
                 lock (instanceMutex)
                 {
                     if (!Behavior.InstanceCanBeManuallyAssignedBehavior())
-                        throw new SingletonException("Attempt to assign value to {0} SingletonHelper Instance".CheckedFormat(Behavior));
+                        new SingletonException("Attempt to assign value to {0} SingletonHelper Instance".CheckedFormat(Behavior)).Throw();
 
                     if (IsDisposed)
-                        throw new SingletonException("Attempt to set Instance after SingletonHelper has been disposed");
+                        new SingletonException("Attempt to set Instance after SingletonHelper has been disposed").Throw();
 
                     if (value == null && !Behavior.DoesBehaviorPermitInstanceToBeSetToNull())
-                        throw new SingletonException("Attempt to set Instance to null value with {0} behavior".CheckedFormat(Behavior));
+                        new SingletonException("Attempt to set Instance to null value with {0} behavior".CheckedFormat(Behavior)).Throw();
 
                     if (instance != null && value != null)
-                        throw new SingletonException("Attempt to replace existing non-null Instance");
+                        new SingletonException("Attempt to replace existing non-null Instance").Throw();
 
                     if (instance != null && value == null)
                         InnerDispose();

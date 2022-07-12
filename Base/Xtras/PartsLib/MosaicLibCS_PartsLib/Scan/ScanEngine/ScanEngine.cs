@@ -302,7 +302,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEnginePart Add(params IScanEnginePlugin[] pluginParamsArray)
         {
             if (HasBeenStarted)
-                throw new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             scanEngineHelper.AddRange(pluginParamsArray);
 
@@ -312,7 +312,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEnginePart AddRange(IEnumerable<IScanEnginePlugin> pluginSet)
         {
             if (HasBeenStarted)
-                throw new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             return AddRange(pluginSet.ToArray());
         }
@@ -320,7 +320,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEnginePart Add<TValueType>(DelegateItemSpec<TValueType> delegateItemSpec)
         {
             if (HasBeenStarted)
-                throw new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after part has been Started".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             scanEngineHelper.Add(delegateItemSpec);
 
@@ -385,7 +385,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEngineHelper Add(IScanEnginePlugin plugin)
         {
             if (hasBeenSetup)
-                throw new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             return AddRange(new[] { plugin });
         }
@@ -393,7 +393,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEngineHelper Add(params IScanEnginePlugin[] pluginArray)
         {
             if (hasBeenSetup)
-                throw new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             return AddRange(pluginArray);
         }
@@ -401,7 +401,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEngineHelper AddRange(IEnumerable<IScanEnginePlugin> pluginSet)
         {
             if (hasBeenSetup)
-                throw new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             foreach (IScanEnginePlugin plugin in pluginSet ?? emptyPluginArray)
             {
@@ -416,7 +416,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEngineHelper Add<TValueType>(DelegateItemSpec<TValueType> delegateItemSpec)
         {
             if (hasBeenSetup)
-                throw new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName));
+                new System.InvalidOperationException("{0} is not valid after object has been Setup or Serviced".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             delegateValueSetAdapter.Add(delegateItemSpec);
 

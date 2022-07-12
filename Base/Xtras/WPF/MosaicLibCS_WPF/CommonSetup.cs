@@ -65,14 +65,19 @@ namespace MosaicLib.WPF.Common
         /// <summary>
         /// This method generates a useful default LogBaseName which is derived from the FullName of the calling assembly by taking the first portion up to the first ','
         /// </summary>
-        public static string DefaultLogBaseName { get { return CallerAssembly.GetAssemblyNameFromFullName(); } }
+        public static string DefaultLogBaseName { get { return CallerAssembly.GetAssemblyShortName(); } }
 
-        private static string GetAssemblyNameFromFullName(this System.Reflection.Assembly assembly)
+        /// <summary>
+        /// Gets the <paramref name="assembly"/>'s "short name".
+        /// Gets the FullName from the given <paramref name="assembly"/> and returns the parts that comes before the first comma (',')
+        /// <para/>for example "TestAssembly, Version=0.1.7.0, Culture=neutral, PublicKeyToken=null" => "TestAssembly"
+        /// </summary>
+        public static string GetAssemblyShortName(this System.Reflection.Assembly assembly, string fallbackValue = "$$GivenAssemblyIsNull$$")
         {
             if (assembly != null)
                 return assembly.FullName.Split(new[] { ',' }, 2).SafeAccess(0); // split off the "name" of the assembly from the other parts that make up its "full" name.
             else
-                return "$$GivenAssemblyIsNull$$";
+                return fallbackValue;
         }
 
         /// <summary>
@@ -81,6 +86,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static System.Reflection.Assembly CallerAssembly
         {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
             get
             {
                 try
@@ -253,11 +259,27 @@ namespace MosaicLib.WPF.Common
         /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
         /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
         /// <para/>See the description and remarks for the full HandleOnStartup method variant for more details.
+        /// <para/>The following is a list of well known named values that are supported by this method:
+        /// <list type="bullet">
+        /// <item>logBaseName: optional name used in the default log file names that are generated.  When null the hosting assembly's name will be used.  Also used to name the main thread if it has not already been named.</item>
+        /// <item>addWPFLMH: no longer supported - ignored</item>
+        /// <item>addSetLMH: pass as true to enable creating a set based log message handler.</item>
+        /// <item>enableUEH: if true, this method will install an unhandled exception handler, if none has already been established.  Set to false to disable this behavior.</item>
+        /// <item>providerSelect: set to StandardProviderSelect value to override the default behavior of StandardProviderSelect.All.  This value will be ignored if there are already any providers registered with Config.Instance when this method is called.  If the given argsRef array value is null then MainArgs will be excluded from this value.</item>
+        /// <item>uehFileWritePath: may be used to override the config key value (Config.UnhandledExceptionEventHandler.FilePath), and/or its initial value.  Must be non-empty to enable setting up an UEH.</item>
+        /// <item>mainLoggerType: may be used to override the config key value (Config.Logging.MainLogger.Type), and/or its initial value.  When neither this parameter, nor the configuration key are found to give a valid FileRingLogMessageHandlerType value, the static DefaultMainLoggerType is used.</item>
+        /// <item>diagTraceLMHSettingFlags, setLMHSettingFlags: may be used to override the corresponding config key values (Config.Logging.DiagnosticTrace/Set), and/or their initial values. (LogMessageHandlerSettingFlags)</item>
+        /// <item>setName, setCapacity, setLogGate: may be used to override the corresponding config key values (Config.Logging.Set.Name/Capacity/LogGate), and/or their initial values.</item>
+        /// <item>appEventMesgType: may be used to define the MesgType to be used for App Event messages.  When present, this key's value is used to set the AppEventMesgType.</item>
+        /// <item>traceLoggingGroupName: may be used to override the config key value (Config.Logging.TraceRing.LGID) and/or its initial value.</item>
+        /// <item>traceRingLinkFromDefaultGroup, traceRingLinkToDefaultGroup: when present these boolean values control the corresponding function without regard to the contents of the corresponding modular config values.</item>
+        /// <item>preloadMainFileRingLoggingConfigFromNVS, preloadMainDateTreeLoggingConfigFromNVS, preloadTraceFileRingLoggingConfigFromNVS: allows the client to specify an NVS that is used to setup the underlying logging config object using a NamedValueSetAdapter before the Modular.Config based values are applied.</item>
+        /// </list>
         /// </summary>
-        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, INamedValueSet nvs)
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, INamedValueSet nvs, System.Reflection.Assembly hostingAssy = null)
         {
             string[] args = (e != null) ? e.Args : null;
-            HandleOnStartup(ref args, ref appLogger, nvs: nvs);
+            HandleOnStartup(ref args, ref appLogger, nvs: nvs, hostingAssy: hostingAssy);
         }
 
         /// <summary>
@@ -277,36 +299,37 @@ namespace MosaicLib.WPF.Common
                 { "enableUEH", enableUEH },
             });
         }
-        
+
         /// <summary>
         /// Full HandleOnStartup method signature.
         /// <paramref name="argsRef"/> line arguments string array will be used with the (optional) initial setup of Modular.Config.  
         /// If this parameter is non-null, it will be processed to extract the key=value items it contains, and will be replaced with a new array that has the consumed key=value items removed from it.
         /// <paramref name="appLogger"/> will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
         /// <paramref name="nvs"/> is used to pass all directly caller configurable values that are supported by this method (see remarks section below)
+        /// <paramref name="hostingAssy"/> allows the caller to provide the hosting assembly that will be used.  If null then the CallerAssembly will be used as the hosting assembly.
+        /// <list type="bullet">
+        /// <item>logBaseName: optional name used in the default log file names that are generated.  When null the hosting assembly's name will be used.  Also used to name the main thread if it has not already been named.</item>
+        /// <item>addWPFLMH: no longer supported - ignored</item>
+        /// <item>addSetLMH: pass as true to enable creating a set based log message handler.</item>
+        /// <item>enableUEH: if true, this method will install an unhandled exception handler, if none has already been established.  Set to false to disable this behavior.</item>
+        /// <item>providerSelect: set to StandardProviderSelect value to override the default behavior of StandardProviderSelect.All.  This value will be ignored if there are already any providers registered with Config.Instance when this method is called.  If the given argsRef array value is null then MainArgs will be excluded from this value.</item>
+        /// <item>uehFileWritePath: may be used to override the config key value (Config.UnhandledExceptionEventHandler.FilePath), and/or its initial value.  Must be non-empty to enable setting up an UEH.</item>
+        /// <item>mainLoggerType: may be used to override the config key value (Config.Logging.MainLogger.Type), and/or its initial value.  When neither this parameter, nor the configuration key are found to give a valid FileRingLogMessageHandlerType value, the static DefaultMainLoggerType is used.</item>
+        /// <item>diagTraceLMHSettingFlags, setLMHSettingFlags: may be used to override the corresponding config key values (Config.Logging.DiagnosticTrace/Set), and/or their initial values. (LogMessageHandlerSettingFlags)</item>
+        /// <item>setName, setCapacity, setLogGate: may be used to override the corresponding config key values (Config.Logging.Set.Name/Capacity/LogGate), and/or their initial values. [defaults: LogMessageHistory, 1000, Debug]</item>
+        /// <item>appEventMesgType: may be used to define the MesgType to be used for App Event messages.  When present, this key's value is used to set the AppEventMesgType. [default: Signif]</item>
+        /// <item>traceLoggingGroupName: may be used to override the config key value (Config.Logging.TraceRing.LGID) and/or its initial value.</item>
+        /// <item>traceRingLinkFromDefaultGroup, traceRingLinkToDefaultGroup: when present these boolean values control the corresponding function without regard to the contents of the corresponding modular config values.</item>
+        /// <item>preloadMainFileRingLoggingConfigFromNVS, preloadMainDateTreeLoggingConfigFromNVS, preloadTraceFileRingLoggingConfigFromNVS: allows the client to specify an NVS that is used to setup the underlying logging config object using a NamedValueSetAdapter before the Modular.Config based values are applied.</item>
+        /// </list>
         /// </summary>
-        /// <remarks>
-        /// logBaseName: optional name used in the default log file names that are generated.  Also used to name the main thread if it has not already been named.
-        /// addWPFLMH: no longer supported - ignored
-        /// addSetLMH: pass as true to enable creating a set based log message handler.
-        /// enableUEH: if true, this method will install an unhandled exception handler, if none has already been established.  Set to false to disable this behavior.
-        /// providerSelect: set to StandardProviderSelect value to override the default behavior of StandardProviderSelect.All.  This value will be ignored if there are already any providers registered with Config.Instance when this method is called.  If the given argsRef array value is null then MainArgs will be excluded from this value.
-        /// uehFileWritePath: may be used to override the config key value (Config.UnhandledExceptionEventHandler.FilePath), and/or its initial value.  Must be non-empty to enable setting up an UEH.
-        /// mainLoggerType: may be used to override the config key value (Config.Logging.MainLogger.Type), and/or its initial value.  When neither this parameter, nor the configuration key are found to give a valid FileRingLogMessageHandlerType value, the static DefaultMainLoggerType is used.
-        /// diagTraceLMHSettingFlags, setLMHSettingFlags: may be used to override the corresponding config key values (Config.Logging.DiagnosticTrace/Set), and/or their initial values. (LogMessageHandlerSettingFlags)
-        /// setName, setCapacity, setLogGate: may be used to override the corresponding config key values (Config.Logging.Set.Name/Capacity/LogGate), and/or their initial values.
-        /// appEventMesgType: may be used to define the MesgType to be used for App Event messages.  When present, this key's value is used to set the AppEventMesgType.
-        /// traceLoggingGroupName: may be used to override the config key value (Config.Logging.TraceRing.LGID) and/or its initial value.
-        /// traceRingLinkFromDefaultGroup, traceRingLinkToDefaultGroup: when present these boolean values control the corresponding function without regard to the contents of the corresponding modular config values.
-        /// </remarks>
-        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, INamedValueSet nvs = null)
+        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, INamedValueSet nvs = null, System.Reflection.Assembly hostingAssy = null)
         {
-            System.Reflection.Assembly callerAssy = CallerAssembly;
+            hostingAssy = hostingAssy ?? CallerAssembly;
 
             nvs = nvs.MapNullToEmpty();
 
-            string logBaseName = nvs["logBaseName"].VC.GetValue<string>(rethrow: false)
-                                ?? callerAssy.GetAssemblyNameFromFullName();
+            string logBaseName = nvs["logBaseName"].VC.GetValueA(rethrow: false) ?? hostingAssy.GetAssemblyShortName();
             bool addWPFLMH = nvs["addWPFLMH"].VC.GetValue<bool?>(rethrow: false) ?? false;
             bool addSetLMH = nvs["addSetLMH"].VC.GetValue<bool?>(rethrow: false) ?? false;
             bool enableUEH = nvs["enableUEH"].VC.GetValue<bool?>(rethrow: false) ?? true;
@@ -322,15 +345,15 @@ namespace MosaicLib.WPF.Common
             IConfig config = Config.Instance;
 
             StandardProviderSelect providerSelect = nvs["providerSelect"].VC.GetValue<StandardProviderSelect>(rethrow: false, defaultValue: StandardProviderSelect.All);
-            if (argsRef == null)
-                providerSelect &= ~StandardProviderSelect.MainArgs;
+            if (argsRef == null && providerSelect.IsSet(StandardProviderSelect.MainArgs))
+                argsRef = System.Environment.GetCommandLineArgs();
 
             if (providerSelect != StandardProviderSelect.None && config.Providers.IsNullOrEmpty())
                 config.AddStandardProviders(ref argsRef, providerSelect: providerSelect);
 
             if (enableUEH && UnhandledExceptionEventHandler != null)
             {
-                uehFileWritePath = nvs["uehFileWritePath"].VC.GetValue<string>(rethrow: false)
+                uehFileWritePath = nvs["uehFileWritePath"].VC.GetValueA(rethrow: false)
                                     ?? config.GetConfigKeyAccessOnce("Config.UnhandledExceptionEventHandler.FilePath", silenceLogging: true).GetValue(uehFileWritePath);
 
                 if (!uehFileWritePath.IsNullOrEmpty())
@@ -353,14 +376,14 @@ namespace MosaicLib.WPF.Common
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: hostingAssy),
                 fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 logGate = Logging.LogGate.Debug,
             };
 
             Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
             {
-                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
+                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: hostingAssy),
                 FileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 LogGate = Logging.LogGate.Debug,
             };
@@ -368,10 +391,10 @@ namespace MosaicLib.WPF.Common
             switch (mainLoggerType)
             {
                 case FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler:
-                    fileRotationRingConfig.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter, configInstance: config);
+                    fileRotationRingConfig.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter, configInstance: config, preloadFromNVS: nvs["preloadMainFileRingLoggingConfigFromNVS"].VC.GetValueNVS(rethrow: false));
                     break;
                 case  FileRingLogMessageHandlerType.TextFileDateTreeDirectoryLogMessageHandler:
-                    dateTreeDirConfig.UpdateFromModularConfig("Config.Logging.DateTree.", issueListEmitter, valuesListEmitter, configInstance: config);
+                    dateTreeDirConfig.UpdateFromModularConfig("Config.Logging.DateTree.", issueListEmitter, valuesListEmitter, configInstance: config, preloadFromNVS: nvs["preloadMainDateTreeLoggingConfigFromNVS"].VC.GetValueNVS(rethrow: false));
                     break;
 
                 default:
@@ -411,7 +434,7 @@ namespace MosaicLib.WPF.Common
             Logging.ILogMessageHandler setLMH = null;
             if (addSetLMH)
             {
-                string setName = nvs["setName"].VC.GetValue<string>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("LogMessageHistory");
+                string setName = nvs["setName"].VC.GetValueA(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("LogMessageHistory");
                 int setCapacity = nvs["setCapacity"].VC.GetValue<int?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").GetValue(1000);
                 Logging.LogGate setLogGate = nvs["setLogGate"].VC.GetValue<Logging.LogGate?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").GetValue(Logging.LogGate.Debug);
 
@@ -444,7 +467,7 @@ namespace MosaicLib.WPF.Common
             Logging.ILogMessageHandler mainLMHQueueLMH = new Logging.Handlers.QueueLogMessageHandler("lmhMainSet.q", mainLMHList.ToArray(), maxQueueSize: maxQueueSize);
             Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMHQueueLMH);
 
-            string traceLoggingGroupName = nvs["traceLoggingGroupName"].VC.GetValue<string>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID", silenceLogging: true).GetValue("LGID.Trace");
+            string traceLoggingGroupName = nvs["traceLoggingGroupName"].VC.GetValueA(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID", silenceLogging: true).GetValue("LGID.Trace");
             bool traceRingEnable = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.Enable").GetValue(!traceLoggingGroupName.IsNullOrEmpty());
 
             if (traceRingEnable)
@@ -455,10 +478,10 @@ namespace MosaicLib.WPF.Common
                     mesgQueueSize = traceQueueSize,
                     nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
                     includeThreadInfo = true,
-                    fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: callerAssy),
+                    fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: hostingAssy),
                     fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                     logGate = Logging.LogGate.All,
-                }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter, configInstance: config);
+                }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter, configInstance: config, preloadFromNVS: nvs["preloadTraceFileRingLoggingConfigFromNVS"].VC.GetValueNVS(rethrow: false));
 
                 Logging.ILogMessageHandler traceRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(traceRingConfig);
 

@@ -22,7 +22,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 using MosaicLib.Modular.Common;
@@ -127,7 +126,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     /// This enumeration serves two purposes (joke not intended) 
     /// - it defines the valid set of purposes that a buffer can be used for
     /// - and it is composed of values choosen to support use as magic numbers.
-    /// <para/>None (0x00000000), Management (0xde47ea12), MessageStart (0xde47ea13), MessageMiddle (0xde47ea14), MessageEnd (0xde47ea15), Message (0xde47ea16)
+    /// <para/>None (0x00000000), Management (0xde47ea12), MessageStart (0xde47ea13), MessageMiddle (0xde47ea14), MessageEnd (0xde47ea15), Message (0xde47ea16), Ack (0xde47ea17)
     /// </summary>
     public enum PurposeCode : uint
     {
@@ -155,7 +154,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
     /// <summary>
     /// When a buffer carries a Management payload, it is expected to have NVS contents and in those contents it is expected to have a Type keyword with one of the following values to indicate the type of Management that is being performed.
-    /// <para/>None (0), RequestOpenSession, RequestResumeSession, SessionRequestAcceptedResponse, NoteSessionTerminated, Status
+    /// <para/>None (0), RequestOpenSession, SessionRequestAcceptedResponse, RequestCloseSession, NoteSessionTerminated, Status, KeepAlive
     /// </summary>
     public enum ManagementType : uint
     {
@@ -248,6 +247,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         /// <summary>Final state of a buffer that was returned to a buffer pool but which could not be retained there.</summary>
         Released,
+
+        /// <summary>State reached after a buffer has been returned to its pool</summary>
+        Returned,
     }
 
     public static partial class ExtensionMethods
@@ -294,7 +296,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// Constructs a buffer of the requested <paramref name="bufferSize"/>.
         /// </summary>
         public Buffer(int bufferSize, BufferPool bufferPool = null, Logging.IMesgEmitter stateEmitter = null)
-            : this(stateEmitter)
         {
             this.bufferPool = bufferPool;
 
@@ -302,13 +303,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             byteArraySize = bufferSize;
 
             byteCount = header.Length;
-        }
 
-        /// <summary>
-        /// internal common constructor
-        /// </summary>
-        protected Buffer(Logging.IMesgEmitter stateEmitter)
-        {
             StateEmitter = stateEmitter ?? Logging.NullMesgEmitter.Instance;
             BufferName = "Buffer_{0:x4}".CheckedFormat(nameInstanceNum & 0xffff);
         }
@@ -340,15 +335,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         public BufferHeaderFlags Flags { get { return header.Flags; } set { header.Flags = value; } }
 
         public Messages.Message Message { get; set; }
-        public INotifyable NotifyOnSetState { get; set; }
+        public Action<QpcTimeStamp, Buffer> NotifyAfterSetState { get; set; }
+
+        public ManagementType ManagementType { get; set; }
 
         public BufferHeaderV1 header;
         public int byteArraySize;
 
         public int byteCount;
         public byte[] byteArray;
-
-        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         public Buffer SetState(QpcTimeStamp qpcTimeStamp, BufferState state, string reason)
         {
@@ -366,14 +361,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             if (StateEmitter.IsEnabled)
                 StateEmitter.Emit("{0} State changed to {1} [from: {2}, reason: {3}]", BufferName, state, entryState, reason ?? "NoReasonGiven");
 
-            INotifyable notifyOnStateChange = NotifyOnSetState;
-            if (notifyOnStateChange != null)
-                notifyOnStateChange.Notify();
+            var notifyAfterStateChange = NotifyAfterSetState;
+            if (notifyAfterStateChange != null)
+                notifyAfterStateChange.Invoke(qpcTimeStamp, this);
 
             return this;
         }
 
-        public Buffer Update(PurposeCode? purposeCode = null, BufferHeaderFlags? orInFlags = null, ulong? seqNum = null, int? byteCount = null, ulong? ackSeqNum = null, INamedValueSet buildPayloadDataFromE005NVS = null, bool throwOnException = false, byte[] copyPayloadDataFromByteArray = null, INotifyable notifyOnSetState = null)
+        public Buffer Update(PurposeCode? purposeCode = null, BufferHeaderFlags? orInFlags = null, ulong? seqNum = null, int? byteCount = null, ulong? ackSeqNum = null, INamedValueSet buildPayloadDataFromE005NVS = null, bool throwOnException = false, byte[] copyPayloadDataFromByteArray = null, Action<QpcTimeStamp, Buffer> notifyAfterSetState = null, ManagementType ? managementType = null)
         {
             if (purposeCode != null)
                 header.PurposeCode = purposeCode ?? PurposeCode.None;
@@ -402,8 +397,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
                 this.byteCount = Math.Min(header.Length + copyPayloadDataFromByteArray.Length, byteArraySize);
             }
 
-            if (notifyOnSetState != null)
-                NotifyOnSetState = notifyOnSetState;
+            if (notifyAfterSetState != null)
+                NotifyAfterSetState = notifyAfterSetState;
+
+            if (managementType != null)
+                ManagementType = managementType ?? ManagementType.None;
 
             return this;
         }
@@ -442,7 +440,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             header = BufferHeaderV1.Empty;
             byteCount = header.Length;
             Message = null;
-            NotifyOnSetState = null;
+            NotifyAfterSetState = null;
 
             if (clearByteArrayContents)
                 System.Array.Clear(byteArray, 0, byteArraySize);
@@ -530,23 +528,65 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
     #endregion
 
-    #region BufferPool
+    #region IBufferPoolInfo, BufferPool
+
+    /// <summary>
+    /// This interface is used to allow external entities to gain access to a set of get only information about a buffer pool's state and counter values.
+    /// </summary>
+    public interface IBufferPoolInfo
+    {
+        /// <summary></summary>
+        string Name { get; }
+
+        /// <summary>Gives the configured maximum total size for the buffer.</summary>
+        int MaxTotalSpaceInBytes { get; }
+
+        /// <summary>Gives the currently configured buffer size.</summary>
+        int BufferSize { get; }
+
+        /// <summary>Gives the configured maximum number of buffers that can be retained in the pool.  Calculated from the MaxTotalSpaceInBytes and the BufferSize</summary>
+        int MaxBuffersToRetain { get; }
+
+        /// <summary>Gives the current number of buffers in the pool</summary>
+        int BufferCount { get; }
+
+        /// <summary>Gives the current total available buffer bytes [<see cref="BufferCount"/> times <see cref="BufferSize"/>].</summary>
+        int AvailableBytes { get; }
+
+        /// <summary>Gives the number of times that the Acquire method has been called.</summary>
+        int AcquireCount { get; }
+
+        /// <summary>Gives the total number of new buffers that have been created in the pool (incremented before creation)</summary>
+        int AllocateCount { get; }
+
+        /// <summary>Gives the number of times that the Release method has been called.</summary>
+        int ReleaseCount { get; }
+
+        /// <summary>Gives the number of buffers that were discarded on release because the pool was full (incremented after discard).</summary>
+        int DiscardCount { get; }
+    }
 
     /// <summary>
     /// This is the object type that is used to manage reclamation of Buffers after their use in a Message has been completed so that they can be reused later.  
     /// This is also used as a factory objects for Buffer objects and will produce such objects using a configured buffer size.
     /// NOTE: this object is no thread safe - it may only be safely used by a single thread (at a time).
     /// </summary>
-    public class BufferPool
+    public class BufferPool : IBufferPoolInfo
     {
         /// <summary>Default buffer size 1024.  Nominal default usable size is 1024 - 26 == 998)</summary>
         public const int DefaultBufferSize = 1024;
+
+        /// <summary>Default maximum space used by the pool.  [1024000 bytes]</summary>
+        public const int DefaultMaxTotalSpaceInBytes = 1024000;
+
+        /// <summary>Default initial buffer space to allocate in the pool.  [0 bytes]</summary>
+        public const int DefaultInitialAllocationSpaceInBytes = 0;
 
         /// <summary>
         /// Constructor.
         /// <para/>defaultBufferSize == 1024.  Usable space is 1024-26 == 998
         /// </summary>
-        public BufferPool(string name, int maxTotalSpaceInBytes = 1024000, int bufferSize = DefaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
+        public BufferPool(string name, int maxTotalSpaceInBytes = DefaultMaxTotalSpaceInBytes, int bufferSize = DefaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.", int initialAllocationSpaceInBytes = DefaultInitialAllocationSpaceInBytes, int recentlyCreatedBufferListCapacity = 0)
         {
             Name = name;
 
@@ -554,6 +594,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             {
                 maxTotalSpaceInBytes = configNVS["{0}MaxTotalSpaceInBytes".CheckedFormat(configNVSKeyPrefix)].VC.GetValue(defaultValue: maxTotalSpaceInBytes, rethrow: false);
                 bufferSize = configNVS["{0}BufferSize".CheckedFormat(configNVSKeyPrefix)].VC.GetValue(defaultValue: bufferSize, rethrow: false);
+                initialAllocationSpaceInBytes = configNVS["{0}InitialAllocationSpaceInBytes".CheckedFormat(configNVSKeyPrefix)].VC.GetValue(defaultValue: initialAllocationSpaceInBytes, rethrow: false);
+                recentlyCreatedBufferListCapacity = configNVS["{0}RecentlyCreatedBufferListCapacity".CheckedFormat(configNVSKeyPrefix)].VC.GetValue(defaultValue: recentlyCreatedBufferListCapacity, rethrow: false);
             }
 
             MaxTotalSpaceInBytes = maxTotalSpaceInBytes;
@@ -563,6 +605,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             BufferStateEmitter = bufferStateEmitter;
 
             bufferCount = 0;
+
+            if (recentlyCreatedBufferListCapacity > 0)
+                recentlyCreatedBufferList = new List<Buffer>(recentlyCreatedBufferListCapacity);
+            else if (recentlyCreatedBufferListCapacity == -1)
+                recentlyCreatedBufferList = new List<Buffer>(MaxBuffersToRetain);
+
+            if (initialAllocationSpaceInBytes > 0)
+                PerformInitialAllocation(initialAllocationSpaceInBytes);
         }
 
         /// <summary>
@@ -576,7 +626,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// <summary>
         /// Use this method to "drain the pool".  This removes all of the buffers from the pool and Releases each of them.
         /// </summary>
-        public void Drain(QpcTimeStamp qpcTimeStamp, string reason = null)
+        public void Drain(QpcTimeStamp qpcTimeStamp)
         {
             Buffer[] capturedBufferArray = capturedBufferArray = bufferArray.SafeToArray();
 
@@ -586,12 +636,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             capturedBufferArray.Where(buffer => buffer != null).DoForEach(buffer => buffer.Release(qpcTimeStamp));
         }
 
+        /// <inheritdoc/>
         public string Name { get; private set; }
+
+        /// <inheritdoc/>
         public int MaxTotalSpaceInBytes { get; private set; }
+
+        /// <inheritdoc/>
         public int BufferSize { get { return _bufferSize; } set { if (_bufferSize != value) ChangeBufferSize(QpcTimeStamp.Now, value); } }
+
         public bool ClearBufferContentsOnRelease { get; private set; }
+
         public Logging.IMesgEmitter BufferStateEmitter { get; set; }
 
+        /// <inheritdoc/>
         public int MaxBuffersToRetain { get; private set; }
 
         private int _bufferSize;
@@ -610,14 +668,67 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             }
         }
 
+        private void PerformInitialAllocation(int initialAllocationSpaceInBytes)
+        {
+            QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
+
+            var buffersToAllocate = Math.Min((int) Math.Ceiling((double) initialAllocationSpaceInBytes / _bufferSize), MaxBuffersToRetain);
+
+            foreach (var _ in Enumerable.Range(0, buffersToAllocate))
+            {
+                bufferArray[bufferCount++] = InnerCreateNewBuffer(qpcTimeStamp, "BufferPool.PerformInitialAllocation");
+            }
+        }
+
+        public Buffer InnerCreateNewBuffer(QpcTimeStamp qpcTimeStamp, string reason)
+        {
+            allocateCount++;
+
+            var buffer = new Buffer(bufferSize: BufferSize, bufferPool: this, stateEmitter: BufferStateEmitter)
+                            .SetState(qpcTimeStamp, BufferState.Created, reason ?? "BufferPool.InnerCreateNewBuffer");
+
+            if (recentlyCreatedBufferList != null)
+            {
+                if (recentlyCreatedBufferList.Count >= recentlyCreatedBufferList.Capacity)
+                    recentlyCreatedBufferList.RemoveAt(0);
+
+                recentlyCreatedBufferList.Add(buffer);
+            }
+
+            return buffer;
+        }
+
+        private readonly List<Buffer> recentlyCreatedBufferList;
+
         private Buffer[] bufferArray;
-        private volatile int bufferCount;
+        private volatile int bufferCount, acquireCount, allocateCount, releaseCount, discardCount;
+
+        /// <inheritdoc/>
+        public int BufferCount { get { return bufferCount; } }
+
+        /// <inheritdoc/>
+        public int AvailableBytes { get { return BufferCount * BufferSize; } }
+
+        /// <inheritdoc/>
+        public int AcquireCount { get { return acquireCount; } }
+
+        /// <inheritdoc/>
+        public int AllocateCount { get { return allocateCount; } }
+
+        /// <inheritdoc/>
+        public int ReleaseCount { get { return releaseCount; } }
+
+        /// <inheritdoc/>
+        public int DiscardCount { get { return discardCount; } }
+
 
         /// <summary>
         /// This obtains a buffer instance from the pool, or creates a new one if the pool is empty.
         /// </summary>
         public Buffer Acquire(QpcTimeStamp qpcTimeStamp, string reason = null)
         {
+            acquireCount++;
+
             if (bufferCount > 0)
             {
                 int bufferIndex = --bufferCount;
@@ -625,12 +736,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
                 Buffer buffer = bufferArray[bufferIndex];
                 bufferArray[bufferIndex] = null;
 
-                return buffer.SetState(qpcTimeStamp, BufferState.Acquired, reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                if (buffer.byteArray != null)
+                    return buffer.SetState(qpcTimeStamp, BufferState.Acquired, reason ?? "BufferPool.Acquire.1");
             }
-            else
+
             {
-                Buffer buffer = new Buffer(bufferSize: BufferSize, bufferPool: this, stateEmitter: BufferStateEmitter)
-                                .SetState(qpcTimeStamp, BufferState.Created, reason ?? "BufferPool.{0}.2".CheckedFormat(Fcns.CurrentMethodName));
+                Buffer buffer = InnerCreateNewBuffer(qpcTimeStamp, reason ?? "BufferPool.Acquire.2");
 
                 return buffer;
             }
@@ -641,19 +752,29 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// </summary>
         public void Release(QpcTimeStamp qpcTimeStamp, Buffer buffer, string reason)
         {
+            releaseCount++;
+
             if (buffer == null)
             { }
-            else if (buffer.bufferPool == this && buffer.byteArraySize >= BufferSize && bufferCount < MaxBuffersToRetain)
+            else if (buffer.bufferPool != this || buffer.byteArraySize != BufferSize || buffer.State == BufferState.Returned)
             {
-                buffer.Clear(qpcTimeStamp, clearByteArrayContents: ClearBufferContentsOnRelease, reason: reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                buffer.Release(qpcTimeStamp, "BufferPool.Release.Invalid [{0}]".CheckedFormat(reason));
+                discardCount++;
+            }
+            else if (bufferCount < MaxBuffersToRetain)
+            {
+                buffer.Clear(qpcTimeStamp, clearByteArrayContents: ClearBufferContentsOnRelease, reason: reason ?? "BufferPool.Release");
 
                 int bufferIndex = bufferCount++;
 
                 bufferArray[bufferIndex] = buffer;
+
+                buffer.SetState(qpcTimeStamp, BufferState.Returned, reason: reason ?? "BufferPool.Release");
             }
             else
             {
-                buffer.Release(qpcTimeStamp, reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                buffer.Release(qpcTimeStamp, "BufferPool.Release.Full [{0}]".CheckedFormat(reason));
+                discardCount++;
             }
         }
     }

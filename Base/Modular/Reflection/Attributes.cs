@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 
@@ -48,7 +49,8 @@ namespace MosaicLib.Modular.Reflection
 
             /// <summary>
             /// This property is used to guide the generation of the derived name by choosing which strategy is to be used.
-            /// <para/>Defaults to Prefix0.  Other choices are None, Format, Prefix1, Prefix2, or Prefix3
+            /// <para/>Defaults to Prefix0.  Choices are None, Prefix0, Prefix1, Prefix2, or Prefix3, Format, FormatWithMemberName
+            /// <para/>A .. D are mapped to Prefix0 .. Prefix3
             /// </summary>
             NameAdjust NameAdjust { get; }
 
@@ -82,15 +84,14 @@ namespace MosaicLib.Modular.Reflection
         /// <summary>
         /// This is the base class for all custom <see cref="ItemInfo"/> and TItemAttribute classes that may be used here.
         /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process.
-        /// <para/>Name property defaults to null, NameAdjust property defaults to NameAdjust.Prefix0
-        /// <para/>AdditionalKeywords = empty string array.
+        /// <para/>defaults: Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class AnnotatedItemAttributeBase : System.Attribute, IAnnotatedItemAttribute
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false, StorageType = ContainerStorageType.None
+            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
             /// </summary>
             public AnnotatedItemAttributeBase() 
                 : base() 
@@ -115,12 +116,13 @@ namespace MosaicLib.Modular.Reflection
             public virtual NameAdjust NameAdjust { get; set; }
 
             /// <summary>
-            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.
+            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.  Defaults to false.
             /// </summary>
             public bool SilenceIssues { get; set; }
 
             /// <summary>
             /// When this property is set to be any value other than None (its default), the value marshalling will attempt to cast the member value to/from this cotnainer type when setting/getting container contents.
+            /// Defaults to ContainerStorageType.None
             /// </summary>
             public ContainerStorageType StorageType { get; set; }
 
@@ -179,7 +181,7 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>
             /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
             /// </summary>
-            public INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+            public virtual INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
             {
                 INamedValueSet derivedTypeMetaDataToMerge = GetDerivedTypeMetaDataToMerge();
 
@@ -220,13 +222,13 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>The item's Name property (if non-null) or the items MemberInfo.Name will be used without further modification.</summary>
             None = 0,
 
-            /// <summary>The params string[0] is used as a prefix (if it is present and non-empty).  This is the default value.</summary>
+            /// <summary>The params string[0], passed to the Setup method, is used as a prefix (if it is present and non-empty).  This is the default value.</summary>
             Prefix0 = 1,
-            /// <summary>The params string[1] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[1], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix1 = 2,
-            /// <summary>The params string[2] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[2], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix2 = 3,
-            /// <summary>The params string[3] is used as a prefix (if it is present and non-empty)</summary>
+            /// <summary>The params string[3], passed to the Setup method, is used as a prefix (if it is present and non-empty)</summary>
             Prefix3 = 4,
 
             /// <summary>For backwards compatibility.  Identical to Prefix0 (1)</summary>
@@ -239,20 +241,19 @@ namespace MosaicLib.Modular.Reflection
             D = Prefix3,
 
             /// <summary>
-            /// Uses the Name property as the format string combined with the corresonding params string array values
-            /// to support more arbitrary mechanisms for generating derived names.  
-            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
-            /// that are passed to the method.
+            /// This <see cref="NameAdjust"/> selection supports a form of arbitrary name generation mechanism.
+            /// In this case the Name property is used as the format string which is evaluated in combination with the corresonding params string values, 
+            /// which are typically passed to the corresponding Setup method.  
+            /// The MosaicLib.Utils.Fcns.CheckedFormat method is used to generate the final name, and as such it will produce error messages if the referenced {} arguments do not match the actual set of params strings that are passed to the Setup method.
             /// (5)
             /// </summary>
             Format = 5,
 
             /// <summary>
-            /// Uses the Name property as the format string combined with the corresonding params string array values, prefixed with the memberInfo.Name value,
-            /// to support more arbitrary mechanisms for generating derived names.  As such format field {0} becomes the memberInfo.Name while {1} ... {n} given params string array
-            /// values 0 .. n-1.
-            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
-            /// that are passed to the method.
+            /// This <see cref="NameAdjust"/> selection supports a second form of arbitrary name generation mechanism.
+            /// In this case the Name property is used as a format string which is evaluated in combination with the name of the member that the attribute is applied to concatinated with the set of params string values,
+            /// which are typically passed to the corresponding Setup method.  As such format field {0} becomes the memberInfo.Name while {1} ... {n} given params string values 0 .. n-1.
+            /// The MosaicLib.Utils.Fcns.CheckedFormat method is used to generate the final name, and as such it will produce error messages if the referenced {} arguments do not match the actual set of params strings that are passed to the Setup method, prefixed with the member name.
             /// (6)
             /// </summary>
             FormatWithMemberName = 6,
@@ -293,6 +294,96 @@ namespace MosaicLib.Modular.Reflection
                     case NameAdjust.Prefix3: return paramsStrArray.SafeAccess(3, string.Empty) + inferredName;
                     default: return string.Empty;
                 }
+            }
+
+            /// <summary>
+            /// Returns the first attribute instance of the given <typeparamref name="TAttributeType"/> that have been applied to the given <paramref name="assembly"/> or the fallbackValue if there are none.
+            /// </summary>
+            public static TAttributeType GetFirstInstance<TAttributeType>(this Assembly assembly, TAttributeType fallbackValue = default(TAttributeType), bool inherit = false) 
+                where TAttributeType : System.Attribute
+            {
+                return assembly.GetInstances<TAttributeType>(inherit: inherit).ConcatItems(fallbackValue).FirstOrDefault();
+            }
+
+            /// <summary>
+            /// Returns the set (array) of attributes of the given <typeparamref name="TAttributeType"/> that have been applied to the given <paramref name="assembly"/> or the empty array if there are none
+            /// </summary>
+            public static TAttributeType[] GetInstances<TAttributeType>(this Assembly assembly, bool inherit = false) where TAttributeType : System.Attribute
+            {
+                var attributes = (assembly != null) ? assembly.GetCustomAttributes(typeof(TAttributeType), inherit: inherit) : null;
+
+                return attributes.MapNullToEmpty().Select(item => item as TAttributeType).WhereIsNotDefault().ToArray();
+            }
+
+            /// <summary>
+            /// First attempts top find and return the non-null version information for the given assembly from the AssemblyInformationVersionAttribute.
+            /// Next, if <paramref name="tryAutoFallbackValues"/> is true, it attempts to find and return the version information for the given assembly from (in order): 
+            /// AssemblyFileVersionAttribute, AssemblyVersionAttribute, second token split from assembly's FullName.
+            /// When no such attributes and information are found then the method either returns the given fallbackValue or a string description of what could not be found (when <paramref name="mapNullFallbackValue"/> is true).
+            /// </summary>
+            public static string GetInformationalVersion(this Assembly assembly, string fallbackValue = null, bool mapNullFallbackValue = true, bool tryAutoFallbackValues = true, string [] assemblySplitFullName = null)
+            {
+                var assyInfoVersionAttrib = assembly.GetFirstInstance<AssemblyInformationalVersionAttribute>();
+
+                if (assyInfoVersionAttrib != null && assyInfoVersionAttrib.InformationalVersion.IsNeitherNullNorEmpty())
+                    return assyInfoVersionAttrib.InformationalVersion;
+
+                if (tryAutoFallbackValues)
+                {
+                    var assyFileVersionAttrib = assembly.GetFirstInstance<AssemblyFileVersionAttribute>();
+                    var assyVersionAttrib = assembly.GetFirstInstance<AssemblyVersionAttribute>();
+
+                    if (assyFileVersionAttrib != null && assyFileVersionAttrib.Version.IsNeitherNullNorEmpty())
+                        return assyFileVersionAttrib.Version;
+
+                    if (assyVersionAttrib != null && assyVersionAttrib.Version.IsNeitherNullNorEmpty())
+                        return assyVersionAttrib.Version;
+
+                    assemblySplitFullName = assemblySplitFullName ?? assembly.GetAssemblySplitFullName();
+                    var versionFromFullName = assemblySplitFullName.SafeAccess(1);
+                    if (versionFromFullName.IsNeitherNullNorEmpty())
+                        return versionFromFullName;
+                }
+
+                if (fallbackValue != null)
+                    return fallbackValue;
+
+                if (mapNullFallbackValue)
+                    return "No assembly version information found for assembly '{0}'".CheckedFormat(assembly);
+
+                return null;
+            }
+
+            /// <summary>
+            /// This EM accepts a System.Reflection.Assembly and attempts to generate a string of the form "name [version]" where
+            /// name comes from the assemblies FullName (the first token when split with space and with commas removed), and where the
+            /// version comes either from the assembly's AssemblyInformationalVersionAttribute.
+            /// </summary>
+            public static string GetSummaryNameAndVersion(this Assembly assembly, string formatString = "{0} [{1}]")
+            {
+                var assemblySplitFullName = assembly.GetAssemblySplitFullName();
+
+                var assemblyName = assembly.GetAssemblySplitFullName().SafeAccess(0);
+
+                var assemblyVersionToUse = assembly.GetInformationalVersion(assemblySplitFullName: assemblySplitFullName);
+
+                var nameAndVersion = formatString.CheckedFormat(assemblyName, assemblyVersionToUse);
+
+                return nameAndVersion;
+            }
+
+            /// <summary>
+            /// This method accepts the given <paramref name="assembly"/> and returns its FullName split on ' ' and with trailing ',' (commas) removed.
+            /// <para/>The first token of the return value is nominally the name of the assembly.
+            /// <para/>The second token is nominally the assembly version
+            /// <para/>
+            /// </summary>
+            public static string[] GetAssemblySplitFullName(this Assembly assembly)
+            {
+                var splitFullName = assembly.FullName.Split(' ');
+                var trimmedSplitFullName = splitFullName.Select(item => item.TrimEnd(',')).ToArray();
+
+                return trimmedSplitFullName;
             }
         }
 
@@ -571,7 +662,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, bool> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, bool>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateBo(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -579,7 +670,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, sbyte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, sbyte>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI1(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -587,7 +678,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, short> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, short>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI2(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -595,7 +686,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, int> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, int>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -603,7 +694,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, long> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, long>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -611,7 +702,9 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, byte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, byte>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU1(pfGetter(annotatedInstance)); };
+                    else if (useStorageType == ContainerStorageType.Bi)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateBi(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -619,7 +712,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, ushort> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ushort>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU2(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -627,7 +720,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, uint> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, uint>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -635,7 +728,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, ulong> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ulong>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -643,7 +736,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, float> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, float>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateF4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -651,7 +744,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, double>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateF8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -747,34 +840,47 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, string>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateA(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
+                    // Note: the fallback System.Reflection MemberInfo.GetValue based version in the final else would also cover this case but does not offer the same performance.
                     Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo);
                     vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<object>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(string[]))
                 {
                     Func<TAnnotatedClass, string[]> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, string[]>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateLS(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ValueContainer[]))
                 {
                     Func<TAnnotatedClass, ValueContainer[]> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ValueContainer[]>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ValueContainer[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateL(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ValueContainer[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(IList<string>).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, IList<string>> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, IList<string>>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<string>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateLS(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<string>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(IList<ValueContainer>).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, IList<ValueContainer>> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, IList<ValueContainer>>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<ValueContainer>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateL(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<ValueContainer>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ValueContainer))
                 {
@@ -795,7 +901,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, TimeSpan> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, TimeSpan>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateTS(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -811,7 +917,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, DateTime> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, DateTime>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateDT(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -827,7 +933,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, INamedValueSet> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValueSet>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateNVS(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -835,21 +941,35 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, INamedValue> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValue>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateNV(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
-                else
+                else if (dti.isEnum)
                 {
-                    // cover other types using ValueContainer's internal construction time object recognizer: enumeration, unrecognized, ...
-                    // NOTE: that useStorageType and isNullable are ignored here.
+                    Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     vcGetter = (annotatedInstance) =>
                     {
-                        object o = itemInfo.IsProperty ? itemInfo.PropertyInfo.GetValue(annotatedInstance, emptyObjectArray) : (itemInfo.IsField ? itemInfo.FieldInfo.GetValue(annotatedInstance) : null);
-
-                        return default(ValueContainer).SetValue<object>(o, useStorageType, isNullable);
+                        return ValueContainer.Create(pfGetter(annotatedInstance), useStorageType, isNullable);
                     };
                 }
+                else
+                {
+                    Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
+                    vcGetter = (annotatedInstance) =>
+                    {
+                        return ValueContainer.Create(pfGetter(annotatedInstance), useStorageType, isNullable);
+                    };
+                }
+                //else      // this clause is only used for unit testing when the above default type handler is not in use.
+                //{
+                //    vcGetter = (annotatedInstance) =>
+                //    {
+                //        new System.NotSupportedException("VCGetter faild: Cannot get {0} [{1}]".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType)).Throw();
+                //    };
+                //}
 
                 GetMemberAsVCFunctionDelegate<TAnnotatedClass> memberToVCDelegate 
                     = (TAnnotatedClass annotatedInstance, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow) => 
@@ -872,7 +992,7 @@ namespace MosaicLib.Modular.Reflection
                             updateIssueEmitter.Emit("Unable to get value from DerivedName:'{0}' [type:'{1}']: {2}", itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)
-                            throw;
+                            ex.Throw();
 
                         return ValueContainer.Empty;
                     }
@@ -902,57 +1022,57 @@ namespace MosaicLib.Modular.Reflection
                 if (itemInfo.ItemType == typeof(bool))
                 {
                     Action<TAnnotatedClass, bool> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, bool>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueBo(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte))
                 {
                     Action<TAnnotatedClass, sbyte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, sbyte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI1(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(short))
                 {
                     Action<TAnnotatedClass, short> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, short>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI2(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(int))
                 {
                     Action<TAnnotatedClass, int> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, int>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(long))
                 {
                     Action<TAnnotatedClass, long> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, long>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(byte))
                 {
                     Action<TAnnotatedClass, byte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, byte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU1(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort))
                 {
                     Action<TAnnotatedClass, ushort> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ushort>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU2(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(uint))
                 {
                     Action<TAnnotatedClass, uint> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, uint>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong))
                 {
                     Action<TAnnotatedClass, ulong> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ulong>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(float))
                 {
                     Action<TAnnotatedClass, float> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, float>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueF4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(double))
                 {
                     Action<TAnnotatedClass, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, double>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueF8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(bool?))
                 {
@@ -1012,7 +1132,7 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(string))
                 {
                     Action<TAnnotatedClass, string> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, string>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueA(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
@@ -1024,40 +1144,70 @@ namespace MosaicLib.Modular.Reflection
                     Action<TAnnotatedClass, string[]> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, string[]>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string[]>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
+                else if (itemInfo.ItemType == typeof(ValueContainer))
+                {
+                    Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
+                }
                 else if (itemInfo.ItemType == typeof(ValueContainer[]))
                 {
                     Action<TAnnotatedClass, ValueContainer[]> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer[]>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ValueContainer[]>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (typeof(IList<string>).IsAssignableFrom(itemInfo.ItemType))
+                else if (itemInfo.ItemType == typeof(IList<string>))
                 {
                     Action<TAnnotatedClass, IList<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, IList<string>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<IList<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueLS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (typeof(IList<ValueContainer>).IsAssignableFrom(itemInfo.ItemType))
+                else if (itemInfo.ItemType == typeof(IList<ValueContainer>))
                 {
                     Action<TAnnotatedClass, IList<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, IList<ValueContainer>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<IList<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueL(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (itemInfo.ItemType == typeof(ValueContainer))
+                else if (itemInfo.ItemType == typeof(List<string>))
                 {
-                    Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
+                    Action<TAnnotatedClass, List<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, List<string>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<List<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(List<ValueContainer>))
+                {
+                    Action<TAnnotatedClass, List<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, List<ValueContainer>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<List<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(ReadOnlyIList<string>))
+                {
+                    Action<TAnnotatedClass, ReadOnlyIList<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyIList<string>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueLS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(ReadOnlyIList<ValueContainer>))
+                {
+                    Action<TAnnotatedClass, ReadOnlyIList<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyIList<ValueContainer>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueL(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(ReadOnlyCollection<string>))
+                {
+                    Action<TAnnotatedClass, ReadOnlyCollection<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyCollection<string>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyCollection<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(ReadOnlyCollection<ValueContainer>))
+                {
+                    Action<TAnnotatedClass, ReadOnlyCollection<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyCollection<ValueContainer>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyCollection<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(Logging.LogGate))
                 {
                     Action<TAnnotatedClass, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate>(decodedValueType: ContainerStorageType.Custom, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+                else if (itemInfo.ItemType == typeof(Logging.LogGate?))
                 {
-                    Action<TAnnotatedClass, Logging.LogGate ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate ?>(itemInfo);
+                    Action<TAnnotatedClass, Logging.LogGate?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate?>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate?>(decodedValueType: ContainerStorageType.Custom, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan))
                 {
                     Action<TAnnotatedClass, TimeSpan> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, TimeSpan>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueTS(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan?))
                 {
@@ -1067,25 +1217,37 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(DateTime))
                 {
                     Action<TAnnotatedClass, DateTime> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, DateTime>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueDT(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime?))
                 {
                     Action<TAnnotatedClass, DateTime?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, DateTime?>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (typeof(INamedValueSet).IsAssignableFrom(itemInfo.ItemType))
+                else if (itemInfo.ItemType == typeof(INamedValueSet))
                 {
                     Action<TAnnotatedClass, INamedValueSet> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, INamedValueSet>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValueSet>(decodedValueType: ContainerStorageType.INamedValueSet, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNVS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (typeof(INamedValue).IsAssignableFrom(itemInfo.ItemType))
+                else if (itemInfo.ItemType == typeof(INamedValue))
                 {
                     Action<TAnnotatedClass, INamedValue> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, INamedValue>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValue>(decodedValueType: ContainerStorageType.INamedValue, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNV(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(NamedValueSet))
+                {
+                    Action<TAnnotatedClass, NamedValueSet> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, NamedValueSet>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNVS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
+                }
+                else if (itemInfo.ItemType == typeof(NamedValue))
+                {
+                    Action<TAnnotatedClass, NamedValue> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, NamedValue>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNV(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
                 }
                 else if (itemInfo.ItemType.IsEnum || (nullableBaseType != null && nullableBaseType.IsEnum))
                 {
+                    Action<TAnnotatedClass, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     Type enumType = nullableBaseType ?? itemInfo.ItemType;
 
                     vcSetter = (annotatedInstance, vc, rethrow) =>
@@ -1099,7 +1261,7 @@ namespace MosaicLib.Modular.Reflection
                             if (vc.IsNullOrEmpty)
                             {
                                 if (!isNullable && rethrow)
-                                    throw new System.InvalidCastException("Cannot cast {0} to be of type {1}".CheckedFormat(vc, itemInfo.ItemType));
+                                    new System.InvalidCastException("Cannot cast {0} to be of type {1}".CheckedFormat(vc, itemInfo.ItemType)).Throw();
                             }
                             else
                             {
@@ -1114,7 +1276,7 @@ namespace MosaicLib.Modular.Reflection
                                     case ContainerStorageType.U4: value = System.Enum.ToObject(enumType, vc.u.u32); break;
                                     case ContainerStorageType.U8: value = System.Enum.ToObject(enumType, vc.u.u64); break;
                                     default:
-                                        value = System.Enum.Parse(enumType, vc.GetValue<string>(rethrow));
+                                        value = System.Enum.Parse(enumType, vc.GetValueA(rethrow));
                                         break;
                                 }
                             }
@@ -1125,32 +1287,35 @@ namespace MosaicLib.Modular.Reflection
                             GlobalLastException = ex;
 
                             if (rethrow)
-                                throw;
+                                ex.Throw();
                         }
 
                         if (value == null && !isNullable)
                             value = itemInfo.ItemType.CreateDefaultInstance();
 
-                        if (itemInfo.IsProperty)
-                            itemInfo.PropertyInfo.SetValue(annotatedInstance, value, emptyObjectArray);
-                        else
-                            itemInfo.FieldInfo.SetValue(annotatedInstance, value);
+                        pfSetter(annotatedInstance, value);
                     };
                 }
                 else
                 {
                     // cover other types using ValueContainer's internal construction time object recognizer: unrecognized, ...
 
+                    Action<TAnnotatedClass, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     vcSetter = (annotatedInstance, vc, rethrow) =>
                     {
                         object o = System.Convert.ChangeType(vc.ValueAsObject, itemInfo.ItemType);
 
-                        if (itemInfo.IsProperty)
-                            itemInfo.PropertyInfo.SetValue(annotatedInstance, o, emptyObjectArray);
-                        else
-                            itemInfo.FieldInfo.SetValue(annotatedInstance, o);
+                        pfSetter(annotatedInstance, o);
                     };
                 }
+                //else      // this clause is only used for unit testing when the above default type handler is not in use.
+                //{
+                //    vcSetter = (annotatedInstance, vc, rethrow) =>
+                //    {
+                //        new System.NotSupportedException("VCSetter faild: Cannot set {0} [{1}] to {2}{3}".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType, vc.ToStringSML(), rethrow ? " rethrow" : "")).Throw();
+                //    };
+                //}
 
                 SetMemberFromVCActionDelegate<TAnnotatedClass> memberFromVCDelegate 
                     = (TAnnotatedClass annotatedInstance, ValueContainer vc, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow) =>
@@ -1171,14 +1336,12 @@ namespace MosaicLib.Modular.Reflection
                             updateIssueEmitter.Emit("Unable to set value '{0}' to DerivedName:'{1}' [type:'{2}']: {3}", vc, itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)
-                            throw;
+                            ex.Throw();
                     }
                 };
 
                 return memberFromVCDelegate;
             }
-
-            private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
 
             #endregion
 
@@ -1191,15 +1354,16 @@ namespace MosaicLib.Modular.Reflection
             /// <typeparam name="TAnnotatedClass">Gives the type of the class on which the getter will be evaluated and from which the ItemInfo was harvisted.</typeparam>
             /// <typeparam name="TValueType">Gives the value type returned by the getter.</typeparam>
             /// <param name="item">Gives the PropertyInfo and/or FieldInfo for the item that shall be used to generate a getter Function.</param>
+            /// <param name="permitCastAttempt">informs the underlying CreateFieldGetterFunc or CreatePropertyGetterFunc method whether it should attempt to perform casting if needed.</param>
             /// <returns>a System.Func{TAnnotatedClass, TValueType} object that may be invoked later obtain the value of the selected field or property from an instance of the TAnnotatedClass that is given to the Func when it is invoked.</returns>
-            public static Func<TAnnotatedClass, TValueType> GenerateGetter<TAnnotatedClass, TValueType>(ItemInfo item)
+            public static Func<TAnnotatedClass, TValueType> GenerateGetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
-                Func<TAnnotatedClass, TValueType> func = null;
+                Func<TAnnotatedClass, TValueType> func;
 
                 if (item.IsField)
-                    func = Reflection.GetterSetterFactory.CreateFieldGetterExpression<TAnnotatedClass, TValueType>(item.FieldInfo);
+                    func = Reflection.GetterSetterFactory.CreateFieldGetterFunc<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
                 else
-                    func = Reflection.GetterSetterFactory.CreatePropertyGetterFunc<TAnnotatedClass, TValueType>(item.PropertyInfo);
+                    func = Reflection.GetterSetterFactory.CreatePropertyGetterFunc<TAnnotatedClass, TValueType>(item.PropertyInfo, permitCastAttempt: permitCastAttempt);
 
                 return func;
             }
@@ -1211,15 +1375,16 @@ namespace MosaicLib.Modular.Reflection
             /// <typeparam name="TAnnotatedClass">Gives the type of the class on which the setter will be performed and from which the ItemInfo was harvisted.</typeparam>
             /// <typeparam name="TValueType">Gives the value type accepted by the setter.</typeparam>
             /// <param name="item">Gives the PropertyInfo and/or FieldInfo for the item that shall be used to generate a getter Function.</param>
+            /// <param name="permitCastAttempt">informs the underlying CreateFieldSetterAction or CreatePropertySetterAction method whether it should attempt to perform casting if needed.</param>
             /// <returns>a System.Action{TAnnotatedClass, TValueType} object that may be invoked later to assign a value to the selected field or propety in an instance of the TAnnotatedClass that is given to the Action when it is invoked.</returns>
-            public static Action<TAnnotatedClass, TValueType> GenerateSetter<TAnnotatedClass, TValueType>(ItemInfo item)
+            public static Action<TAnnotatedClass, TValueType> GenerateSetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
-                Action<TAnnotatedClass, TValueType> action = null;
+                Action<TAnnotatedClass, TValueType> action;
 
                 if (item.IsField)
-                    action = Reflection.GetterSetterFactory.CreateFieldSetterAction<TAnnotatedClass, TValueType>(item.FieldInfo);
+                    action = Reflection.GetterSetterFactory.CreateFieldSetterAction<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
                 else
-                    action = Reflection.GetterSetterFactory.CreatePropertySetterAction<TAnnotatedClass, TValueType>(item.PropertyInfo);
+                    action = Reflection.GetterSetterFactory.CreatePropertySetterAction<TAnnotatedClass, TValueType>(item.PropertyInfo, permitCastAttempt: permitCastAttempt);
 
                 return action;
             }
@@ -1319,10 +1484,12 @@ namespace MosaicLib.Modular.Reflection
                         continue;		// skip properties that are not selected for inclusion
 
                     // save relevant parts in list
-                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>();
-                    iai.ItemType = piType;
-                    iai.ItemAttribute = ia;
-                    iai.PropertyInfo = pi;
+                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>()
+                    {
+                        ItemType = piType,
+                        ItemAttribute = ia,
+                        PropertyInfo = pi
+                    };
 
                     itemAccessInfoList.Add(iai);
                 }
@@ -1344,10 +1511,12 @@ namespace MosaicLib.Modular.Reflection
                         continue;		// skip fields that are not selected for inclusion
 
                     // save relevant parts in list
-                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>();
-                    iai.ItemType = fiType;
-                    iai.ItemAttribute = ia;
-                    iai.FieldInfo = fi;
+                    ItemInfo<TItemAttribute> iai = new ItemInfo<TItemAttribute>()
+                    {
+                        ItemType = fiType,
+                        ItemAttribute = ia,
+                        FieldInfo = fi
+                    };
 
                     itemAccessInfoList.Add(iai);
                 }

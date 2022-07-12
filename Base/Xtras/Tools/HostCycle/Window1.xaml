@@ -1,0 +1,388 @@
+﻿<!--
+ * @file Window1.xaml
+ *  @brief
+ * 
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2019 Mosaic Systems Inc.
+ * All rights reserved.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+<Window x:Class="HostCycle.Window1"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctrl="clr-namespace:MosaicLib.WPF.Controls;assembly=MosaicLibCS_WPF"
+    xmlns:conv="clr-namespace:MosaicLib.WPF.Converters;assembly=MosaicLibCS_WPF" 
+    xmlns:ext="clr-namespace:MosaicLib.WPF.Extensions;assembly=MosaicLibCS_WPF"
+    xmlns:cmd="clr-namespace:MosaicLib.WPF.Commands;assembly=MosaicLibCS_WPF"
+    xmlns:local="clr-namespace:HostCycle"
+    Title="Window1" Height="950" Width="1000">
+    <Window.Resources>
+        <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
+        <conv:ObjectToStringConverter x:Key="ObjectToStringConverter"/>
+        <conv:SetToStringConverter x:Key="SetToStringConverter"/>
+        <conv:NamedValueSetConverter x:Key="NamedValueSetConverter"/>
+        <conv:NamedValueConverter x:Key="NamedValueConverter"/>
+        <conv:AppendParameterWithSpaceDelimiterConverter x:Key="AppendParameterWithSpaceDelimiterConverter"/>
+        <conv:ConcatenateMultiValueConverter x:Key="ConcatenateMultiValueConverter"/>
+        <local:MesgAvailToAckDenyReasonConverter x:Key="MesgAvailToAckDenyReasonConverter"/>
+        <local:SendResultConverter x:Key="SendResultConverter"/>
+    </Window.Resources>
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static cmd:Commands.RoutedServiceCommand}" Executed="RoutedServiceCommand_Executed" CanExecute="RoutedServiceCommand_CanExecute"/>
+    </Window.CommandBindings>
+    <Grid>
+        <TabControl Margin="12" Name="MainTabControl">
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <Label Content="Host"/>
+                        <ctrl:PartBaseStateLED DockPanel.Dock="Right" HorizontalAlignment="Right" Height="20" Width="20" BorderThickness="2" PartBaseState="{Binding [HostCycle.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.ActionInfo].ValueAsObject, Mode=OneWay}"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Canvas>
+                    <GroupBox Header="HostCycle" MinWidth="450" Padding="2" Canvas.Left="10" Canvas.Top="10">
+                        <StackPanel Orientation="Vertical" MinWidth="450" Margin="2">
+                            <DockPanel Margin="2">
+                                <Label Content="State:"/>
+                                <Label Width="150" DockPanel.Dock="Right" Content="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}" ToolTip="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}"/>
+                                <ctrl:PartBaseStateLED Name="hostCyclePartLED" DockPanel.Dock="Right" HorizontalAlignment="Right" Height="25" Width="25" BorderThickness="2" PartBaseState="{Binding [HostCycle.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.ActionInfo].ValueAsObject, Mode=OneWay}"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel LastChildFill="True">
+                                <Label Content="State:" DockPanel.Dock="Left" MinWidth="60" VerticalAlignment="Center"/>
+                                <TextBox BorderThickness="2" BorderBrush="Gray" IsReadOnly="True" TextWrapping="Wrap" Text="{Binding [HostCycle.EqpInfoNVS].ValueAsObject, Mode=OneWay, Converter={StaticResource VCToStringSMLConverter}}" Width="380" MinHeight="80"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Initialize" CommandParameter="HostCycle GoOnlineAndInitialize" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Connect" CommandParameter="HostCycle Connect" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Disconnect" CommandParameter="HostCycle Disconnect" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Host Offline" CommandParameter="HostCycle SetHostOffline" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Host Online" CommandParameter="HostCycle SetHostOnline" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Local" CommandParameter="HostCycle GoLocal" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Remote" CommandParameter="HostCycle GoRemote" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="Refresh" CommandParameter="HostCycle Refresh" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                                <Button Content="RefreshE039" CommandParameter="HostCycle RefreshE039" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            </StackPanel>
+                            <DockPanel>
+                                <Label DockPanel.Dock="Left" Content="PPIDs:" MinWidth="60" VerticalAlignment="Center"/>
+                                <ComboBox ItemsSource="{Binding [HostCycle.PPIDArray].ValueAsObject, Mode=OneWay}" SelectedValue="{Binding [SelectedPPID].ValueAsString, Mode=TwoWay}" MinHeight="30" Width="380"/>
+                            </DockPanel>
+                        </StackPanel>
+                    </GroupBox>
+                    <GroupBox Header="LP1" Canvas.Top="256" MinWidth="350" Padding="2" Canvas.Left="10" Width="450">
+                        <StackPanel Orientation="Vertical">
+                            <DockPanel Margin="2">
+                                <Label Content="State:"/>
+                                <Label Width="270" DockPanel.Dock="Right" Content="{Binding ElementName=lpCyclePartLED, Path=ToolTip, Mode=OneWay}" ToolTip="{Binding ElementName=lpCyclePartLED, Path=ToolTip, Mode=OneWay}"/>
+                                <ctrl:PartBaseStateLED Name="lpCyclePartLED" DockPanel.Dock="Right" HorizontalAlignment="Right" Height="25" Width="25" BorderThickness="2" PartBaseState="{Binding [HostCycle.LP1.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.LP1.ActionInfo].ValueAsObject, Mode=OneWay}"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel>
+                                <Label Content="AMS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.AMS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="LRS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.LRS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="LTS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.LTS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="LCAS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Width="220" ToolTip="{Binding Path=Content, RelativeSource={RelativeSource Self}}" MinWidth="300">
+                                    <Label.Content>
+                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
+                                            <Binding Path="[HostCycle.LP1.LCAS].ValueAsString" FallbackValue="----" Mode="OneWay"/>
+                                            <Binding Source=" ["/>
+                                            <Binding Path="[HostCycle.LP1.LCAS_CarrierID].ValueAsString" FallbackValue="" Mode="OneWay"/>
+                                            <Binding Source="]"/>
+                                        </MultiBinding>
+                                    </Label.Content>
+                                </Label>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="CIDS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CIDS].ValueAsString, Mode=OneWay}" MinWidth="300" ToolTip="{Binding [HostCycle.LP1.CIDS_Reason].VC, Mode=OneWay}"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="CSMS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CSMS].ValueAsString, Mode=OneWay}" MinWidth="300" ToolTip="{Binding [HostCycle.LP1.CSMS_Reason].VC, Mode=OneWay}"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="CAS:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CAS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
+                            </DockPanel>
+
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel>
+                                <Label Content="CIDS CarrierID:" DockPanel.Dock="Left"/>
+                                <TextBox BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Text="{Binding [HostCycle.LP1.CIDS_CarrierID].ValueAsString, Mode=TwoWay}" MinWidth="300"/>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="CSMS SlotMap:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CSMS_SlotMap].ValueAsString, Mode=TwoWay}" MinWidth="300"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel>
+                                <Label Content="Last Carrier Event:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.LastCarrierEventInfo].ValueAsString, Mode=TwoWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Initialize" CommandParameter="HostCycle LP1 GoOnlineAndInitialize" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
+                                <Button Content="Reserve" CommandParameter="HostCycle LP1 ReserveAtPort" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
+                                <Button Content="Cancel Reservation" CommandParameter="HostCycle LP1 CancelReservationAtPort" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
+                                <Button Content="Automatic" CommandParameter="HostCycle LP1 Automatic" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
+                                <Button Content="Manual" CommandParameter="HostCycle LP1 Manual" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="PWC1" CommandParameter="HostCycle LP1 ProceedWithCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <Button Content="PWC2" CommandParameter="HostCycle LP1 ProceedWithCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <Button Content="Recreate1" CommandParameter="HostCycle LP1 CarrierReCreate" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <Button Content="Recreate2" CommandParameter="HostCycle LP1 CarrierReCreate" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <Button Content="Cancel" CommandParameter="HostCycle LP1 CancelCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <CheckBox Content="Auto PWC and Cancel" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.AutoPWCAndCancel].ValueAsBoolean, Mode=TwoWay}"/>
+                            </StackPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel>
+                                <Label Content="CJID [State]:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300">
+                                    <Label.Tag>
+                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
+                                            <Binding Path="[HostCycle.LP1.CJID].ValueAsString" FallbackValue="----" Mode="OneWay"/>
+                                            <Binding Source=" ["/>
+                                            <Binding Path="[HostCycle.LP1.CJState].ValueAsString" FallbackValue="" Mode="OneWay"/>
+                                            <Binding Source="]"/>
+                                        </MultiBinding>
+                                    </Label.Tag>
+                                </Label>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="PJIDs [States]:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300">
+                                    <Label.Tag>
+                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
+                                            <Binding Path="[HostCycle.LP1.PJIDs].ValueAsString" FallbackValue="----" Mode="OneWay"/>
+                                            <Binding Source=" ["/>
+                                            <Binding Path="[HostCycle.LP1.PJStates].ValueAsString" FallbackValue="" Mode="OneWay"/>
+                                            <Binding Source="]"/>
+                                        </MultiBinding>
+                                    </Label.Tag>
+                                </Label>
+                            </DockPanel>
+                            <DockPanel>
+                                <Label Content="PPID:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.PPID].ValueAsString, Mode=OneWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <DockPanel>
+                                <Label Content="E090 state tally:" DockPanel.Dock="Left"/>
+                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.E090StateTally].ValueAsString, Mode=OneWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
+                            </DockPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Create Jobs" CommandParameter="HostCycle LP1 CreateJobs" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="PPID" Path="[SelectedPPID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <Button Content="Run Carrier" CommandParameter="HostCycle LP1 Start RunCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
+                                    <ext:Attachable.NPV>
+                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                            <Binding ConverterParameter="PPID" Path="[SelectedPPID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
+                                        </MultiBinding>
+                                    </ext:Attachable.NPV>
+                                </Button>
+                                <CheckBox Content="Cycle" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.CycleSelected].ValueAsBoolean, Mode=TwoWay}"/>
+                                <CheckBox Content="Pause" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestPause].ValueAsBoolean, Mode=TwoWay}"/>
+                                <CheckBox Content="Stop" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestStop].ValueAsBoolean, Mode=TwoWay}"/>
+                                <CheckBox Content="Abort" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestAbort].ValueAsBoolean, Mode=TwoWay}"/>
+                                <Label Content="{Binding [HostCycle.LP1.RunNumber].ValueAsString, Mode=OneWay}" MinHeight="23" MinWidth="40" BorderBrush="Black" BorderThickness="1" Margin="10,0,0,0"/>
+                            </StackPanel>
+                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
+                        </StackPanel>
+                    </GroupBox>
+                </Canvas>
+            </TabItem>
+            <TabItem Header="Term Svcs">
+                <StackPanel Orientation="Vertical" MinWidth="450" Margin="2">
+                    <GroupBox Header="Terminal Message To Host" Padding="2">
+                        <DockPanel LastChildFill="True">
+                            <ctrl:BasicLED x:Name="ledTermMesgAvailable" Height="20" Width="20" ActiveColor="Green" BorderBrush="Black" BorderThickness="1" IsActive="{Binding [HostCycle.TermMesgToHost.Available].ValueAsBoolean, Mode=OneWay}"/>
+                            <Button Content="Ack" CommandParameter="HostCycle TermMesgToHost.Ack" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center" ext:Attachable.DenyReason="{Binding ElementName=ledTermMesgAvailable, Path=IsActive, Converter={StaticResource MesgAvailToAckDenyReasonConverter}}" />
+                            <Label BorderBrush="DarkGray" BorderThickness="2" Margin="2">
+                                <Label.Content>
+                                    <TextBlock Text="{Binding [HostCycle.TermMesgToHost.Body].VC, Mode=OneWay, Converter={StaticResource VCToStringSMLConverter}, FallbackValue=----}" />
+                                </Label.Content>
+                            </Label>
+                        </DockPanel>
+                    </GroupBox>
+                    <GroupBox Header="Terminal Message To Equipment" Padding="2">
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel Orientation="Horizontal">
+                                <ctrl:BasicLED Height="20" Width="20" InactiveColor="Green" ActiveColor="Yellow" BorderBrush="Black" BorderThickness="1" IsActive="{Binding [HostCycle.TermMesgToEqp.Pending].ValueAsBoolean, Mode=OneWay}"/>
+                                <StackPanel Orientation="Horizontal" Margin="5,1,0,1"  Background="{Binding [HostCycle.TermMesgToEqp.SendResult].VC, Mode=OneWay, FallbackValue=Cyan, Converter={StaticResource SendResultConverter}, ConverterParameter=SolidColorBrush}" ToolTip="{Binding [HostCycle.TermMesgToEqp.SendResult].VC, Mode=OneWay, FallbackValue=Cyan, Converter={StaticResource SendResultConverter}, ConverterParameter=ToolTip}">
+                                    <Button Content="Send One" CommandParameter="HostCycle TermMesgToTool.SendOne" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center">
+                                        <ext:Attachable.NPV>
+                                            <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                                <Binding ElementName="tbLine1" Path="Text" ConverterParameter="Text" Converter="{StaticResource NamedValueConverter}"/>
+                                            </MultiBinding>
+                                        </ext:Attachable.NPV>
+                                    </Button>
+                                    <Button Content="Send Many" CommandParameter="HostCycle TermMesgToTool.SendMany" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center">
+                                        <ext:Attachable.NPV>
+                                            <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                                <Binding ElementName="tbLine1" Path="Text" ConverterParameter="Text01" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine2" Path="Text" ConverterParameter="Text02" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine3" Path="Text" ConverterParameter="Text03" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine4" Path="Text" ConverterParameter="Text04" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine5" Path="Text" ConverterParameter="Text05" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine6" Path="Text" ConverterParameter="Text06" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine7" Path="Text" ConverterParameter="Text07" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine8" Path="Text" ConverterParameter="Text08" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine9" Path="Text" ConverterParameter="Text09" Converter="{StaticResource NamedValueConverter}"/>
+                                                <Binding ElementName="tbLine10" Path="Text" ConverterParameter="Text10" Converter="{StaticResource NamedValueConverter}"/>
+                                            </MultiBinding>
+                                        </ext:Attachable.NPV>
+                                    </Button>
+                                    <Button Content="Broadcast One" CommandParameter="HostCycle TermMesgToTool.BroadcastOne" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center">
+                                        <ext:Attachable.NPV>
+                                            <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                                <Binding ElementName="tbLine1" Path="Text" ConverterParameter="Text" Converter="{StaticResource NamedValueConverter}"/>
+                                            </MultiBinding>
+                                        </ext:Attachable.NPV>
+                                    </Button>
+                                    <Button Content="Send Clear" CommandParameter="HostCycle TermMesgToTool.SendClear" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBox x:Name="tbLine1" Text="Line 01" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine2" Text="Line 02" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine3" Text="Line 03" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine4" Text="Line 04" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine5" Text="Line 05" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine6" Text="Line 06" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine7" Text="Line 07" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine8" Text="Line 08" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine9" Text="Line 09" MinHeight="30" Margin="2" />
+                            <TextBox x:Name="tbLine10" Text="Line 10" MinHeight="30" Margin="2" />
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="SVIDs">
+                <DockPanel LastChildFill="True">
+                    <GroupBox DockPanel.Dock="Top" Header="Controls">
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox x:Name="cbScan" Content="Scan" VerticalAlignment="Center" Margin="3" CommandParameter="HostCycle SVIDs SetScanEnable" Command="{x:Static cmd:Commands.RoutedServiceCommand}" ToolTip="Enable to update SVIDs at 1 Hz" IsChecked="{Binding [HostCycle.SVIDs.ScanEnabled].ValueAsBoolean, FallbackValue=False}">
+                                <ext:Attachable.NPV>
+                                    <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
+                                        <Binding ElementName="cbScan" Path="IsChecked" ConverterParameter="Enable" Converter="{StaticResource NamedValueConverter}"/>
+                                    </MultiBinding>
+                                </ext:Attachable.NPV>
+                            </CheckBox>
+                            <Button Content="Refresh" CommandParameter="HostCycle SVIDs Refresh" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="3" />
+                            <Label Content="Scan SMPLN:" Margin="20,0,5,0" VerticalAlignment="Center"/>
+                            <Label Content="{Binding [HostCycle.SVIDs.SMPLN].ValueAsObject, Mode=OneWay, FallbackValue=----}" VerticalAlignment="Center" Width="80" MinHeight="25" BorderBrush="Gray"  BorderThickness="2" Background="LightGray"/>
+                            <Label Content="STIME:" Margin="20,0,5,0" VerticalAlignment="Center"/>
+                            <Label Content="{Binding [HostCycle.SVIDs.STIME].ValueAsString, Mode=OneWay, FallbackValue=----}" VerticalAlignment="Center" Width="120" MinHeight="25" BorderBrush="Gray"  BorderThickness="2" Background="LightGray"/>
+                        </StackPanel>
+                    </GroupBox>
+                    <ctrl:IVIView IVIName="SVID_IVI" NameColumnWidth="300" SeqNumColumnWidth="40" ValueColumnWidth="550"/>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="ECIDs">
+                <DockPanel LastChildFill="True">
+                    <GroupBox DockPanel.Dock="Top" Header="Controls">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Refresh" CommandParameter="HostCycle ECIDs Refresh" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="3" />
+                        </StackPanel>
+                    </GroupBox>
+                    <ctrl:IVIView IVIName="ECID_IVI" NameColumnWidth="300" SeqNumColumnWidth="40" ValueColumnWidth="550"/>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="ALIDs">
+                <DockPanel LastChildFill="True">
+                    <GroupBox DockPanel.Dock="Top" Header="Controls">
+                    </GroupBox>
+                    <ctrl:IVIView IVIName="ALID_IVI" NameColumnWidth="300" SeqNumColumnWidth="40" ValueColumnWidth="550"/>
+                </DockPanel>
+            </TabItem>
+            <!--<TabItem Header="E039/E090">
+                <ctrl:E090View SetName="E039Set"/>
+            </TabItem>-->
+            <TabItem Header="E039">
+                <DockPanel LastChildFill="True">
+                    <GroupBox Header="Controls" DockPanel.Dock="Top">
+                        <Button Content="Refresh" CommandParameter="HostCycle RefreshE039" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                    </GroupBox>
+                    <GroupBox Header="Treeview">
+                        <TreeView x:Name="e039TreeView" />
+                    </GroupBox>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Local IVI">
+                <ctrl:IVIView NameColumnWidth="300" SeqNumColumnWidth="40" ValueColumnWidth="550"/>
+            </TabItem>
+            <TabItem Header="Logs">
+                <ctrl:LogView SetName="LogMessageHistory" DateColumnWidth="100" TypeColumnWidth="50" SourceColumnWidth="150" MesgColumnWidth="580" />
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

@@ -94,7 +94,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string MapNullTo(this string s, string mapNullTo)
         {
-            return ((s == null) ? mapNullTo : s);
+            return (s ?? mapNullTo);
         }
 
         /// <summary>
@@ -338,6 +338,53 @@ namespace MosaicLib.Utils
             sb.Append(c);
         }
 
+        /// <summary>
+        /// If needed, generate and return a version of the given string where strings that contain a comma or " (double quote), or line breaks (CR or LF) are escaped by placing them in quotes and escapaing any quotes or line break characters.
+        /// <para/>This method maps the null value to the given <paramref name="mapNullTo"/>
+        /// <para/>Quoting is done as per RFC 4180 [https://tools.ietf.org/html/rfc4180] and is also covered within [https://en.wikipedia.org/wiki/Comma-separated_values]
+        /// </summary>
+        public static string GenerateRFC4180EscapedVersion(this string s, string mapNullTo = "", char valueDelimiterChar = ',')
+        {
+            if (!s.NeedsEscapeForRFC4180(valueDelimiterChar: valueDelimiterChar))
+                return (s ?? mapNullTo);
+
+            StringBuilder sb = new StringBuilder("\"");
+
+            // once we have decide to enclose the string in double quotes ("...") then we only need to modify the string contents if it actually contains double quotes
+            if (!s.Contains('\"'))
+            {
+                sb.Append(s);
+            }
+            else
+            {
+                foreach (char c in s)
+                {
+                    if (c == '\"')
+                        sb.Append("\"\"");
+                    else
+                        sb.Append(c);
+                }
+            }
+
+            sb.Append("\"");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// For any non-null string <paramref name="s"/> this method evaluates if any character in the given string is in the rfc4180ForceEscapeCharSet in which case the method returns true.
+        /// If the string <paramref name="s"/> is empty then the method returns false, and if it is null the method returns the given <paramref name="mapNullTo"/> which defaults to false.
+        /// </summary>
+        private static bool NeedsEscapeForRFC4180(this string s, bool mapNullTo = false, char valueDelimiterChar = ',')
+        {
+            if (s == null)
+                return mapNullTo;
+
+            return s.Any(c => ((c == valueDelimiterChar) || rfc4180ForceEscapeCharSet.Contains(c)));
+        }
+
+        private static readonly ReadOnlyHashSet<char> rfc4180ForceEscapeCharSet = new ReadOnlyHashSet<char>(new[] { '\"', '\r', '\n' });
+
         #endregion
 
         #region static CheckedFormat methods
@@ -509,7 +556,7 @@ namespace MosaicLib.Utils
         #endregion
     }
 
-	#endregion
+    #endregion
 
     #region Extension Methods
 
@@ -526,7 +573,7 @@ namespace MosaicLib.Utils
             sb.Remove(0, sb.Length);
             return sb;
         }
-        
+
         #endregion
 
         #region static System.Text.StringBuilder.CheckedAppendFormat extension methods
@@ -626,6 +673,24 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat("FormatPN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
+
+            return sb;
+        }
+
+        /// <summary>If the given <paramref name="condition"/> is true then this method calls <paramref name="sb"/>.Append(<paramref name="str"/>).  Supports call chaining.</summary>
+        public static StringBuilder ConditionalAppend(this StringBuilder sb, bool condition, string str)
+        {
+            if (condition)
+                sb.Append(str);
+
+            return sb;
+        }
+
+        /// <summary>If the given <paramref name="condition"/> is true then this method calls <paramref name="sb"/>.AppendWithDelimiter(<paramref name="delimiter"/>, <paramref name="str"/>).  Supports call chaining.</summary>
+        public static StringBuilder ConditionalAppendWithDelimiter(this StringBuilder sb, bool condition, string delimiter, string str)
+        {
+            if (condition)
+                sb.AppendWithDelimiter(delimiter, str);
 
             return sb;
         }
@@ -777,17 +842,15 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given list of ValueContainers in bytes</summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public static int EstimatedContentSizeInBytes(this IList<ValueContainer> vcList)
         {
-            return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes));
+            return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes) + 10);
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given array of ValueContainers in bytes</summary>
-        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public static int EstimatedContentSizeInBytes(this ValueContainer[] vcArray)
         {
-            return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes));
+            return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes) + 10);
         }
 
         #endregion
@@ -1087,6 +1150,12 @@ namespace MosaicLib.Utils
                     Add(new MatchRule(matchType, ruleString));
             }
 
+            /// <summary>Shorthand constructor to build a MatchRuleSet that contains an InSet match rule for the given <paramref name="stringSet"/>.</summary>
+            public MatchRuleSet(IEnumerable<string> stringSet)
+            {
+                Add(MatchRule.InSet(stringSet));
+            }
+
             /// <summary>Debugging and Logging helper method</summary>
             public override string ToString()
             {
@@ -1217,6 +1286,9 @@ namespace MosaicLib.Utils
             /// <summary>Static factory method to create MatchType.Regex match rule instances</summary>
             public static MatchRule Regex(string regex) { return new MatchRule(MatchType.Regex, regex); }
 
+            /// <summary>Static factory method to create MatchType.InSet match rule instances</summary>
+            public static MatchRule InSet(IEnumerable<string> stringSet) { return new MatchRule(MatchType.InSet) { Set = new ReadOnlyHashSet<string>(stringSet) }; }
+
             private static readonly MatchRule matchRuleAny = new MatchRule(MatchType.Any);
             private static readonly MatchRule matchRuleNone = new MatchRule(MatchType.None);
 
@@ -1251,6 +1323,7 @@ namespace MosaicLib.Utils
             {
                 MatchType = other.MatchType;
                 RuleString = other.RuleString;
+                Set = other.Set;
                 BuildRegexIfNeeded();
             }
 
@@ -1262,6 +1335,10 @@ namespace MosaicLib.Utils
             /// <remarks>Note that the constructor sanitizes this string at construction time so that this property will never return null.</remarks>
             [DataMember(Order = 2)]
             public String RuleString { get; private set; }
+
+            /// <summary>Defines the, optional, set of values that may be used to match against.</summary>
+            [DataMember(Order = 3)]
+            public ReadOnlyHashSet<string> Set { get; private set; }
 
             /// <summary>Internal storage for the pre-computed regular expression engine if this object was constructed using StringMatchType.Regex.</summary>
             internal System.Text.RegularExpressions.Regex regex = null;
@@ -1294,6 +1371,7 @@ namespace MosaicLib.Utils
                     case MatchType.Contains: return testString.Contains(RuleString);
                     case MatchType.Regex: return BuildRegexIfNeeded().IsMatch(testString);
                     case MatchType.Exact: return (testString == RuleString);
+                    case MatchType.InSet: return (Set ?? ReadOnlyHashSet<string>.Empty).Contains(testString);
                     default: return false;
                 }
             }
@@ -1303,7 +1381,10 @@ namespace MosaicLib.Utils
             /// </summary>
             public override string ToString()
             {
-                return "MatchType.{0} '{1}'".CheckedFormat(MatchType, RuleString);
+                if (MatchType != MatchType.InSet)
+                    return "MatchType.{0} '{1}'".CheckedFormat(MatchType, RuleString);
+                else
+                    return "MatchType.{0} '{1}'".CheckedFormat(MatchType, string.Join("|", Set ?? ReadOnlyHashSet<string>.Empty));
             }
         }
 
@@ -1335,6 +1416,9 @@ namespace MosaicLib.Utils
             /// <summary>matches if the string value is exactly the same as the RuleString</summary>
             [EnumMember]
             Exact,
+            /// <summary>matches if the string value is found in a predefined set of strings</summary>
+            [EnumMember]
+            InSet,
         }
     }
 
@@ -1357,8 +1441,8 @@ namespace MosaicLib.Utils
             basicToStringResultFactoryDelegate = basicStringFactoryDelegate; 
         }
 
-        private Func<string, IFormatProvider, string> formatProviderToStringResultFactoryDelegate;
-        private Func<string> basicToStringResultFactoryDelegate;
+        private readonly Func<string, IFormatProvider, string> formatProviderToStringResultFactoryDelegate;
+        private readonly Func<string> basicToStringResultFactoryDelegate;
 
         /// <summary>Returns the result of calling either the format provider or the basic ToString factory delegate (depending on which this wrapper was constructed from)</summary>
         public override string ToString()

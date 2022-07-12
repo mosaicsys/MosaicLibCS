@@ -30,9 +30,11 @@ using System.Runtime.Serialization;
 
 using MosaicLib;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 
@@ -301,12 +303,17 @@ namespace MosaicLib
             /// Use this method to read the stock set of ModularConfig points using the given configKeyPrefixStr and to update this ring configuration using the valid, non-zero values read from these keys.
             /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, 
             /// IncludeQPCTime, IncludeThreadInfo, IncludeFileAndLine
+            /// <para/>Note: if no value (0) is given for the AdvanceAfterFileReachesSize (fileSizeLimit) then the method assigns this to be 50 Mbytes.
             /// </summary>
-            public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
+            public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null, INamedValueSet preloadFromNVS = null)
             {
-                ConfigValueSetAdapter<ConfigKeyValuesHelper> adapter = new ConfigValueSetAdapter<ConfigKeyValuesHelper>(configInstance) { ValueSet = new ConfigKeyValuesHelper(), SetupIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefixStr);
+                var valueSet = new ConfigKeyValuesHelper();
+                if (preloadFromNVS.IsNeitherNullNorEmpty())
+                    new NamedValueSetAdapter<ConfigKeyValuesHelper>() { ValueSet = valueSet, IssueEmitter = Logging.NullEmitter, ValueNoteEmitter = Logging.NullEmitter, MustSupportGet = false, MustSupportSet = false }.Setup().Set(preloadFromNVS);
 
-                ConfigKeyValuesHelper configValues = adapter.ValueSet;
+                new ConfigValueSetAdapter<ConfigKeyValuesHelper>(configInstance) { ValueSet = valueSet, SetupIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefixStr);
+
+                ConfigKeyValuesHelper configValues = valueSet;
 
                 logGate |= configValues.LogGate;
 
@@ -330,6 +337,8 @@ namespace MosaicLib
 
                 if (configValues.AdvanceAfterFileReachesSize != 0)
                     advanceRules.fileSizeLimit = configValues.AdvanceAfterFileReachesSize;
+                else if (advanceRules.fileSizeLimit == 0)
+                    advanceRules.fileSizeLimit = 50 * 1024 * 1024;
 
                 if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
                     advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;
@@ -356,64 +365,64 @@ namespace MosaicLib
             public class ConfigKeyValuesHelper
             {
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public Logging.LogGate LogGate { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public string DirectoryPath { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public string FileNamePrefix { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public string FileNameSuffix { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public int MaxFilesToKeep { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public double MaxFileAgeToKeepInDays { get; set; }
                 /// <summary>TimeSpan version of corresponding InDays property</summary>
                 public TimeSpan MaxFileAgeToKeep { get { return TimeSpan.FromDays(MaxFileAgeToKeepInDays); } }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public long MaxTotalSizeToKeep { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public int AdvanceAfterFileReachesSize { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public double AdvanceAfterFileReachesAgeInDays { get; set; }
 
                 /// <summary>TimeSpan version of corresponding InDays property</summary>
                 public TimeSpan AdvanceAfterFileReachesAge { get { return TimeSpan.FromDays(AdvanceAfterFileReachesAgeInDays); } }
 
                 /// <summary>Target property for key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public ValueContainer AdvanceOnTimeBoundary { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public bool? IncludeQPCTime { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public bool? IncludeThreadInfo { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public bool? IncludeFileAndLine { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
-                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true), NamedValueSetItem]
                 public bool? IncludeNamedValueSet { get; set; }
             }
         }
@@ -898,7 +907,7 @@ namespace MosaicLib
                     notifyMessageDelivered.Notify();
                 }
 
-                /// <summary>Returns true if the MesgType from the given LogMessage is currently enabled in this handler's LoggerConfig object.</summary>
+                /// <summary>Returns true if the given log message <paramref name="lm"/> is non-null and its MesgType is enabled in this handler's LoggerConfig object.</summary>
                 protected bool IsMessageTypeEnabled(LogMessage lm)
                 {
                     return ((lm != null) ? loggerConfig.IsTypeEnabled(lm.MesgType) : false);
@@ -1467,6 +1476,14 @@ namespace MosaicLib
             System.Reflection.Assembly mainAssembly = System.Reflection.Assembly.GetEntryAssembly();
             System.Reflection.Assembly currentAssembly = System.Reflection.Assembly.GetExecutingAssembly();
 
+            string hostingAssemblyInformationalVersion = hostingAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+            string mainAssemblyInformationalVersion = mainAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+            string currentAssemblyInformationalVersion = currentAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+
+            string hostingAssemblyInformationalVersionStr = hostingAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(hostingAssemblyInformationalVersion) : "";
+            string mainAssemblyInformationalVersionStr = mainAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(mainAssemblyInformationalVersion) : "";
+            string currentAssemblyInformationalVersionStr = currentAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(currentAssemblyInformationalVersion) : "";
+
             DebuggableAttribute.DebuggingModes hostingAssemblyDebuggingFlags = hostingAssembly.GetDebuggingMode();
             DebuggableAttribute.DebuggingModes mainAssemblyDebuggingFlags = mainAssembly.GetDebuggingMode();
             DebuggableAttribute.DebuggingModes currentAssemblyDebuggingFlags = currentAssembly.GetDebuggingMode();
@@ -1487,9 +1504,9 @@ namespace MosaicLib
                 "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
                 "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(machineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
                 "User:'{0}' {1}".CheckedFormat(userName, Environment.UserInteractive ? "interactive" : "service"),
-                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'{1}".CheckedFormat(hostingAssembly, hostingAssemblyDebugInfoStr) : null),
-                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'{1}".CheckedFormat(mainAssembly, mainAssemblyDebugInfoStr) : null),
-                (currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? "Current Assembly: '{0}'{1}".CheckedFormat(currentAssembly, currentAssemblyDebugInfoStr) : null),
+                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'{1}{2}".CheckedFormat(hostingAssembly, hostingAssemblyInformationalVersionStr, hostingAssemblyDebugInfoStr) : null),
+                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'{1}{2}".CheckedFormat(mainAssembly, mainAssemblyInformationalVersionStr, mainAssemblyDebugInfoStr) : null),
+                (currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? "Current Assembly: '{0}'{1}{2}".CheckedFormat(currentAssembly, currentAssemblyInformationalVersionStr, currentAssemblyDebugInfoStr) : null),
                 (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
             }.Where(s => !s.IsNullOrEmpty()).ToArray();
 

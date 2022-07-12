@@ -47,15 +47,26 @@ namespace MosaicLib.Utils
         public string ClassName { get; private set; }
 
         /// <summary>Basic constructor.  Takes ClassName from class name of caller.  Uses empty suffix.</summary>
-        public ObjIDBase(string objID) : this(1, objID, string.Empty) { }
+        public ObjIDBase(string objID) 
+            : this(1, objID, string.Empty)
+        { }
+
         /// <summary>Basic constructor.  Caller specifies ObjID and ClassName.  Uses empty suffix.</summary>
-        public ObjIDBase(string className, string objID) : this(className, objID, string.Empty) { }
+        public ObjIDBase(string className, string objID) 
+            : this(className, objID, string.Empty)
+        { }
 
         /// <summary>Nested constructor.  Takes ClassName from class name of caller n=skipStackFrames stack frames up from here.  Uses empty suffix.</summary>
-        public ObjIDBase(int skipStackFrames, string objID) : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, string.Empty) { }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public ObjIDBase(int skipStackFrames, string objID) 
+            : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, string.Empty)
+        { }
 
         /// <summary>Nested constructor.  Takes ClassName from class name of caller n=skipStackFrames stack frames up from here.</summary>
-        public ObjIDBase(int skipStackFrames, string objID, string objIDStrSuffix) : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, objIDStrSuffix) { }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public ObjIDBase(int skipStackFrames, string objID, string objIDStrSuffix) 
+            : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, objIDStrSuffix)
+        { }
 
         /// <summary>
         /// Essential constructor: caller specifies className, objID and objIDStrSuffix.  

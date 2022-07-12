@@ -79,7 +79,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             Config = new NetIfacePerformancePartConfig(config);
             this.mdrfWriter = mdrfWriter;
 
-            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, new NamedValueSet() { { "noMDRF" } });
+            Log.SetDefaultNamedValueSetForEmitter(Logging.MesgType.All, Defaults.PerfLoggerDefaultNVS);
 
             sampleRecordingIntervalTimer = new QpcTimer() { TriggerInterval = config.SampleRecordingInterval, AutoReset = true }.Start();
             sampleIntervalTimer = new QpcTimer() { TriggerInterval = config.SampleRecordingInterval.Min((0.5).FromSeconds()), AutoReset = true }.Start();
@@ -164,27 +164,27 @@ namespace MosaicLib.PartsLib.Tools.Performance
             public string name;
             public MDRF.Writer.GroupInfo groupInfo;
 
-            public MDRF.Writer.GroupPointInfo linkUpGPI = new MDRF.Writer.GroupPointInfo() { Name = "linkUp", Comment = "", ValueCST = ContainerStorageType.Boolean, VC = new ValueContainer(false) };
-            public MDRF.Writer.GroupPointInfo opStatGPI = new MDRF.Writer.GroupPointInfo() { Name = "opState", Comment = "", ValueCST = ContainerStorageType.None, VC = ValueContainer.Empty };
-            public MDRF.Writer.GroupPointInfo rxBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxBytes", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "txBytes", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo rxUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxUnicastPkts", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txUnicastPkts", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo rxNonUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxNonUnicastPkts", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txNonUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txNonUnicastPkts", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txQueueLenGPI = new MDRF.Writer.GroupPointInfo() { Name = "txQueueLen", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo rxPktDiscardsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktDiscards", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo rxPktErrorsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktErrors", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo rxPktUnkProtosGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktUnkProtos", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txPktDiscardsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txPktDiscards", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
-            public MDRF.Writer.GroupPointInfo txPktErrorsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txPktErrors", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo linkUpGPI = new MDRF.Writer.GroupPointInfo() { Name = "linkUp", Comment = "", CST = ContainerStorageType.Boolean, VC = new ValueContainer(false) };
+            public MDRF.Writer.GroupPointInfo opStatGPI = new MDRF.Writer.GroupPointInfo() { Name = "opState", Comment = "", CST = ContainerStorageType.None, VC = ValueContainer.Empty };
+            public MDRF.Writer.GroupPointInfo rxBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxBytes", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "txBytes", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo rxUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxUnicastPkts", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txUnicastPkts", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo rxNonUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxNonUnicastPkts", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txNonUnicastPktsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txNonUnicastPkts", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txQueueLenGPI = new MDRF.Writer.GroupPointInfo() { Name = "txQueueLen", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo rxPktDiscardsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktDiscards", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo rxPktErrorsGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktErrors", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo rxPktUnkProtosGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxPktUnkProtos", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txPktDiscardsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txPktDiscards", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
+            public MDRF.Writer.GroupPointInfo txPktErrorsGPI = new MDRF.Writer.GroupPointInfo() { Name = "txPktErrors", Comment = "", CST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
 
-            public MDRF.Writer.GroupPointInfo rxByteRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxByteRate", Comment = "bytes per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo txByteRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txByteRate", Comment = "bytes per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo rxUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxUnicastPktRate", Comment = "packets per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo txUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txUnicastPktRate", Comment = "packets per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo rxNonUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxNonUnicastPktRate", Comment = "packets per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
-            public MDRF.Writer.GroupPointInfo txNonUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txNonUnicastPktRate", Comment = "packets per second", ValueCST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo rxByteRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxByteRate", Comment = "bytes per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo txByteRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txByteRate", Comment = "bytes per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo rxUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxUnicastPktRate", Comment = "packets per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo txUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txUnicastPktRate", Comment = "packets per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo rxNonUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxNonUnicastPktRate", Comment = "packets per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
+            public MDRF.Writer.GroupPointInfo txNonUnicastPktRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "txNonUnicastPktRate", Comment = "packets per second", CST = ContainerStorageType.Single, VC = new ValueContainer(0.0f) };
 
             long lastRxBytes = 0, lastTxBytes = 0, lastRxUnicastPkts = 0, lastTxUnicastPkts = 0, lastRxNonUnicastPkts = 0, lastTxNonUnicastPkts = 0;
             QpcTimeStamp lastQpcTimeStamp = QpcTimeStamp.Zero;
@@ -225,29 +225,29 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
                 linkUpGPI.VC = ValueContainer.Empty.SetValue(linkUp);
                 opStatGPI.VC = ValueContainer.Empty.SetValue(opStat);
-                rxBytesGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.BytesReceived, ContainerStorageType.Int64, false);
-                txBytesGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.BytesSent, ContainerStorageType.Int64, false);
-                rxUnicastPktsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.UnicastPacketsReceived, ContainerStorageType.Int64, false);
-                txUnicastPktsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.UnicastPacketsSent, ContainerStorageType.Int64, false);
-                rxNonUnicastPktsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.NonUnicastPacketsReceived, ContainerStorageType.Int64, false);
-                txNonUnicastPktsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.NonUnicastPacketsSent, ContainerStorageType.Int64, false);
-                txQueueLenGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.OutputQueueLength, ContainerStorageType.Int64, false);
-                rxPktDiscardsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.IncomingPacketsDiscarded, ContainerStorageType.Int64, false);
-                rxPktErrorsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.IncomingPacketsWithErrors, ContainerStorageType.Int64, false);
-                rxPktUnkProtosGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.IncomingUnknownProtocolPackets, ContainerStorageType.Int64, false);
-                txPktDiscardsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.OutgoingPacketsDiscarded, ContainerStorageType.Int64, false);
-                txPktErrorsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.OutgoingPacketsWithErrors, ContainerStorageType.Int64, false);
+                rxBytesGPI.VC = ValueContainer.CreateI8(ipStats.BytesReceived);
+                txBytesGPI.VC = ValueContainer.CreateI8(ipStats.BytesSent);
+                rxUnicastPktsGPI.VC = ValueContainer.CreateI8(ipStats.UnicastPacketsReceived);
+                txUnicastPktsGPI.VC = ValueContainer.CreateI8(ipStats.UnicastPacketsSent);
+                rxNonUnicastPktsGPI.VC = ValueContainer.CreateI8(ipStats.NonUnicastPacketsReceived);
+                txNonUnicastPktsGPI.VC = ValueContainer.CreateI8(ipStats.NonUnicastPacketsSent);
+                txQueueLenGPI.VC = ValueContainer.CreateI8(ipStats.OutputQueueLength);
+                rxPktDiscardsGPI.VC = ValueContainer.CreateI8(ipStats.IncomingPacketsDiscarded);
+                rxPktErrorsGPI.VC = ValueContainer.CreateI8(ipStats.IncomingPacketsWithErrors);
+                rxPktUnkProtosGPI.VC = ValueContainer.CreateI8(ipStats.IncomingUnknownProtocolPackets);
+                txPktDiscardsGPI.VC = ValueContainer.CreateI8(ipStats.OutgoingPacketsDiscarded);
+                txPktErrorsGPI.VC = ValueContainer.CreateI8(ipStats.OutgoingPacketsWithErrors);
 
                 QpcTimeStamp now = QpcTimeStamp.Now;
                 double elapsedTimeInSeconds = (lastQpcTimeStamp.IsZero ? 0.0 : (now - lastQpcTimeStamp).TotalSeconds);
                 double oneOverElapsedTimeInSeconds = (elapsedTimeInSeconds > 0.0) ? (1.0 / elapsedTimeInSeconds) : 0.0;
 
-                rxByteRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.BytesReceived - lastRxBytes) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
-                txByteRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.BytesSent - lastTxBytes) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
-                rxUnicastPktRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.UnicastPacketsReceived - lastRxUnicastPkts) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
-                txUnicastPktRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.UnicastPacketsSent - lastTxUnicastPkts) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
-                rxNonUnicastPktRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.NonUnicastPacketsReceived - lastRxNonUnicastPkts) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
-                txNonUnicastPktRateGPI.VC = ValueContainer.Empty.SetValue<float>((float)((ipStats.NonUnicastPacketsSent - lastTxNonUnicastPkts) * oneOverElapsedTimeInSeconds), ContainerStorageType.Single, false);
+                rxByteRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.BytesReceived - lastRxBytes) * oneOverElapsedTimeInSeconds));
+                txByteRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.BytesSent - lastTxBytes) * oneOverElapsedTimeInSeconds));
+                rxUnicastPktRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.UnicastPacketsReceived - lastRxUnicastPkts) * oneOverElapsedTimeInSeconds));
+                txUnicastPktRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.UnicastPacketsSent - lastTxUnicastPkts) * oneOverElapsedTimeInSeconds));
+                rxNonUnicastPktRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.NonUnicastPacketsReceived - lastRxNonUnicastPkts) * oneOverElapsedTimeInSeconds));
+                txNonUnicastPktRateGPI.VC = ValueContainer.CreateF4((float)((ipStats.NonUnicastPacketsSent - lastTxNonUnicastPkts) * oneOverElapsedTimeInSeconds));
 
                 lastRxBytes = ipStats.BytesReceived;
                 lastTxBytes = ipStats.BytesSent;

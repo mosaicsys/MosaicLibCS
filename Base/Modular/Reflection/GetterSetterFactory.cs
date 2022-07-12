@@ -26,6 +26,8 @@ using System.Reflection.Emit;
 using System.Linq;
 using System.Linq.Expressions;
 
+using MosaicLib.Utils;
+
 namespace MosaicLib.Modular.Reflection
 {
     /// <summary>
@@ -34,135 +36,221 @@ namespace MosaicLib.Modular.Reflection
     public static class GetterSetterFactory
     {
         /// <summary>
-        /// Creates a two argument getter delegate for a given object type (TObject), result type (TResult), and a selected Property (pi).  
+        /// Creates a two argument getter delegate for a given object type {TObject}, result type {TResult}, and a selected Property <paramref name="pi"/>.  
         /// When called, this delegate will obtain and return the property's value as evaluated on the target object.
         /// </summary>
         /// <typeparam name="TObject">The actual type of the target object.  Must be an instance of the PropertyInfo.DeclaringType.</typeparam>
-        /// <typeparam name="TResult">The property value type.  Must be the same as the PropertyInfo.PropertyType</typeparam>
+        /// <typeparam name="TResult">The property value type.  Must be the same as the PropertyInfo.PropertyType, or must be assignable from it.</typeparam>
         /// <param name="pi">The PropertyInfo for the property to be read.  Must not refer to a static property.</param>
+        /// <param name="permitCastAttempt">When true this allows the generation of delegates that will code the attempt to perform the cast based type conversion even if the {TResult} is not known to be assignable from the given PropertyInfo.PropertyType</param>
         /// <exception cref="System.NotSupportedException">Exception thrown on any validation error as described above.</exception>
-        public static Func<TObject, TResult> CreatePropertyGetterFunc<TObject, TResult>(PropertyInfo pi)
+        public static Func<TObject, TResult> CreatePropertyGetterFunc<TObject, TResult>(PropertyInfo pi, bool permitCastAttempt = false)
         {
             Type targetObjType = typeof(TObject);
             Type resultType = typeof(TResult);
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create property getter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
-
-            if (!resultType.Equals(pi.PropertyType))
-                throw new System.NotSupportedException("Cannot create property getter function when given TResult is not the same as the given PropertyInfo instance's PropertyType");
+                new System.NotSupportedException("Cannot create property getter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType").Throw();
 
             MethodInfo pgGetMethod = pi.GetGetMethod();
             if (pgGetMethod == null)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod does not exist");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod does not exist").Throw();
 
             if (pgGetMethod.IsStatic)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod is static");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod is static").Throw();
 
-            ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
-            Expression propertyGetExpr = Expression.Property(targetObjParameter, pi);
+            if (resultType.Equals(pi.PropertyType))
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                Expression propertyGetExpr = Expression.Property(targetObjParameter, pi);
+                var lambdaExpr = Expression.Lambda<Func<TObject, TResult>>(propertyGetExpr, targetObjParameter);
 
-            Func<TObject, TResult> func = Expression.Lambda<Func<TObject, TResult>>(propertyGetExpr, targetObjParameter).Compile();
-            return func;
+                Func<TObject, TResult> func = lambdaExpr.Compile();
+
+                return func;
+            }
+            else if (resultType.IsAssignableFrom(pi.PropertyType) || permitCastAttempt)
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                Expression propertyGetExpr = Expression.Property(targetObjParameter, pi);
+                Expression convertedValueExpr = Expression.Convert(propertyGetExpr, resultType);
+                var lambdaExpr = Expression.Lambda<Func<TObject, TResult>>(convertedValueExpr, targetObjParameter);
+
+                Func<TObject, TResult> func = lambdaExpr.Compile();
+
+                return func;
+            }
+            else
+            {
+                new System.NotSupportedException("Cannot create property getter function when given TResult is not the same as the given PropertyInfo instance's PropertyType and the given TResult is not assignable from the PropertyType reference type.").Throw();
+                return null;
+            }
         }
 
         /// <summary>
-        /// Creates a two argument setter delegate for a given object type (TObject), value type (TValue), and a selected Property (pi).
+        /// Creates a two argument setter delegate for a given object type {TObject}, value type {TValue}, and a selected Property <paramref name="pi"/>.
         /// When called, this delegate will assign the given value to the selected property in the given target object.
         /// </summary>
         /// <typeparam name="TObject">The actual type of the target object.  Must be an instance of the PropertyInfo.DeclaringType.</typeparam>
-        /// <typeparam name="TValue">The property value type.  Must be the same as the PropertyInfo.PropertyType</typeparam>
+        /// <typeparam name="TValue">The property value type.  Must be the same as the PropertyInfo.PropertyType, or must be assignable to it.</typeparam>
         /// <param name="pi">The PropertyInfo for the property to be set.  Must not refer to a static property.</param>
+        /// <param name="permitCastAttempt">When true this allows the generation of delegates that will code the attempt to perform the cast based type conversion even if the PropertyInfo.PropertyType is not known to be assignable from the given {TValue} type</param>
         /// <exception cref="System.NotSupportedException">Exception thrown on any validation error as described above.</exception>
-        public static Action<TObject, TValue> CreatePropertySetterAction<TObject, TValue>(PropertyInfo pi)
+        public static Action<TObject, TValue> CreatePropertySetterAction<TObject, TValue>(PropertyInfo pi, bool permitCastAttempt = false)
         {
             Type targetObjType = typeof(TObject);
             Type valueType = typeof(TValue);
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create property setter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create property setter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType").Throw();
 
             if (targetObjType.IsValueType)
-                throw new System.NotSupportedException("Cannot create property setter action when given TObject is a value type");
-
-            if (!valueType.Equals(pi.PropertyType))
-                throw new System.NotSupportedException("Cannot create property setter function when given TValue is not the same as the given PropertyInfo instance's PropertyType");
+                new System.NotSupportedException("Cannot create property setter action when given TObject is a value type").Throw();
 
             MethodInfo piSetMethod = pi.GetSetMethod();
             if (piSetMethod == null)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod does not exist");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod does not exist").Throw();
 
             if (piSetMethod.IsStatic)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod is static");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod is static").Throw();
 
-            ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
-            ParameterExpression valueParameter = Expression.Parameter(valueType, "value");
-            MethodCallExpression propertySetExpr = Expression.Call(targetObjParameter, piSetMethod, valueParameter);
+            if (valueType.Equals(pi.PropertyType))
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                ParameterExpression inputParameter = Expression.Parameter(valueType, "input");
+                MethodCallExpression propertySetExpr = Expression.Call(targetObjParameter, piSetMethod, inputParameter);
+                var lambdaExpr = Expression.Lambda<Action<TObject, TValue>>(propertySetExpr, targetObjParameter, inputParameter);
 
-            Action<TObject, TValue> act = Expression.Lambda<Action<TObject, TValue>>(propertySetExpr, targetObjParameter, valueParameter).Compile();
+                Action<TObject, TValue> act = lambdaExpr.Compile();
 
-            return act;
+                return act;
+            }
+            else if (pi.PropertyType.IsAssignableFrom(valueType) || permitCastAttempt)
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                ParameterExpression inputParameter = Expression.Parameter(valueType, "input");
+                Expression convertedValueExpr = Expression.Convert(inputParameter, pi.PropertyType);
+                MethodCallExpression propertySetExpr = Expression.Call(targetObjParameter, piSetMethod, convertedValueExpr);
+                var lambdaExpr = Expression.Lambda<Action<TObject, TValue>>(propertySetExpr, targetObjParameter, inputParameter);
+
+                Action<TObject, TValue> act = lambdaExpr.Compile();
+
+                return act;
+            }
+            else
+            {
+                new System.NotSupportedException("Cannot create property setter function when given TValue is not the same as the given PropertyInfo instance's PropertyType and the PropertyType is not assignable from the TValue reference type.").Throw();
+                return null;
+            }
+        }
+
+        [Obsolete("Please switch to the use of the new equivilant CreateFieldGetterFunc method (2019-03-29)")]
+        public static Func<TObject, TResult> CreateFieldGetterExpression<TObject, TResult>(FieldInfo fi)
+        {
+            return CreateFieldGetterFunc<TObject, TResult>(fi);
         }
 
         /// <summary>
-        /// Creates a two argument getter delegate for a given object type (TObject), result type (TResult), and a selected Field (fi).  
+        /// Creates a two argument getter delegate for a given object type {TObject}, result type {TResult}, and a selected Field <paramref name="fi"/>.  
         /// When called, this delegate will obtain and return the field's value as evaluated on the target object.
         /// </summary>
         /// <typeparam name="TObject">The actual type of the target object.  Must be an instance of the FieldInfo.DeclaringType.</typeparam>
-        /// <typeparam name="TResult">The property value type.  Must be the same as the FieldInfo.FieldType</typeparam>
+        /// <typeparam name="TResult">The property value type.  Must be the same as the FieldInfo.FieldType, or must be an assignable from it.</typeparam>
         /// <param name="fi">The FieldInfo for the property to be read.  Must not refer to a static field.</param>
+        /// <param name="permitCastAttempt">When true this allows the generation of delegates that will code the attempt to perform the cast based type conversion even if the {TResult} is not known to be assignable from the given FieldInfo.FieldType</param>
         /// <exception cref="System.NotSupportedException">Exception thrown on any validation error as described above.</exception>
-        public static Func<TObject, TResult> CreateFieldGetterExpression<TObject, TResult>(FieldInfo fi)
+        public static Func<TObject, TResult> CreateFieldGetterFunc<TObject, TResult>(FieldInfo fi, bool permitCastAttempt = false)
         {
             Type targetObjType = typeof(TObject);
             Type resultType = typeof(TResult);
 
             if (!targetObjType.Equals(fi.DeclaringType) && !targetObjType.IsSubclassOf(fi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create field getter function when given TObject is not derived from the given FieldInfo instance's DeclaringType");
-            if (!resultType.Equals(fi.FieldType))
-                throw new System.NotSupportedException("Cannot create field getter function when given TResult is not the same as the given FieldInfo instance's FieldType");
+                new System.NotSupportedException("Cannot create field getter function when given TObject is not derived from the given FieldInfo instance's DeclaringType").Throw();
+
             if (fi.IsStatic)
-                throw new System.NotSupportedException("Cannot create field getter action when given FieldInfo refers to a static field");
+                new System.NotSupportedException("Cannot create field getter action when given FieldInfo refers to a static field").Throw();
 
-            ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
-            Expression fieldReadExpr = Expression.Field(targetObjParameter, fi);
+            if (resultType.Equals(fi.FieldType))
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                Expression fieldGetExpr = Expression.Field(targetObjParameter, fi);
+                var lambdaExpr = Expression.Lambda<Func<TObject, TResult>>(fieldGetExpr, targetObjParameter);
 
-            Func<TObject, TResult> func = Expression.Lambda<Func<TObject, TResult>>(fieldReadExpr, targetObjParameter).Compile();
-            return func;
+                Func<TObject, TResult> func = lambdaExpr.Compile();
+
+                return func;
+            }
+            else if (resultType.IsAssignableFrom(fi.FieldType) || permitCastAttempt)
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                Expression fieldGetExpr = Expression.Field(targetObjParameter, fi);
+                Expression convertedValueExpr = Expression.Convert(fieldGetExpr, resultType);
+                var lambdaExpr = Expression.Lambda<Func<TObject, TResult>>(convertedValueExpr, targetObjParameter);
+
+                Func<TObject, TResult> func = lambdaExpr.Compile();
+
+                return func;
+            }
+            else
+            {
+                new System.NotSupportedException("Cannot create field getter action when given TResult is neither equal to, nor assignable from a reference to the given FieldInfo instance's FieldType").Throw();
+                return null;
+            }
         }
 
         /// <summary>
-        /// Creates a two argument setter delegate for a given object type (TObject), value type (TValue), and a selected Field (fi).
+        /// Creates a two argument setter delegate for a given object type {TObject}, value type {TValue}, and a selected Field <paramref name="fi"/>.
         /// When called, this delegate will assign the given value to the selected field in the given target object.
         /// </summary>
         /// <typeparam name="TObject">The actual type of the target object.  Must be an instance of the FieldInfo.DeclaringType and must not be a value type.</typeparam>
-        /// <typeparam name="TValue">The property value type.  Must be the same as the FieldInfo.FieldType</typeparam>
+        /// <typeparam name="TValue">The property value type.  Must be the same as the FieldInfo.FieldType, or must be assignable to it.</typeparam>
         /// <param name="fi">The FieldInfo for the field to be set.  Must not refer to a static field.</param>
+        /// <param name="permitCastAttempt">When true this allows the generation of delegates that will code the attempt to perform the cast based type conversion even if the FieldInfo.FieldType is not known to be assignable from the given {TValue} type</param>
         /// <exception cref="System.NotSupportedException">Exception thrown on any validation error as described above.</exception>
-        public static Action<TObject, TValue> CreateFieldSetterAction<TObject, TValue>(FieldInfo fi)
+        public static Action<TObject, TValue> CreateFieldSetterAction<TObject, TValue>(FieldInfo fi, bool permitCastAttempt = false)
         {
             Type targetObjType = typeof(TObject);
             Type valueType = typeof(TValue);
 
             if (!targetObjType.Equals(fi.DeclaringType) && !targetObjType.IsSubclassOf(fi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create field setter action when given TObject is not derived from the given FieldInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create field setter action when given TObject is not derived from the given FieldInfo instance's DeclaringType").Throw();
+
             if (targetObjType.IsValueType)
-                throw new System.NotSupportedException("Cannot create field setter action when given TObject is a value type");
-            if (!valueType.Equals(fi.FieldType))
-                throw new System.NotSupportedException("Cannot create field setter action when given TValue is not the same as the given FieldInfo instance's FieldType");
+                new System.NotSupportedException("Cannot create field setter action when given TObject is a value type").Throw();
+
             if (fi.IsStatic)
-                throw new System.NotSupportedException("Cannot create field setter action when given FieldInfo refers to a static field");
+                new System.NotSupportedException("Cannot create field setter action when given FieldInfo refers to a static field").Throw();
 
-            DynamicMethod setFieldMethod = new DynamicMethod("_setField_" + fi.Name, typeof(void), new[] { typeof(TObject), typeof(TValue) });
-            ILGenerator ilGen = setFieldMethod.GetILGenerator();
+            if (valueType.Equals(fi.FieldType))
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                ParameterExpression valueParameter = Expression.Parameter(valueType, "value");
+                Expression fieldExpr = Expression.Field(targetObjParameter, fi);
+                Expression assignExpr = Expression.Assign(fieldExpr, valueParameter);
+                var lambdaExpr = Expression.Lambda<Action<TObject, TValue>>(assignExpr, targetObjParameter, valueParameter);
 
-            ilGen.Emit(OpCodes.Ldarg_0);        // get the target object (TObject type)
-            ilGen.Emit(OpCodes.Ldarg_1);        // get the value (TValue)
-            ilGen.Emit(OpCodes.Stfld, fi);      // store the TValue into the TObject.(fi.Name) field
-            ilGen.Emit(OpCodes.Ret);            // done.
+                Action<TObject, TValue> act = lambdaExpr.Compile();
 
-            Action<TObject, TValue> act = (Action<TObject, TValue>) setFieldMethod.CreateDelegate(typeof(Action<TObject, TValue>));
-            return act;
+                return act;
+            }
+            else if (fi.FieldType.IsAssignableFrom(valueType) || permitCastAttempt)
+            {
+                ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
+                ParameterExpression valueParameter = Expression.Parameter(valueType, "value");
+                Expression covnertedValueExpr = Expression.Convert(valueParameter, fi.FieldType);
+                Expression fieldExpr = Expression.Field(targetObjParameter, fi);
+                Expression assignExpr = Expression.Assign(fieldExpr, covnertedValueExpr);
+                var lambdaExpr = Expression.Lambda<Action<TObject, TValue>>(assignExpr, targetObjParameter, valueParameter);
+
+                Action<TObject, TValue> act = lambdaExpr.Compile();
+
+                return act;
+            }
+            else
+            {
+                new System.NotSupportedException("Cannot create field setter action when given TValue is neither equal to, nor assignable as a reference to the given FieldInfo instance's FieldType").Throw();
+                return null;
+            }
         }
     }
 }

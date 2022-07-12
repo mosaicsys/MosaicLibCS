@@ -265,11 +265,11 @@ namespace MosaicLib.WPF.Controls
         {
             var combinedInfo = value as Tools.Sets.E090.E090CombinedSubstLocAndSubstInfo;
 
-            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty || combinedInfo.SubstLocInfo.SLS == Semi.E090.SubstLocState.Undefined || combinedInfo.SubstLocInfo.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty || combinedInfo.SubstLocInfo.SLS == Semi.E090.SubstLocState.Undefined)
                 return siennaBrush;
 
             if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.None)
-                return lightGrayBrush;
+                return (combinedInfo.SubstLocInfo.NotAccessibleReason.IsNullOrEmpty() ? lightGrayBrush : darkGrayBrush);
 
             Color substColor = default(Color);
             float alpha = 1.0f;
@@ -294,7 +294,11 @@ namespace MosaicLib.WPF.Controls
             else if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Source || combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Destination)
                 alpha *= 0.1f;
 
+            if (combinedInfo.SubstLocInfo.NotAccessibleReason.IsNeitherNullNorEmpty())
+                substColor =  substColor * 0.333f;
+
             substColor.ScA = alpha;
+
             substColor.Clamp();
 
             return new SolidColorBrush(substColor);
@@ -316,6 +320,7 @@ namespace MosaicLib.WPF.Controls
         private static readonly Color goldenrod = ((Color)colorConverter.ConvertFrom("Goldenrod"));
         private static readonly Color sienna = ((Color)colorConverter.ConvertFrom("Sienna"));
 
+        private static readonly Brush darkGrayBrush = new SolidColorBrush(darkGray);
         private static readonly Brush lightGrayBrush = new SolidColorBrush(lightGray);
         private static readonly Brush siennaBrush = new SolidColorBrush(sienna);
     }

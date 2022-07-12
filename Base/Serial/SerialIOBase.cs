@@ -602,10 +602,15 @@ namespace MosaicLib.SerialIO
 					rdActionParam.BytesRead += gotCount;
 
                 bool readComplete = (rdActionParam.WaitForAllBytes ? (rdActionParam.BytesRead >= rdActionParam.BytesToRead) : (gotCount > 0));
-                if (ec == null && (readResult != ActionResultEnum.None && readResult != ActionResultEnum.ReadDone && readResult != ActionResultEnum.ReadRemoteEndHasBeenClosed))
-                    ec = Fcns.CheckedFormat("HandleRead gave: {0}", readResult);
-				if (ec == null && readComplete)
-					ec = string.Empty;
+                if (ec == null)
+                {
+                    if (readResult != ActionResultEnum.None && readResult != ActionResultEnum.ReadDone && readResult != ActionResultEnum.ReadRemoteEndHasBeenClosed)
+                        ec = Fcns.CheckedFormat("HandleRead gave: {0}", readResult);
+                    else if (readComplete)
+                        ec = string.Empty;
+                    else if (readResult == ActionResultEnum.ReadRemoteEndHasBeenClosed && rdActionParam.BytesRead > 0)
+                        ec = string.Empty;
+                }
 
 				TimeSpan elapsed = now - rdActionParam.StartTime;
 				bool readTimeout = elapsed > PortConfig.ReadTimeout;

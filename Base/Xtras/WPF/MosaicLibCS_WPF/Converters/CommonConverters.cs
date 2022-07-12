@@ -22,11 +22,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Windows;
-using System.Windows.Data;
+using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
+using System.Windows.Data;
+using System.Windows.Media;
 
 using MosaicLib;
 using MosaicLib.Modular.Common;
@@ -77,6 +77,36 @@ namespace MosaicLib.WPF.Converters
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return value.SafeToString();
+        }
+    }
+
+    /// <summary>
+    /// Supports bindable, one way, conversion of an object to an I4.  
+    /// Starts by trying System.Convert.ChangeType, and then ValueContainer.CreateFromObject().GetValueI4().
+    /// <para/>The ConvertBack method alsways returns Binding.DoNothing
+    /// </summary>
+    public class ObjectToI4Converter : OneWayValueConverterBase
+    {
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            try
+            {
+                try
+                {
+                    var i4 = System.Convert.ChangeType(value, typeof(int));
+                    return i4;
+                }
+                catch
+                {
+                    var valueVC = ValueContainer.CreateFromObject(value);
+                    return valueVC.GetValueI4(rethrow: true);
+                }
+            }
+            catch
+            {
+                var paramVC = ValueContainer.CreateFromObject(parameter);
+                return paramVC.GetValueI4(rethrow: false);
+            }
         }
     }
 
@@ -167,7 +197,7 @@ namespace MosaicLib.WPF.Converters
 
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            int indexFromValue = ValueContainer.CreateFromObject(value).GetValue<int>(rethrow: false);
+            int indexFromValue = ValueContainer.CreateFromObject(value).GetValueI4(rethrow: false);
 
             string [] tokenSetArray = parameter.SafeToString().Split(Delimiter);
 
@@ -241,6 +271,34 @@ namespace MosaicLib.WPF.Converters
     {
         /// <summary>Constructor</summary>
         public IndexIntoSemiColonDelimitedStringConverter() : base(';') { }
+    }
+
+    #endregion
+
+    #region ColorNameToSolidColorBrushConverter
+
+    /// <summary>
+    /// Converter used to go from color names to solid color brushes.
+    /// </summary>
+    public class ColorNameToSolidColorBrushConverter : OneWayValueConverterBase
+    {
+        public static readonly TypeConverter colorConverter = TypeDescriptor.GetConverter(typeof(Color));
+        private Color conversionFailureColor = (Color)colorConverter.ConvertFrom("Cyan");
+
+        /// <summary>
+        /// Attempts to convert and return the given string <paramref name="value"/> to a solid color brush.
+        /// If this conversion fails then this converter attempts to convert and return the given <paramref name="parameter"/> to a solid color brush.
+        /// Otherwise this method returns the conversion failure color (Cyan) as a solid color brush.
+        /// </summary>
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            Color ? result = null;
+
+            try { result = (Color) colorConverter.ConvertFrom((string)value); } catch { }
+            try { result = (Color)colorConverter.ConvertFrom((string)parameter); } catch { }
+
+            return new SolidColorBrush(result ?? conversionFailureColor);
+        }
     }
 
     #endregion
@@ -517,6 +575,21 @@ namespace MosaicLib.WPF.Converters
                 return new[] { objIn };
 
             return nullOrEmptyObjectResult;
+        }
+    }
+
+    #endregion
+
+    #region ConcatenateMultivalueConverter
+
+    /// <summary>
+    /// This multi-value converter converts each of the given objects to strings and returns the concatenation of these strings
+    /// </summary>
+    public class ConcatenateMultiValueConverter : OneWayMultiValueConverterBase
+    {
+        public override object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            return string.Concat(values.Select(item => item.SafeToString()));
         }
     }
 

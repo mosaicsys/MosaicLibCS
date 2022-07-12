@@ -21,15 +21,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
-using MosaicLib;
-using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
@@ -90,6 +85,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>Selects the action logging config to be used by the ConfigBridge</summary>
         public ActionLoggingConfig ActionLoggingConfig { get; set; }
 
+        /// <summary>When true (the default) the bridge will merge the config key's metadata into the corresponding IVA's meta data.</summary>
+        public bool PropagateConfigKeyMetaDataToIVA { get; set; }
+
         public ConfigIVIBridgeConfig(string partID)
         {
             PartID = partID;
@@ -99,6 +97,7 @@ namespace MosaicLib.Modular.Config
             ValueUpdateTraceLogMesgType = Logging.MesgType.Debug;
             UseEnsureExists = true;
             ActionLoggingConfig = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+            PropagateConfigKeyMetaDataToIVA = true;
         }
 
         public ConfigIVIBridgeConfig(ConfigIVIBridgeConfig other)
@@ -128,6 +127,7 @@ namespace MosaicLib.Modular.Config
             CKAMapNameFromTo = other.CKAMapNameFromTo;
 
             ActionLoggingConfig = other.ActionLoggingConfig;
+            PropagateConfigKeyMetaDataToIVA = other.PropagateConfigKeyMetaDataToIVA;
         }
     }
 
@@ -199,7 +199,7 @@ namespace MosaicLib.Modular.Config
             if (!BaseState.IsOnline)
                 return "Part is not Online [{0}]".CheckedFormat(BaseState);
 
-            ServiceBridge();
+            ServiceBridge(forSync: true);
 
             return string.Empty;
         }
@@ -226,9 +226,9 @@ namespace MosaicLib.Modular.Config
 
                 case "SetKey":
                     {
-                        string key = npv["key"].VC.GetValue<string>(rethrow: true);
+                        string key = npv["key"].VC.GetValueA(rethrow: true);
                         ValueContainer value = npv["value"].VC;
-                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        string comment = npv["comment"].VC.GetValueA(rethrow: false).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
                         bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         IConfigKeyAccess icka = Config.GetConfigKeyAccess(key, ensureExists: ensureExists, defaultValue: value);
@@ -250,7 +250,7 @@ namespace MosaicLib.Modular.Config
                     {
                         string [] keys = npv["keys"].VC.GetValue<string []>(rethrow: true);
                         ValueContainer [] values = npv["values"].VC.GetValue<ValueContainer []>(rethrow: true);
-                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        string comment = npv["comment"].VC.GetValueA(rethrow: false).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
                         bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         if (keys.SafeLength() != values.SafeLength())
@@ -293,7 +293,7 @@ namespace MosaicLib.Modular.Config
         bool useNominalSyncHoldoffTimer = false;
         QpcTimer nominalSyncHoldoffTimer = new QpcTimer();
 
-        Dictionary<string, AttemptToAddSyncItemForIVAInfo> lookAtLaterDictionary = new Dictionary<string, AttemptToAddSyncItemForIVAInfo>();
+        IDictionaryWithCachedArrays<string, AttemptToAddSyncItemForIVAInfo> lookAtLaterDictionary = new IDictionaryWithCachedArrays<string, AttemptToAddSyncItemForIVAInfo>();
         bool useLookAtLaterTimer = false;
         QpcTimer lookAtLaterTimer = new QpcTimer();
 
@@ -305,7 +305,7 @@ namespace MosaicLib.Modular.Config
             public IValueAccessor iva;
         }
 
-        private void ServiceBridge()
+        private void ServiceBridge(bool forSync = false)
         {
             if (useNominalSyncHoldoffTimer)
                 nominalSyncHoldoffTimer.Reset();
@@ -361,9 +361,9 @@ namespace MosaicLib.Modular.Config
             }
 
             // if we have lookAtLater items and the corresponding timer has triggered then 
-            if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered))
+            if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered || forSync))
             {
-                foreach (var item in lookAtLaterDictionary.Values.ToArray())
+                foreach (var item in lookAtLaterDictionary.ValueArray)
                 {
                     if (AttemptToAddSyncItemForIVA(item, requireUpdateNeeded: true))
                     {
@@ -424,7 +424,7 @@ namespace MosaicLib.Modular.Config
             // service existing IVA -> CKA items
             if (syncItemArrayUpdated || ivaArray.IsUpdateNeeded())
             {
-                foreach (SyncItem syncItem in syncItemArray)
+                foreach (var syncItem in syncItemArray)
                 {
                     if (syncItem.iva.IsUpdateNeeded)
                     {
@@ -445,10 +445,15 @@ namespace MosaicLib.Modular.Config
             }
 
             // service existing CKA -> IVA items
-            if (lastConfigSeqNums.ChangeSeqNum != configSeqNum.ChangeSeqNum)
+            bool serviceMDChanges = (lastConfigSeqNums.KeyMetaDataChangeSeqNum != configSeqNum.KeyMetaDataChangeSeqNum && BridgeConfig.PropagateConfigKeyMetaDataToIVA);
+
+            if (lastConfigSeqNums.ChangeSeqNum != configSeqNum.ChangeSeqNum || serviceMDChanges)
             {
-                foreach (SyncItem syncItem in syncItemArray)
+                foreach (var syncItem in syncItemArray)
                 {
+                    int entryMDSeqNum = syncItem.icka.MetaDataSeqNum;
+                    int entryValueSeqNum = syncItem.icka.ValueSeqNum;
+
                     if (syncItem.icka.UpdateValue())
                     {
                         ValueContainer vc = syncItem.icka.VC;
@@ -458,10 +463,17 @@ namespace MosaicLib.Modular.Config
                             ValueTraceEmitter.Emit("Propagating cka change '{0}' to iva '{1}'", syncItem.icka, syncItem.iva);
                             syncItem.iva.Set(vc);
                             syncItem.UpdateCopyInSet(ReferenceSet);
+
+                            if (BridgeConfig.PropagateConfigKeyMetaDataToIVA)
+                                syncItem.ServiceMDPropagation(ValueTraceEmitter);
                         }
                         else
                         {
-                            ValueTraceEmitter.Emit("cka '{0}' updated, value matches iva '{1}'", syncItem.icka, syncItem.iva);
+                            if (entryValueSeqNum != syncItem.icka.ValueSeqNum)
+                                ValueTraceEmitter.Emit("cka '{0}' updated, value already matched iva '{1}'", syncItem.icka, syncItem.iva);
+
+                            if (BridgeConfig.PropagateConfigKeyMetaDataToIVA)
+                                syncItem.ServiceMDPropagation(ValueTraceEmitter);
                         }
                     }
                 }
@@ -488,11 +500,10 @@ namespace MosaicLib.Modular.Config
             if (item.iva.HasValueBeenSet && !item.iva.VC.IsEmpty)
             {
                 IConfigKeyAccess cka = Config.GetConfigKeyAccess(new ConfigKeyAccessSpec()
-                {
-                    Key = item.mappedToCKAKeyName,
-                    Flags = new ConfigKeyAccessFlags() { MayBeChanged = true, EnsureExists = BridgeConfig.UseEnsureExists, DefaultProviderName = BridgeConfig.DefaultConfigKeyProviderName },
-                }
-                                                                 , item.iva.VC);
+                    {
+                        Key = item.mappedToCKAKeyName,
+                        Flags = new ConfigKeyAccessFlags() { MayBeChanged = true, EnsureExists = BridgeConfig.UseEnsureExists, DefaultProviderName = BridgeConfig.DefaultConfigKeyProviderName },
+                    }, item.iva.VC);
 
                 AddSyncItemAndPerformInitialPropagation(item.iva, cka, item.ivaNativeName, null, item.mappedFromIVAName, item.mappedToCKAKeyName);
 
@@ -506,7 +517,15 @@ namespace MosaicLib.Modular.Config
 
         private SyncItem AddSyncItemAndPerformInitialPropagation(IValueAccessor iva, IConfigKeyAccess cka, string ivaLookupName, string ivaFromCkaMappedName, string ckaFromIvaMappedName, string ckaLookupKeyName)
         {
-            SyncItem syncItem = new SyncItem() { iva = iva, icka = cka, ivaLookupName = ivaLookupName, ivaFromCkaMappedName = ivaFromCkaMappedName, ckaFromIvaMappedName = ckaFromIvaMappedName, ckaLookupKeyName = ckaLookupKeyName };
+            SyncItem syncItem = new SyncItem() 
+            { 
+                iva = iva, 
+                icka = cka, 
+                ivaLookupName = ivaLookupName, 
+                ivaFromCkaMappedName = ivaFromCkaMappedName, 
+                ckaFromIvaMappedName = ckaFromIvaMappedName, 
+                ckaLookupKeyName = ckaLookupKeyName 
+            };
 
             syncItemList.Add(syncItem);
             syncItemArray = null;
@@ -539,6 +558,9 @@ namespace MosaicLib.Modular.Config
                 ValueTraceEmitter.Emit("Propagating initial iva '{0}' to cka '{1}'", iva, cka);
                 cka.SetValue(vc, "{0}: Propagating initial value from iva '{1}'".CheckedFormat(PartID, iva));
             }
+
+            if (BridgeConfig.PropagateConfigKeyMetaDataToIVA)
+                syncItem.ServiceMDPropagation(ValueTraceEmitter, force: true);
 
             syncItem.UpdateCopyInSet(ReferenceSet);
 
@@ -577,11 +599,25 @@ namespace MosaicLib.Modular.Config
                         ckacLastPublishedSeqNumInSet = referenceSet.RemoveBySeqNumsAndAddItems(EmptyArrayFactory<long>.Instance, ckac);
                 }
             }
+
+            public int ckacLastServicedMDSeqNum = 0;
+
+            public void ServiceMDPropagation(Logging.IMesgEmitter emitter, bool force = false)
+            {
+                if (ckacLastServicedMDSeqNum != icka.MetaDataSeqNum || force)
+                {
+                    iva.SetMetaData(icka.MetaData);
+                    ckacLastServicedMDSeqNum = icka.MetaDataSeqNum;
+
+                    emitter.Emit("Merged MetaData from icka:{0} into iva:{1}", icka, iva);
+                }
+            }
         }
 
         Dictionary<string, SyncItem> ivaNameToSyncItemDictionary = new Dictionary<string, SyncItem>();
         Dictionary<string, SyncItem> configKeyNameToSyncItemDictionary = new Dictionary<string, SyncItem>();
 
+        // Note: the following is explicitly not using a IListWithCachedArray because the ivaArray is also generated at the same time that the syncItemArray is generated.
         private List<SyncItem> syncItemList = new List<SyncItem>();
         private SyncItem[] syncItemArray = null;
         private IValueAccessor[] ivaArray = null;

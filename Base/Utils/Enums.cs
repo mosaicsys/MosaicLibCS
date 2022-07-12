@@ -91,7 +91,7 @@ namespace MosaicLib.Utils
                 //  risk that we will fail to pass on some other unexpected type of exception that is not a direct result of calling System.Enum.Parse.
 
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return false;
             }
@@ -106,7 +106,7 @@ namespace MosaicLib.Utils
             Type enumT = typeof(EnumT);
 
             if (!enumT.IsEnum)
-                throw new System.ArgumentException("Type:'{0}' is not usable with Utils.Enum.{1}.  It must be a System.Enum".CheckedFormat(typeof(EnumT), Fcns.CurrentMethodName));
+                new System.ArgumentException("Type:'{0}' is not usable with Utils.Enum.{1}.  It must be a System.Enum".CheckedFormat(typeof(EnumT), Fcns.CurrentMethodName)).Throw();
 
             if (s != null)
                 s = s.Trim();

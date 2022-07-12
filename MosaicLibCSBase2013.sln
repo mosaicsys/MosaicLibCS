@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase2010", "Base\MosaicLibCSBase2010.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase", "Base\MosaicLibCSBase.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -19,10 +19,7 @@
  * limitations under the License.
  */
 
-using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Linq;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
@@ -146,7 +143,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
             set { singletonInstanceHelper.Instance = value; }
         }
 
-        private static SingletonHelperBase<IPartsInterconnection> singletonInstanceHelper = new SingletonHelperBase<IPartsInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new PartsInterconnection("MainActionsInterconnect"));
+        private static readonly SingletonHelperBase<IPartsInterconnection> singletonInstanceHelper = new SingletonHelperBase<IPartsInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new PartsInterconnection("MainActionsInterconnect"));
 
         #endregion
     }
@@ -196,7 +193,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
             }
 
             if (part == null && throwOnNotFound)
-                throw new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name));
+                new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name)).Throw();
 
             return part;
         }
@@ -274,7 +271,8 @@ namespace MosaicLib.Modular.Interconnect.Parts
                                 break;
 
                             case DuplicatePartIDRegistrationBehavior.Throw:
-                                throw new DuplicatePartIDException("Registration of PartID '{0}' failed: by request cannot replace previously registered part with the same name [{1} {2}]".CheckedFormat(sanitizedPartID, Name, existingPart.GetType()));
+                                new DuplicatePartIDException("Registration of PartID '{0}' failed: by request cannot replace previously registered part with the same name [{1} {2}]".CheckedFormat(sanitizedPartID, Name, existingPart.GetType())).Throw();
+                                break;
                         }
                     }
                 }
@@ -298,7 +296,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
         private readonly object mutex = new object();
 
         /// <summary>This is the dictionary that is used to convert part ID's into the corresponding IActivePartBase registered for that name.</summary>
-        private Dictionary<string, IActivePartBase> partIDDictionary = new Dictionary<string, IActivePartBase>();
+        private readonly Dictionary<string, IActivePartBase> partIDDictionary = new Dictionary<string, IActivePartBase>();
 
         #endregion
 

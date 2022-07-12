@@ -74,6 +74,30 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Allows the caller to Service the given <paramref name="set"/> of IServiceable items.  Returns the sum of the results of calling SafeService on each such object.
+        /// </summary>
+        public static int SafeServiceSet(this IEnumerable<IServiceable> set, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            if (set != null)
+            {
+                qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
+                int deltaCount = 0;
+
+                foreach (var item in set)
+                {
+                    deltaCount += item.SafeService(qpcTimeStamp);
+                }
+
+                return deltaCount;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
         /// If the given IServiceable <paramref name="obj"/> is non-null, this method uses ThreadPool.QueueUserWorkItem to queue a call to run the SafeService method on it.
         /// If <paramref name="passQpcAtTimeOfCall"/> is true then the SafeService method will be passed QpcTimeStamp.Now, otherwise it will be passed QpcTimeStamp.Zero.
         /// </summary>
@@ -868,7 +892,7 @@ namespace MosaicLib.Utils
 	/// <summary>Define the delegate type that is used with our generic IEventHandlerNotificationList and derived types</summary>
 	public delegate void EventHandlerDelegate<EventArgsType>(object source, EventArgsType eventArgs);
 
-	/// <summary> Define the interface that is provided to clients to allow them to add and remove their typed EventHandler delegates </summary>
+	/// <summary> Define the interface that is provided to clients to allow them to add and remove their typed EventHandler delegates</summary>
 	public interface IEventHandlerNotificationList<EventArgsType>
 	{
         /// <summary>
@@ -975,8 +999,14 @@ namespace MosaicLib.Utils
         #region Internals
 
         /// <summary>
-        /// Protected mutex object used during object creation as required within the CreateEmptyObjectIfNeeded static method.
+        /// protected static, class wide, mutex object.  
+        /// Used to synchronize all changes to the contents of any basic notification list and used to synchronize the generation of the cached Action array.
         /// </summary>
+        /// <remarks>
+        /// The choice to use a single static mutex is based on the premise that list updates are both rare and are quick.  In addition the use of the
+        /// internal cached Action array allows individual Notify methods to be used without use of this mutex, provided that the list contents has not changed
+        /// since the last Notification for this instance.
+        /// </remarks>
         protected static readonly object mutex = new object();
 
         private List<Action> basicNotificationActionList = null;
@@ -985,7 +1015,7 @@ namespace MosaicLib.Utils
         private List<System.Threading.EventWaitHandle> eventWaitHandleList = null;
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType: class
+        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item)
         {
             lock (mutex)
             {
@@ -1000,7 +1030,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType : class
+        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item)
         {
             lock (mutex)
             {
@@ -1076,8 +1106,8 @@ namespace MosaicLib.Utils
         /// </summary>
         public new event EventHandlerDelegate<EventArgsType> OnNotify
 		{
-            add { AddItem(ref eventHandlerList, value); }
-            remove { RemoveItem(ref eventHandlerList, value); }
+            add { AddItem(ref eventHandlerDelegateList, value); }
+            remove { RemoveItem(ref eventHandlerDelegateList, value); }
 		}
 
         /// <summary>
@@ -1087,6 +1117,38 @@ namespace MosaicLib.Utils
         public object Source { get; set; }
 
 		#endregion
+
+        #region internal event handler tuple list interface (AddHandlerWithObjectKey, RemoveHandlerByObjectKey)
+
+        /// <summary>
+        /// Adds a given <paramref name="eventHandlerDelegate"/> and an associated <paramref name="objectKey"/>.  This method is used with RemoveHandlerByObjectKey.
+        /// </summary>
+        internal void AddHandlerWithObjectKey(EventHandlerDelegate<EventArgsType> eventHandlerDelegate, System.Object objectKey)
+        {
+            OnNotify += eventHandlerDelegate;
+            AddItem(ref eventHandlerTupleList, Tuple.Create(objectKey, eventHandlerDelegate));
+        }
+
+        /// <summary>
+        /// Finds the EventHandlerDelegate instance that is associated with the given <paramref name="objectKey"/> (if any) and removes both from the corresonding notification list(s)
+        /// </summary>
+        internal bool RemoveHandlerByObjectKey(System.Object objectKey)
+        {
+            Tuple<object, EventHandlerDelegate<EventArgsType>> t = null;
+
+            if (eventHandlerTupleList != null)
+                t = eventHandlerTupleList.Find(item => Object.ReferenceEquals(objectKey, item.Item1));
+
+            if (t != null)
+            {
+                eventHandlerTupleList.Remove(t);
+                OnNotify -= t.Item2;
+            }
+
+            return (t != null);
+        }
+
+        #endregion
 
 		#region INotifyable<EventArgsType> Members
 
@@ -1129,7 +1191,8 @@ namespace MosaicLib.Utils
 
         #region Internals
 
-        private List<EventHandlerDelegate<EventArgsType>> eventHandlerList = null;
+        private List<EventHandlerDelegate<EventArgsType>> eventHandlerDelegateList = null;
+        private List<Tuple<object, EventHandlerDelegate<EventArgsType>>> eventHandlerTupleList = null;
 
         private volatile EventHandlerDelegate<EventArgsType>[] savedEventHandlerArray = emptyEventHandlerArray;
 
@@ -1148,7 +1211,7 @@ namespace MosaicLib.Utils
 
             lock (mutex)
             {
-                savedEventHandlerArray = eventHandlerArray = eventHandlerList.SafeToArray();
+                savedEventHandlerArray = eventHandlerArray = eventHandlerDelegateList.SafeToArray();
 
                 return eventHandlerArray;
             }
@@ -1158,6 +1221,37 @@ namespace MosaicLib.Utils
 
         #endregion
 	}
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This extension method allows the given <paramref name="eventHandler"/> System.EventHandler to be added to the given EventHandlerNotificationList{EventArgsType}'s OnNotify list.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static EventHandlerNotificationList<EventArgsType> AddOnNotifyItem<EventArgsType>(this EventHandlerNotificationList<EventArgsType> eventHandlerNotificationList, System.EventHandler<EventArgsType> eventHandler)
+            where EventArgsType : System.EventArgs
+        {
+            EventHandlerDelegate<EventArgsType> eventHandlerDelegate = (sender, e) => eventHandler(sender, e);
+            eventHandlerNotificationList.AddHandlerWithObjectKey(eventHandlerDelegate, eventHandler);
+
+            return eventHandlerNotificationList;
+        }
+
+        /// <summary>
+        /// This extension method allows the previously added <paramref name="eventHandler"/> System.EventHandler to be removed from the given EventHandlerNotificationList{EventArgsType}'s OnNotify list.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static EventHandlerNotificationList<EventArgsType> RemoveOnNotifyItem<EventArgsType>(this EventHandlerNotificationList<EventArgsType> eventHandlerNotificationList, System.EventHandler<EventArgsType> eventHandler)
+            where EventArgsType : System.EventArgs
+        {
+            eventHandlerNotificationList.RemoveHandlerByObjectKey(eventHandler);
+
+            return eventHandlerNotificationList;
+        }
+    }
 
 	#endregion
 
@@ -1405,9 +1499,9 @@ namespace MosaicLib.Utils
             WaitEventNotifier wenRef = item as WaitEventNotifier;
 
             if (item == null)
-                throw new System.NullReferenceException("Given item is null");
+                new System.NullReferenceException("Given item is null").Throw();
             else if (wenRef == null || wenRef.behavior != Behavior || !System.Object.ReferenceEquals((object) this, wenRef.CreatedInPool))
-                throw new System.NotSupportedException("Given item was not obtained from this pool.");
+                new System.NotSupportedException("Given item was not obtained from this pool.").Throw();
 
             item = null;
             eventNotifierPool.ReturnObjectToPool(ref wenRef);

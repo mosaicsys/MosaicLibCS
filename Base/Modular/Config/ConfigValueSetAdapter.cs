@@ -21,7 +21,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
 
 using MosaicLib.Modular.Common;
@@ -63,6 +62,7 @@ namespace MosaicLib.Modular.Config
 
             /// <summary>
             /// This property is true when the config key's value will follow the MayBeChanged update behavior.  (defaults to false)
+            /// <para/>Note: use of this flag does not indicate that the provided key can actually be changed, only that the client would be able to accept it if the key's value is both changable and gets changed.
             /// </summary>
             public bool UpdateNormally { get { return accessFlags.MayBeChanged; } set { accessFlags.MayBeChanged = value; } }
 
@@ -91,6 +91,84 @@ namespace MosaicLib.Modular.Config
             /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
             /// </summary>
             public string DefaultProviderName { get { return accessFlags.DefaultProviderName.MapNullToEmpty(); } set { accessFlags.DefaultProviderName = value; } }
+
+            /// <summary>When non-null set the Type named meta data value to the given value.</summary>
+            public string Type { get; set; }
+
+            /// <summary>When this property is true and the attribute's Deafult value is non-null or the value set's initial value's container storage type is not None, then the Type named value is set to the corresponding CST type (as a string).</summary>
+            public bool AutoType { get; set; }
+
+            /// <summary>When non-null set the Default named meta data value to the given value.</summary>
+            public object Default { get; set; }
+
+            /// <summary>When the attribute's Default property is null and this property is true then the value set's initial value is used to set the Default named meta data value.</summary>
+            public bool AutoDefault { get; set; }
+
+            /// <summary>When non-null set the Min named meta data value to the given value.</summary>
+            public object Min { get; set; }
+
+            /// <summary>When non-null set the Max named meta data value to the given value.</summary>
+            public object Max { get; set; }
+
+            /// <summary>When non-null set the UnitOfMeasure named meta data value to the given value.</summary>
+            public string UnitOfMeasure { get; set; }
+
+            /// <summary>When non-null set the Description named meta data value to the given value.</summary>
+            public string Description { get; set; }
+
+            /// <summary>When non-null set the Custom named meta data value to the given value.</summary>
+            public string Custom { get; set; }
+
+            /// <summary>
+            /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
+            /// </summary>
+            public override INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+            {
+                var localNVS = new NamedValueSet()
+                    .ConditionalSetKeyword(ReadOnlyOnceKeyword, ReadOnlyOnce)
+                    .SetValueIfNotNull(TypeKeyword, Type)
+                    .SetValueIfNotNull(DefaultKeyword, Default)
+                    .SetValueIfNotNull(MinKeyword, Min)
+                    .SetValueIfNotNull(MaxKeyword, Max)
+                    .SetValueIfNotNull(UnitOfMeasureKeyword, UnitOfMeasure)
+                    .SetValueIfNotNull(DescriptionKeyword, Description)
+                    .SetValueIfNotNull(CustomKeyword, Custom)
+                    ;
+
+                var mdNvs = base.GetMergedMetaData(mergeWithMetaData, mergeBehavior);
+
+                if (localNVS.IsNeitherNullNorEmpty())
+                    mdNvs = mdNvs.MergeWith(localNVS, mergeBehavior).ConvertToReadOnly();
+
+                return mdNvs;
+            }
+
+            /// <summary>Keyword used for Custom meta data named value</summary>
+            public static string TypeKeyword = "Type";
+
+            /// <summary>Keyword used for Default meta data named value</summary>
+            public static string DefaultKeyword = "Default";
+
+            /// <summary>Keyword used for Min meta data named value</summary>
+            public static string MinKeyword = "Min";
+
+            /// <summary>Keyword used for Max meta data named value</summary>
+            public static string MaxKeyword = "Max";
+
+            /// <summary>Keyword used for UnitOfMeasure meta data named value</summary>
+            public static string UnitOfMeasureKeyword = "UnitOfMeasure";
+
+            /// <summary>Keyword used for Description meta data named value</summary>
+            public static string DescriptionKeyword = "Description";
+
+            /// <summary>Keyword used for Custom meta data named value</summary>
+            public static string CustomKeyword = "Custom";
+
+            /// <summary>
+            /// Keyword added when a config key access item is using ReadOnlyOnce semantics.
+            /// <para/>Note: the use of this keyword implies that at least on key accessor for this key is useing ReadOnlyOnce behavior.  It does indicate that all such accessors are.
+            /// </summary>
+            public static string ReadOnlyOnceKeyword = "ReadOnlyOnce";
         }
     }
 
@@ -204,7 +282,7 @@ namespace MosaicLib.Modular.Config
                 ConfigInstance = configInstance ?? Config.Instance;
 
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Setup can be called");
+                new System.NullReferenceException("ValueSet property must be non-null before Setup can be called").Throw();
 
             // setup all of the static information
             bool anySetupIssues = false;
@@ -226,10 +304,12 @@ namespace MosaicLib.Modular.Config
                 string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
                 string fullKeyName = GenerateFullKeyName(itemInfo, baseNames);
 
+                Logging.IMesgEmitter setupIssueEmitter = (!itemAttribute.SilenceIssues && !itemAttribute.SilenceLogging) ? SetupIssueEmitter : Logging.NullEmitter;
+                Logging.IMesgEmitter valueNoteEmitter = (!itemAttribute.SilenceLogging) ? ValueNoteEmitter : Logging.NullEmitter;
+
                 if (!itemInfo.CanSetValue)
                 {
-                    if (!itemAttribute.SilenceIssues)
-                        SetupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
+                    setupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
 
                     continue;
                 }
@@ -245,42 +325,61 @@ namespace MosaicLib.Modular.Config
 
                 INamedValueSet combindKeyMetaData = itemAttribute.GetMergedMetaData(defaultNVS, KeyMetaDataMergeBehavior).MapEmptyToNull();
 
-                ValueContainer defaultValue = ((customAccessFlags.EnsureExists ?? false) ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
-
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
-
                 KeySetupInfo keySetupInfo = new KeySetupInfo()
                 {
-                    KeyAccess = keyAccess,
                     ItemInfo = itemInfo,
                     FullItemName = fullKeyName,
                 };
 
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
+                keySetupInfo.MemberVCValueGetter = keySetupInfo.ItemInfo.GenerateGetMemberToVCFunc<TConfigValueSet>();
+
+                ValueContainer defaultValue = (keySetupInfo.MemberVCValueGetter != null) ? keySetupInfo.MemberVCValueGetter(ValueSet, setupIssueEmitter, valueNoteEmitter, rethrow: false) : default(ValueContainer);
+
+                if (defaultValue.IsEmpty && itemAttribute.Default != null)
+                    defaultValue = ValueContainer.CreateFromObject(itemAttribute.Default);
+
+                if (!defaultValue.IsEmpty)
+                {
+                    var localNVS = new NamedValueSet()
+                        .ConditionalSetValue(ConfigItemAttribute.TypeKeyword, (itemAttribute.Type == null &&  itemAttribute.AutoType), defaultValue.cvt)
+                        .ConditionalSetValue(ConfigItemAttribute.DefaultKeyword, (itemAttribute.Default == null && itemAttribute.AutoDefault), defaultValue)
+                        ;
+
+                    if (localNVS.IsNeitherNullNorEmpty())
+                        combindKeyMetaData = combindKeyMetaData.MergeWith(localNVS, KeyMetaDataMergeBehavior);
+                }
+
+                if (customAccessFlags.EnsureExists ?? false)
+                {
+                    if (keySetupInfo.MemberVCValueGetter == null)
+                    {
+                        setupIssueEmitter.Emit("EnsureExists requested for item '{0}' which does not support getter access.  Key cannot be created with empty value.", itemInfo);
+                        anySetupIssues |= !itemAttribute.SilenceIssues;
+                    }
+                }
+
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData.ConvertToReadOnly(), MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
+                keySetupInfo.KeyAccess = keyAccess;
 
                 if (!keyAccess.IsUsable)
                 {
-                    if (!itemAttribute.SilenceIssues)
+                    if (keyAccess.Flags.IsOptional)
                     {
-                        if (keyAccess.Flags.IsOptional)
-                        {
-                            ValueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                        }
-                        else
-                        {
-                            SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                            anySetupIssues = true;
-                        }
+                        valueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                    }
+                    else
+                    {
+                        setupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                        anySetupIssues |= !itemAttribute.SilenceIssues;
                     }
                     continue;
                 }
                 else if (keySetupInfo.UpdateMemberFromKeyAccessAction == null)
                 {
-                    if (!itemAttribute.SilenceIssues)
-                    {
-                        SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
-                        anySetupIssues = true;
-                    }
+                    setupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
+                    anySetupIssues |= !itemAttribute.SilenceIssues;
+
                     continue;
                 }
 
@@ -310,7 +409,7 @@ namespace MosaicLib.Modular.Config
         {
             get 
             {
-                return (isUpdateNeeded || _ickaArray.Any(icka => icka.IsUpdateNeeded)); 
+                return (isUpdateNeeded || _ickaArray.IsUpdateNeeded()); 
             }
             internal set 
             { 
@@ -342,7 +441,7 @@ namespace MosaicLib.Modular.Config
         private ConfigValueSetAdapter<TConfigValueSet> Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
+                new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             if (!IsUpdateNeeded && !isFirstUpdate)
                 return this;
@@ -375,6 +474,52 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
+        /// May be called by the client to obtain values from each of the annotated members and to attempt to set the corresponding config keys from these values.
+        /// This method will only attempt to set individual key values when the members current values are not ValueContainer.Equal to the current values in the key access objects 
+        /// or for which the key access object IsUpdateNeeded property is true (indicating that the keys value has changed since this adapter was last Updated).
+        /// </summary>
+        public ConfigValueSetAdapter<TConfigValueSet> Set(string commentStr = "", bool andUpdateAfterSet = true)
+        {
+            if (ValueSet == null)
+                new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName)).Throw();
+
+            List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>> pendingUpdateItemList = new List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>>();
+
+            foreach (var keySetupInfo in keySetupInfoArray)
+            {
+                if (keySetupInfo == null || keySetupInfo.MemberVCValueGetter == null)
+                    continue;
+
+                var accessFlags = keySetupInfo.ItemAttribute.AccessFlags;
+                var silenceLogging = accessFlags.SilenceLogging;
+                var silenceIssues = silenceLogging || accessFlags.SilenceIssues;
+
+                try
+                {
+                    var issueEmitter = !silenceIssues ? UpdateIssueEmitter : Logging.NullEmitter;
+                    var valueEmitter = !silenceLogging ? ValueNoteEmitter : Logging.NullEmitter;
+                    var rethrow = issueEmitter.IsEnabled;
+
+                    ValueContainer vc = keySetupInfo.MemberVCValueGetter(ValueSet, issueEmitter, valueEmitter, true);
+
+                    if (!vc.Equals(keySetupInfo.KeyAccess.VC) || keySetupInfo.KeyAccess.IsUpdateNeeded)
+                        pendingUpdateItemList.Add(Tuple.Create(keySetupInfo, vc, issueEmitter, valueEmitter));
+                }
+                catch { }
+            }
+
+            if (pendingUpdateItemList.Count > 0 && ConfigInstance != null)
+            {
+                ConfigInstance.SetValues(pendingUpdateItemList.Select(t => KVP.Create(t.Item1.KeyAccess, t.Item2)).ToArray(), commentStr.MapNullToEmpty());
+            }
+
+            if (andUpdateAfterSet)
+                Update();
+
+            return this;
+        }
+
+        /// <summary>
         /// Gives the caller access to the set of IConfigKeyAccess items that this adapter has generated and uses to support its operation
         /// </summary>
         public IConfigKeyAccess[] ICKAArray { get { return _ickaArray; } }
@@ -383,25 +528,7 @@ namespace MosaicLib.Modular.Config
 
         #endregion
 
-        #region private methods
-
-        /// <summary>
-        /// Simple method that uses basic reflection to obtain the desird Property/Field contents enclosed in a ValueContainer.
-        /// </summary>
-        ValueContainer GetDefaultValue(ItemInfo<ConfigItemAttribute> itemInfo)
-        {
-            if (ValueSet != null)
-            {
-                if (itemInfo.IsProperty)
-                    return new ValueContainer(itemInfo.PropertyInfo.GetValue(ValueSet, emptyObjectArray));
-                else if (itemInfo.IsField)
-                    return new ValueContainer(itemInfo.FieldInfo.GetValue(ValueSet));
-            }
-
-            return ValueContainer.Empty;
-        }
-
-        private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
+        #region private methods (GenerateFullKeyName, GenerateUpdateMemberFromKeyAccessAction, GenerateSetAccessFromMemberAction)
 
         protected string GenerateFullKeyName(ItemInfo<Attributes.ConfigItemAttribute> itemInfo, string[] baseNames)
         {
@@ -757,6 +884,9 @@ namespace MosaicLib.Modular.Config
             /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
             public Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> UpdateMemberFromKeyAccessAction { get; set; }
+
+            /// <summary>delegate that is used to get this specfic member's value as a value container.  ValueSet, rethrow => VC  returns ValueContainer.Empty if no valid value could be obtained and rethrow is false.</summary>
+            public AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TConfigValueSet> MemberVCValueGetter { get; set; } 
         }
 
         /// <remarks>Non-null elements in this array correspond to fully vetted writable value set items.</remarks>
