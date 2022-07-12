@@ -92,12 +92,18 @@ namespace Mosaic.ToolsLib.Semi.IDSpec
         /// <ineritdoc/>
         public INamedValueSet NVS { get { return nvs.MapNullToEmpty(); } set { nvs = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
         private INamedValueSet nvs;
+
+        /// <summary>Debugging and logging helper method</summary>
+        public override string ToString()
+        {
+            return $"{nameof(IDSpec)} {Name} {IDType} {ID} {NVS.ToStringSML()}";
+        }
     }
 
     /// <summary>
     /// IDType.  This type is used both to indicate the specific type of some <see cref="IIDSpec"/> item and as a mask of types to match
     /// when searching for an ID by name.
-    /// <para/>Any (0xffffffff), None (0x00), ALID (0x01), CEID (0x02), ECID (0x04), DVID (0x08), SVID (0x10), ModuleID (0x20)
+    /// <para/>Any (0xffffffff), AnyVariable (0x1c), None (0x00), ALID (0x01), CEID (0x02), ECID (0x04), DVID (0x08), SVID (0x10), ModuleID (0x20)
     /// </summary>
     [DataContract(Namespace = Constants.SemiNameSpace)]
     [Flags]
@@ -106,6 +112,10 @@ namespace Mosaic.ToolsLib.Semi.IDSpec
         /// <summary>Any - placeholder value indicates that any type may be used.</summary>
         [EnumMember]
         Any = unchecked((int) 0xffffffff),
+
+        /// <summary>An Variable type (<see cref="SVID"/> | <see cref="DVID"/> | <see cref="ECID"/>) [0x1c]</summary>
+        [EnumMember]
+        AnyVariable = SVID | DVID | ECID,
 
         /// <summary>Placeholder default value for use when type is not known.</summary>
         [EnumMember]
@@ -149,8 +159,18 @@ namespace Mosaic.ToolsLib.Semi.IDSpec
 
         /// <summary>
         /// Gives the <see cref="IIDSpec"/> that was returned from the corresponding GetIDSpec method.
+        /// This is expected to be null if no valid <see cref="IIDSpec"> could be found for the given <see cref="Name"/>.
         /// </summary>
         public IIDSpec IDSpec { get; set; }
+
+        /// <summary>Debugging and logging helper method</summary>
+        public override string ToString()
+        {
+            if (IDSpec != null)
+                return $"{nameof(NameIIDSpecPair)} '{Name}' => {IDSpec}";
+            else
+                return $"{nameof(NameIIDSpecPair)} '{Name}' => [Null]";
+        }
     }
 
     /// <summary>

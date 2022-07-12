@@ -71,6 +71,11 @@ namespace MosaicLib.Modular.Reflection
             ItemAccess ItemAccess { get; }
 
             /// <summary>
+            /// When true, GenerateFullName will throw an <see cref="ArgumentNullException"/> or <see cref="FormatException"/> if the <see cref="Name"/> or setup parameters are null or are not valid.
+            /// </summary>
+            bool ThrowStringFormatIssues { get; }
+
+            /// <summary>
             /// Generates a full derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
             /// </summary>
             string GenerateFullName(MemberInfo memberInfo, params string[] paramsStrArray);
@@ -91,7 +96,7 @@ namespace MosaicLib.Modular.Reflection
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
+            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal, ThrowStringFormatIssues = DefaultThrowStringFormatIssues
             /// </summary>
             public AnnotatedItemAttributeBase() 
                 : base() 
@@ -100,6 +105,48 @@ namespace MosaicLib.Modular.Reflection
                 NameAdjust = NameAdjust.Prefix0;
                 SilenceIssues = false;
                 StorageType = ContainerStorageType.None;
+                ThrowStringFormatIssues = DefaultThrowStringFormatIssues ?? false;
+            }
+
+            /// <summary>
+            /// Defines the default value that is used when constructing new <see cref="AnnotatedItemAttributeBase"/> 
+            /// derived attribute instances, unless this is overriden in the derived attribute type constructor.
+            /// If this property has not been explicitly set to be non-null before its first (get) use then it will be initialized to the result of calling
+            /// the <see cref="AnnotatedItemAttributeBase.GetAutomaticUnsetDefaultThrowStringFormatIssuesValue"/> method at that point.
+            /// </summary>
+            /// <remarks>
+            /// Note: explicitly setting this property to null will unset any previous explicitly given non-null value so that the automatic determination may be used again.
+            /// </remarks>
+            public static bool? DefaultThrowStringFormatIssues { get { return _DefaultThrowStringFormatIssues ?? (_DefaultThrowStringFormatIssues = GetAutomaticUnsetDefaultThrowStringFormatIssuesValue()); } set { _DefaultThrowStringFormatIssues = value; } }
+            private static bool? _DefaultThrowStringFormatIssues;
+
+            /// <summary>
+            /// Manually set to true (usually very early in the startup sequence) in ordere to enable automatic setting of the
+            /// the related static default properties in the various static attribute class constructors.
+            /// </summary>
+            public static bool EnableAutomaticUnsetDefaultThrowStringFormatIssuesBehavior { get; set; }
+
+            /// <summary>
+            /// This method is typically called on the first use of one of the <see cref="DefaultThrowStringFormatIssues"/> property getter methods when it has not been explicitly set already.
+            /// This method returns true if
+            /// <see cref="EnableAutomaticUnsetDefaultThrowStringFormatIssuesBehavior"/> has already been set to true,
+            /// There is a debugger attached,
+            /// and either the entry assembly or the executing assembly was compiled with debugging enabled.
+            /// </summary>
+            /// <remarks>
+            /// The purpose of this logic is so that (when explicitly enabled) the string format calls in the related 
+            /// GetFullName methods will only throw string format exceptions when the application is a debug build and it is being run under a debugger.
+            /// In all other cases (not enabled, no debugger attached, entry assembly in release mode) the CheckedFormat method will be used and thus no such
+            /// string format exception will be thrown into client code (typically via use of a Setup method).
+            /// </remarks>
+            public static bool GetAutomaticUnsetDefaultThrowStringFormatIssuesValue()
+            {
+                return (EnableAutomaticUnsetDefaultThrowStringFormatIssuesBehavior
+                        && System.Diagnostics.Debugger.IsAttached
+                        && (Assembly.GetEntryAssembly().GetDebuggingMode().IsDebuggingEnabled()
+                            || Assembly.GetExecutingAssembly().GetDebuggingMode().IsDebuggingEnabled()
+                            )
+                        );
             }
 
             /// <summary>
@@ -133,6 +180,9 @@ namespace MosaicLib.Modular.Reflection
             public ItemAccess ItemAccess { get { return _itemAccess; } set { _itemAccess = value; } }
             private ItemAccess _itemAccess = ItemAccess.Normal;
 
+            /// <inheritdoc/>
+            public bool ThrowStringFormatIssues { get; set; }
+
             /// <summary>
             /// Generates a derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
             /// </summary>
@@ -146,7 +196,7 @@ namespace MosaicLib.Modular.Reflection
             /// </summary>
             public string GenerateFullName(string memberName, params string[] paramsStrArray)
             {
-                return NameAdjust.GenerateFullName(Name, memberName, paramsStrArray);
+                return NameAdjust.GenerateFullName(Name, memberName, ThrowStringFormatIssues, paramsStrArray);
             }
 
             /// <summary>
@@ -275,18 +325,54 @@ namespace MosaicLib.Modular.Reflection
             /// </summary>
             public static string GenerateFullName(this NameAdjust nameAdjust, string itemName, string memberName, params string[] paramsStrArray)
             {
+                return nameAdjust.GenerateFullName(itemName, memberName, false, paramsStrArray);
+            }
+
+            /// <summary>
+            /// Generates a derived Name from the given nameAdjust value, itemName, memberName, rethrow, and the given paramsStrArray contents to be used as potential Prefix values or string format parameters.
+            /// <para/>This method generally has the following behavior:
+            /// <para/>inferredName = itemName ?? memberName ?? String.Empty
+            /// <para/>NameAdjust.None: return inferredName
+            /// <para/>NameAdjust.Format: return itemName.CheckedFormat(paramsStrArray) or String.Format(itemName, paramsStrArray)
+            /// <para/>NameAdjust.FormatWithMemberName: return itemName.CheckedFormat(memberName, paramStrArray) or String.Format(itemName, paramsStrArray)
+            /// <para/>NameAdjust.Prefix0: return paramsStrArray[0] + inferredName
+            /// <para/>NameAdjust.Prefix1: return paramsStrArray[1] + inferredName
+            /// <para/>NameAdjust.Prefix2: return paramsStrArray[2] + inferredName
+            /// <para/>NameAdjust.Prefix3: return paramsStrArray[3] + inferredName
+            /// </summary>
+            /// <exception cref="ArgumentNullException">
+            /// when <paramref name="throwStringFormatIssues"/> is passed as true this exception will be thrown if 
+            /// either of the given parameters, <paramref name="itemName"/> or <paramref name="paramsStrArray"/>, is null.
+            /// </exception>
+            /// <exception cref="FormatException">
+            /// when <paramref name="throwStringFormatIssues"/> is passed as true this exception will be thrown if 
+            /// the given <paramref name="itemName"/> is not a valid format string. 
+            ///     -or- 
+            /// The index of a format item in the given <paramref name="itemName"/> is less than zero, or greater than or equal to the length of the derived <paramref name="paramsStrArray"/>.
+            /// </exception>
+            public static string GenerateFullName(this NameAdjust nameAdjust, string itemName, string memberName, bool throwStringFormatIssues, params string[] paramsStrArray)
+            {
                 string inferredName = itemName ?? memberName ?? string.Empty;
 
                 switch (nameAdjust)
                 {
                     case NameAdjust.None: return inferredName;
-                    case NameAdjust.Format: return (itemName ?? string.Empty).CheckedFormat(paramsStrArray);
+                    case NameAdjust.Format:
+                        {
+                            if (throwStringFormatIssues)
+                                return string.Format(itemName, paramsStrArray);
+                            else
+                                return (itemName ?? string.Empty).CheckedFormat(paramsStrArray);
+                        }
                     case Attributes.NameAdjust.FormatWithMemberName:
                         {
                             List<string> paramsStrList = new List<string>();
                             paramsStrList.Add(memberName ?? string.Empty);
                             paramsStrList.AddRange(paramsStrArray);
-                            return (itemName ?? string.Empty).CheckedFormat(paramsStrList.ToArray());
+                            if (throwStringFormatIssues)
+                                return string.Format(itemName, paramsStrList.ToArray());
+                            else
+                                return (itemName ?? string.Empty).CheckedFormat(paramsStrList.ToArray());
                         }
                     case NameAdjust.Prefix0: return paramsStrArray.SafeAccess(0, string.Empty) + inferredName;
                     case NameAdjust.Prefix1: return paramsStrArray.SafeAccess(1, string.Empty) + inferredName;
@@ -295,7 +381,6 @@ namespace MosaicLib.Modular.Reflection
                     default: return string.Empty;
                 }
             }
-
             /// <summary>
             /// Returns the first attribute instance of the given <typeparamref name="TAttributeType"/> that have been applied to the given <paramref name="assembly"/> or the fallbackValue if there are none.
             /// </summary>

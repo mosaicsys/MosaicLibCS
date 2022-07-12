@@ -2114,6 +2114,51 @@ namespace MosaicLib.Utils
         private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
 
         /// <summary>
+        /// Calls <see cref="AddToNVS(Exception, NamedValueSet, ExceptionFormat)"/> passing in a new <see cref="NamedValueSet"/>
+        /// which is then made read only and returned.
+        /// </summary>
+        public static INamedValueSet ConvertToNVS(this System.Exception ex, ExceptionFormat exceptionFormat = ExceptionFormat.FullForNVS)
+        {
+            return ex.AddToNVS(new NamedValueSet(), exceptionFormat: exceptionFormat).MakeReadOnly();
+        }
+
+        /// <summary>
+        /// Converts the given <paramref name="ex"/> to a set of <see cref="NamedValueSet"/> <see cref="NamedValue"/> elements included based on the
+        /// given <paramref name="exceptionFormat"/> and the actual <paramref name="ex"/> contents.
+        /// <para/>Note: when the given <paramref name="ex"/> is a <see cref="System.AggregateException"/> this method will also include the
+        /// set of converted <see cref="System.AggregateException.InnerExceptions"/>.
+        /// </summary>
+        public static NamedValueSet AddToNVS(this System.Exception ex, NamedValueSet nvs, ExceptionFormat exceptionFormat = ExceptionFormat.FullForNVS)
+        {
+            if (ex == null)
+                return nvs.SetKeyword("Null");
+            else if (exceptionFormat == ExceptionFormat.Default)
+                return nvs.SetValue("Default", string.Format("{0}", ex));
+
+            nvs.ConditionalSetValue("Type", (exceptionFormat & ExceptionFormat.IncludeType) != 0, ex.GetType().ToString());
+            nvs.ConditionalSetValue("Source", (exceptionFormat & ExceptionFormat.IncludeSource) != 0 && ex.Source.IsNeitherNullNorEmpty(), ex.Source);
+            nvs.ConditionalSetValue("Message", (exceptionFormat & ExceptionFormat.IncludeMessage) != 0 && ex.Message.IsNeitherNullNorEmpty(), ex.Message);
+            nvs.ConditionalSetValue("Data", (exceptionFormat & ExceptionFormat.IncludeData) != 0 && ex.Data.Count > 0, new NamedValueSet().AddRange(ex.Data).MakeReadOnly());
+            nvs.ConditionalSetValue("StackTrace", (exceptionFormat & ExceptionFormat.IncludeStackTrace) != 0 && ex.StackTrace.IsNeitherNullNorEmpty(), ex.StackTrace);
+            nvs.ConditionalSetValue("HResult", (exceptionFormat & ExceptionFormat.IncludeHResult) != 0 && ex.HResult != default(int), ex.HResult);
+            nvs.ConditionalSetValue("TargetSite", (exceptionFormat & ExceptionFormat.IncludeTargetSite) != 0 && ex.TargetSite != null, ex.TargetSite.SafeToString());
+            nvs.ConditionalSetValue("HelpLink", (exceptionFormat & ExceptionFormat.IncludeHelpLink) != 0 && ex.HelpLink.IsNeitherNullNorEmpty(), ex.HelpLink);
+
+            var aex = ex as System.AggregateException;
+
+            if (aex != null && aex.InnerExceptions.Count >= 0)
+            {
+                nvs.SetValue("InnerExceptions", ValueContainer.CreateFromSet(aex.InnerExceptions.Select(aexItem => aexItem.ConvertToNVS(exceptionFormat: exceptionFormat))));
+            }
+            else
+            {
+                nvs.ConditionalSetValue("InnerException", (exceptionFormat & ExceptionFormat.IncludeInnerException) != 0 && ex.InnerException != null, ex.InnerException.ConvertToNVS(exceptionFormat: exceptionFormat));
+            }
+
+            return nvs;
+        }
+
+        /// <summary>
         /// Exception throw helper extension method.  This method throws the given System.Exception <paramref name="ex"/>.  
         /// This method can be used to improve the ability of the calling method to support being inlined.
         /// </summary>
@@ -2261,24 +2306,28 @@ namespace MosaicLib.Utils
     /// <summary>
     /// Flag Enumeration used with System.Exception ToString extension method above.  Defines the string contents to be included from the exception.
     /// <para/>Default (0x00), TypeAndMessage (0x05), TypeAndMessageAndStackTrace (0x15), Full (0x1f), AllButStackTrace (0x0f), 
-    /// <para/>IncludeType (0x01), IncludeSource (0x02), IncludeMessage (0x04), IncludeData (0x08), IncludeStackTrace (0x10)
+    /// <para/>IncludeType (0x01), IncludeSource (0x02), IncludeMessage (0x04), IncludeData (0x08), IncludeStackTrace (0x10),
+    /// IncludeHResult (0x02), IncludeTargetSite (0x40), IncludeHelpLink (0x80), IncludeInnerException (0x100)
     /// </summary>
     [Flags]
     public enum ExceptionFormat : int
     {
-        /// <summary>Use basic System.Exception.ToString method [x00]</summary>
+        /// <summary>Use basic <see cref="System.Exception.ToString()"/> method [x00]</summary>
         Default = 0x00,
 
-        /// <summary>IncludeType | IncludeMessage [0x05]</summary>
+        /// <summary><see cref="IncludeType"/> | <see cref="IncludeMessage"/> [0x05]</summary>
         TypeAndMessage = (IncludeType | IncludeMessage),
 
-        /// <summary>IncludeType | IncludeMessage | IncludeStackTrace [0x15]</summary>
+        /// <summary><see cref="IncludeType"/> | <see cref="IncludeMessage"/> | <see cref="IncludeStackTrace"/> [0x15]</summary>
         TypeAndMessageAndStackTrace = (IncludeType | IncludeMessage | IncludeStackTrace),
 
-        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace [0x1f]</summary>
+        /// <summary><see cref="IncludeType"/> | <see cref="IncludeSource"/> | <see cref="IncludeMessage"/> | <see cref="IncludeData"/> | <see cref="IncludeStackTrace"/> [0x1f]</summary>
         Full = (IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace),
 
-        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData [0x0f]</summary>
+        /// <summary>All bits generally used with the <see cref="ExtensionMethods.ConvertToNVS(Exception, ExceptionFormat)"/> method [0x1ff]</summary>
+        FullForNVS = (IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace | IncludeHResult | IncludeTargetSite | IncludeHelpLink | IncludeInnerException),
+
+        /// <summary><see cref="IncludeType"/> | <see cref="IncludeSource"/> | <see cref="IncludeMessage"/> | <see cref="IncludeData"/> [0x0f]</summary>
         AllButStackTrace = (IncludeType | IncludeSource | IncludeMessage | IncludeData),
 
         /// <summary>Includes Type: field [0x01]</summary>
@@ -2295,6 +2344,18 @@ namespace MosaicLib.Utils
 
         /// <summary>Includes Stack:[] field [0x10]</summary>
         IncludeStackTrace = 0x10,
+
+        /// <summary>Includes HResult: field (recursive) [0x20]</summary>
+        IncludeHResult = 0x20,
+
+        /// <summary>Includes Target: field [0x40]</summary>
+        IncludeTargetSite = 0x40,
+
+        /// <summary>Includes HelpLink: field [0x80]</summary>
+        IncludeHelpLink = 0x80,
+
+        /// <summary>Includes Inner: field (recursive) [0x100]</summary>
+        IncludeInnerException = 0x100,
     }
 
     #endregion

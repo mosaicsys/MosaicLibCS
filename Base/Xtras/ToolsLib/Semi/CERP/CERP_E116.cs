@@ -44,7 +44,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
     [DataContract(Namespace = MosaicLib.Constants.ToolsLibNameSpace)]
     public class E116EventRecord : CERPEventReportBase
     {
-        /// <summary>Gives the type name that is used with this object type.</summary>
+        /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
         public const string MDRF2TypeName = "CERP.E116.EventRecord";
 
         /// <summary>Gives the <see cref="MosaicLib.Semi.E116.EPTTransition"/> that is being reported here.</summary>
@@ -216,6 +216,9 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// <summary>Gives the <see cref="ICombinedEventReportingPart"/> instance with which this module name is to be registered.</summary>
         public ICombinedEventReportingPart CERP { get; set; }
 
+        /// <summary>When set to true the CERP will publish new event records, with the current state, to the module scoped token's StatePublisher</summary>
+        public bool EnableStatePublication { get; set; }
+
         /// <summary>Gives the default <see cref="IScopedToken.Priority"/> value for module and other scoped tokens created from this value.</summary>
         public uint DefaultPriority { get; set; }
 
@@ -373,6 +376,18 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         public IScopedToken InitialStateScopedToken { get; set; }
 
         /// <summary>
+        /// Gives the StatePublisher for this module.
+        /// Use of this publisher requires that the module corresponding <see cref="E116ModuleConfig.EnableStatePublication"/> property was explicitly set to true.
+        /// The initial state will be published after the scoped token has been started.
+        /// </summary>
+        public ISequencedObjectSource<E116EventRecord, int> StatePublisher => _StatePublisher;
+
+        /// <summary>
+        /// Gives the internally settable StatePublisher for this module.
+        /// </summary>
+        internal readonly InterlockedSequencedRefObject<E116EventRecord> _StatePublisher = new InterlockedSequencedRefObject<E116EventRecord>();
+
+        /// <summary>
         /// Dispose of initial scoped token if it is still there and it has not been ended elsewhere.
         /// </summary>
         protected override void AboutToEnd()
@@ -396,8 +411,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         public E116BusyScopedToken(E116ModuleScopedToken moduleScopedToken)
             : base(moduleScopedToken, "E116.Busy")
         {
-            BeginSyncFlags = moduleScopedToken.DefaultScopedBeginSyncFlags;
-            EndSyncFlags = moduleScopedToken.DefaultScopedEndSyncFlags;
+            BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
 
         /// <summary>This gives the <see cref="Semi.E116.TaskType"/> that is to be reported with any related Busy transition</summary>
@@ -450,8 +465,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         public E116BlockedScopedToken(E116ModuleScopedToken moduleScopedToken)
             : base(moduleScopedToken, "E116.Blocked")
         {
-            BeginSyncFlags = moduleScopedToken.DefaultScopedBeginSyncFlags;
-            EndSyncFlags = moduleScopedToken.DefaultScopedEndSyncFlags;
+            BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
 
         /// <summary>Gives the <see cref="Semi.E116.BlockedReasonEx"/> value to be used while the module is reported as Blocked.</summary>

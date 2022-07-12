@@ -52,6 +52,12 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <summary>Gives an optional KVCSet which may be used to carry arbitrary additional information to event handler.</summary>
         IList<KeyValuePair<string, ValueContainer>> KVCSet { get; }
 
+        /// <summary>
+        /// When true this event report will not be passed to the delegate handler.  
+        /// When false (the default) this event report will be passed to the delegate handler as normal.
+        /// </summary>
+        bool DisableReporting { get; }
+
         /// <summary>This property may be used to adjust the order that this event is reported vs being recorded.</summary>
         /// <remarks>Default (false) is to record the event record before reporting it to the delegate handler.</remarks>
         bool ReportBeforeRecording { get; }
@@ -77,6 +83,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
         IList<KeyValuePair<string, ValueContainer>> ICERPEventReport.KVCSet => KVCSet;
 
         /// <inheritdoc/>
+        public bool DisableReporting { get; set; }
+
+        /// <inheritdoc/>
         public bool ReportBeforeRecording { get; set; }
 
         /// <inheritdoc/>
@@ -95,6 +104,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         {
             Module = default;
             KVCSet.Clear();
+            DisableReporting = default;
             ReportBeforeRecording = default;
             RecordingKeyInfo = default;
         }
@@ -102,10 +112,15 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <inheritdoc/>
         public virtual void Serialize(ref MessagePackWriter mpWriter, MessagePackSerializerOptions mpOptions)
         {
-            mpWriter.WriteArrayHeader(2);
+            bool includeDisable = DisableReporting;
+
+            mpWriter.WriteArrayHeader(2 + (includeDisable ? 1 : 0));
 
             mpWriter.Write(ModuleName);
             MessagePackUtils.KVCSetFormatter.Instance.Serialize(ref mpWriter, KVCSet, mpOptions);
+            if (includeDisable)
+                mpWriter.Write(DisableReporting);
+
             // note that RecordingKeyInfo is recorded by MDRF2 outside of the type name specific part of the MP record.
         }
 
@@ -113,11 +128,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public virtual void Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions)
         {
             int arraySize = mpReader.ReadArrayHeader();
-            if (arraySize != 2)
-                new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 2]").Throw();
+            if (arraySize != 2 && arraySize != 3)
+                new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 2 or 3]").Throw();
 
             ModuleName = mpReader.ReadString();
             KVCSet.AddRange(MessagePackUtils.KVCSetFormatter.Instance.Deserialize(ref mpReader, mpOptions));
+            if (arraySize == 3)
+                DisableReporting = mpReader.ReadBoolean();
+
             // note that RecordingKeyInfo is populated by the MDRF2MessagePackSerializableTypeNameHandler to match the record contents.
         }
     }
@@ -204,6 +222,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         /// <summary>Gives the <see cref="SyncFlags"/> value that is used with related Scoped End operations</summary>
         SyncFlags EndSyncFlags { get; }
+
+        /// <summary>
+        /// This property can be set by the client to true when constructing a specific <see cref="ScopedTokenBase"/> derived type.
+        /// It can also be implicitly set to true if this <see cref="ScopedTokenBase"/>'s <see cref="IModuleScopedToken.DisableReporting"/> is true.
+        /// When true this event report will not be passed to the delegate handler.  
+        /// When false (the default) this event report will be passed to the delegate handler as normal.
+        /// </summary>
+        bool DisableReporting { get; }
     }
 
     /// <summary>
@@ -213,17 +239,15 @@ namespace Mosaic.ToolsLib.Semi.CERP
     {
         /// <summary>
         /// Constructor.  
-        /// Requires an <paramref name="other"/> <see cref="IScopedToken"/> instance that is used to obtain the <see cref="ModuleScopedToken"/> instance to use from.
+        /// If provided, it uses the <paramref name="other"/> <see cref="IScopedToken"/> instance to obtain the <see cref="ModuleScopedToken"/> instance to use.
         /// </summary>
         public ScopedTokenBase(IScopedToken other, string logTypeName)
             : this(logTypeName)
         {
-            if (other == null)
-                new ArgumentNullException("other").Throw();
-            else if (other.ModuleScopedToken == null)
-                new ArgumentException("the given scoped token's ModuleScopedToken property must not be null").Throw();
+            ModuleScopedToken = other?.ModuleScopedToken;
 
-            ModuleScopedToken = other.ModuleScopedToken;
+            if (ModuleScopedToken?.DisableReporting == true)
+                DisableReporting = true;
 
             priority = ModuleScopedToken?.DefaultPriority ?? 0;
         }
@@ -231,16 +255,21 @@ namespace Mosaic.ToolsLib.Semi.CERP
         protected ScopedTokenBase(string logTypeName, uint defaultPriority = 0)
         {
             LogTypeName = logTypeName ?? Fcns.CurrentClassLeafName;
+
             priority = defaultPriority;
         }
 
         /// <summary>
-        /// This method calls End.  
-        /// Passes <see cref="EndWaitTimeLimitValueForUseWithDispose"/> and <see cref="EndRethrowValueForUseWithDispose"/> to the corresponding End method parameters.
+        /// This method calls <see cref="ExtensionMethods.End{TScopedToken}(TScopedToken, TimeSpan?, bool)"/> or <see cref="ExtensionMethods.EndIfNeeded{TScopedToken}(TScopedToken, TimeSpan?, bool)"/> based on the value of the
+        /// <see cref="DisposeUsesEndIfNeeded"/> static property.
+        /// This method passes <see cref="EndWaitTimeLimitValueForUseWithDispose"/> and <see cref="EndRethrowValueForUseWithDispose"/> to the corresponding End/EndIfNeeded method parameters.
         /// </summary>
         public void Dispose()
         {
-            ((IScopedToken) this).End(waitTimeLimit: EndWaitTimeLimitValueForUseWithDispose, rethrow: EndRethrowValueForUseWithDispose);
+            if (DisposeUsesEndIfNeeded)
+                ExtensionMethods.EndIfNeeded(this, waitTimeLimit: EndWaitTimeLimitValueForUseWithDispose, rethrow: EndRethrowValueForUseWithDispose);
+            else
+                ExtensionMethods.End(this, waitTimeLimit: EndWaitTimeLimitValueForUseWithDispose, rethrow: EndRethrowValueForUseWithDispose);
         }
 
         /// <summary>
@@ -252,6 +281,12 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// Defines the value that this classes Dispose method passes for the rethrow parameter when calling the End method.
         /// </summary>
         public static bool EndRethrowValueForUseWithDispose { get; set; }
+
+        /// <summary>
+        /// This value defines if the <see cref="Dispose"/> method shall use <see cref="ExtensionMethods.EndIfNeeded{TScopedToken}(TScopedToken, TimeSpan?, bool)"/> or <see cref="ExtensionMethods.End{TScopedToken}(TScopedToken, TimeSpan?, bool)"/>.
+        /// <para/>Defaults to true (use EndIfNeeded).
+        /// </summary>
+        public static bool DisposeUsesEndIfNeeded { get; set; } = true;
 
         /// <summary>Helper Debug and Logging method</summary>
         public override string ToString()
@@ -407,6 +442,18 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
             QpcTimeStamp qpcTimeStamp = (waitTimeLimit != null) ? QpcTimeStamp.Now : QpcTimeStamp.Zero;
 
+            if (ModuleScopedToken?.CERP == null)
+            {
+                LocalEmitters.StateEmitter.Emit("{0}: {1} skipped.  ModuleScopedToken or CERP was not provided.", LogTypeName, scopedOp);
+                switch (scopedOp)
+                {
+                    case ScopedOp.Begin: State = ScopedTokenState.Started; break;
+                    case ScopedOp.End: State = ScopedTokenState.Ended; break;
+                    default: break;
+                }
+                return;
+            }
+
             var icf = ModuleScopedToken.CERP.ScopedOp(scopedOp, this).StartInline();
 
             string ec = null;
@@ -436,13 +483,18 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <inheritdoc/>
         public SyncFlags EndSyncFlags { get; protected set; }
 
+        /// <inheritdoc/>
+        public bool DisableReporting { get; set; }
+
         internal IScopedTokenLogMessageEmitters LocalEmitters
         {
-            get { return _LocalEmitters ?? (_LocalEmitters = ModuleScopedToken.ScopedTokenLogMessageEmitters); }
+            get { return _LocalEmitters ?? (_LocalEmitters = ModuleScopedToken?.ScopedTokenLogMessageEmitters ?? fallbackScopedTokenLogMessageEmitter); }
             set { _LocalEmitters = value; }
         }
 
         private IScopedTokenLogMessageEmitters _LocalEmitters;
+
+        protected static readonly IScopedTokenLogMessageEmitters fallbackScopedTokenLogMessageEmitter = new ScopedTokenLogMessageEmitters(null);
     }
 
     /// <summary>
@@ -489,20 +541,17 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
     public abstract class ModuleScopedTokenBase : ScopedTokenBase, IModuleScopedToken
     {
-        protected ModuleScopedTokenBase(string moduleName, ICombinedEventReportingPart cerp, string logTypeName = null, SyncFlags defaultScopedBeginSyncFlags = default(SyncFlags), SyncFlags defaultScopedEndSyncFlags = default(SyncFlags), string purposeStr = null, SyncFlags moduleBeginAndEndSyncFlagAdditions = SyncFlags.Events, uint defaultPriority = 0)
+        protected ModuleScopedTokenBase(string moduleName, ICombinedEventReportingPart cerp, string logTypeName = null, SyncFlags defaultScopedBeginSyncFlags = default, SyncFlags defaultScopedEndSyncFlags = default, string purposeStr = null, SyncFlags moduleBeginAndEndSyncFlagAdditions = SyncFlags.Events, uint defaultPriority = 0)
             : base(logTypeName: logTypeName, defaultPriority: defaultPriority)
         {
             if (moduleName.IsNullOrEmpty())
                 new ArgumentException("Given module name must be non-empty (and non-null)", "moduleName").Throw();
 
-            if (cerp == null)
-                new ArgumentNullException("cerp").Throw();
-
             ModuleScopedToken = this;
             ModuleName = moduleName;
             CERP = cerp;
 
-            ScopedTokenLogMessageEmitters = CERP.GetScopedTokenLogMessageEmitters(ModuleName, purposeStr);
+            ScopedTokenLogMessageEmitters = CERP?.GetScopedTokenLogMessageEmitters(ModuleName, purposeStr) ?? fallbackScopedTokenLogMessageEmitter;
 
             DefaultScopedBeginSyncFlags = defaultScopedBeginSyncFlags;
             DefaultScopedEndSyncFlags = defaultScopedEndSyncFlags;
@@ -674,12 +723,66 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <remarks>
         /// Due to the risk of a scoped token being in a (temporarily) unusable state, it is not recommended to re-use scope token instances when using non-null waitTimeLimit values for this operation.
         /// </remarks>
-        public static TScopedToken End<TScopedToken>(this TScopedToken scopedToken, TimeSpan? waitTimeLimit = null, bool rethrow = false) where TScopedToken : IScopedToken
+        public static TScopedToken End<TScopedToken>(this TScopedToken scopedToken, TimeSpan? waitTimeLimit = null, bool rethrow = false) 
+            where TScopedToken : IScopedToken
         {
             ((IScopedToken)scopedToken).End(waitTimeLimit: waitTimeLimit, rethrow: rethrow);
 
             return scopedToken;
         }
+
+        /// <summary>
+        /// Variant of normal <see cref="End{TScopedToken}(TScopedToken, TimeSpan?, bool)"/> extension method.
+        /// This method will End the <paramref name="scopedToken"/> if its' <see cref="IScopedToken.State"/> is <see cref="ScopedTokenState.Starting"/> or <see cref="ScopedTokenState.Started"/>.
+        /// This method will just return the given <paramref name="scopedToken"/> it its' <see cref="IScopedToken.State"/> is either <see cref="ScopedTokenState.Initial"/> or <see cref="ScopedTokenState.Ended"/>.
+        /// This method will throw and <see cref="System.InvalidOperationException"/> or use its IssueEmitter to report an issue if the <see cref="IScopedToken.State"/> has any other value.
+        /// </summary>
+        public static TScopedToken EndIfNeeded<TScopedToken>(this TScopedToken scopedToken, TimeSpan? waitTimeLimit = null, bool rethrow = false)
+            where TScopedToken : IScopedToken
+        {
+            switch (scopedToken.State)
+            {
+                case ScopedTokenState.Initial: 
+                    return scopedToken;
+
+                case ScopedTokenState.Starting:
+                case ScopedTokenState.Started: 
+                    scopedToken.End(waitTimeLimit: waitTimeLimit, rethrow: rethrow); 
+                    return scopedToken;
+
+                case ScopedTokenState.Ended: 
+                    return scopedToken;
+
+                case ScopedTokenState.Ending:
+                default:
+                    {
+                        string mesg = $"{Fcns.CurrentMethodName} failed: token state is not valid [{scopedToken}]";
+
+                        if (rethrow)
+                            new System.InvalidOperationException(mesg).Throw();
+
+                        IssueEmitter.Emit(mesg);
+
+                        return scopedToken;
+                    }
+            }
+        }
+
+        /// <summary>
+        /// This emitter is used whenver any of the extension methods used here needs to report an issue.
+        /// It defaults to a Debug emitter that uses source "CERP.ExtensionMethods";
+        /// </summary>
+        public static Logging.IMesgEmitter IssueEmitter { get; set; } = Logger.Debug;
+
+        /// <summary>
+        /// baseline logger that is used by default here.
+        /// </summary>
+        private static Logging.ILogger Logger 
+        {
+            get { return logger ?? (logger = new Logging.Logger("CERP.ExtensionMethods")); }
+        }
+
+        private static Logging.ILogger logger;
     }
 
     #endregion
@@ -699,7 +802,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         IClientFacet ScopedOp(ScopedOp scopedOp, IScopedToken scopedToken);
 
         /// <summary>Action Factory Method.  May be used by clients to synchronize themselves with the internal state of a this part using the given <paramref name="syncFlags"/> value to determine which elements of th parts internal state to synchronize with.</summary>
-        IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags), string moduleName = null);
+        IClientFacet Sync(SyncFlags syncFlags = default, string moduleName = null);
 
         /// <summary>Method used to obtain <see cref="IScopedTokenLogMessageEmitters"/> for a given <paramref name="moduleName"/> and optional <paramref name="purpose"/>.</summary>
         IScopedTokenLogMessageEmitters GetScopedTokenLogMessageEmitters(string moduleName, string purpose = null);

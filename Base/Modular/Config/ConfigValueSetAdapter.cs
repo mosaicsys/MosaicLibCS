@@ -49,10 +49,21 @@ namespace MosaicLib.Modular.Config
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false, EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = new string[0]
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false, EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = new string[0],
+            /// ThrowStringFormatIssues = DefaultThrowStringFormatIssues,
             /// </summary>
             public ConfigItemAttribute() 
-            { }
+            {
+                ThrowStringFormatIssues = DefaultThrowStringFormatIssues ?? false;
+            }
+
+            /// <summary>
+            /// Defines the default value that is used when constructing new <see cref="ConfigItemAttribute"/> instances.
+            /// If this property has not been explicitly set to be non-null before its first (get) use then it will be initialized to the current value 
+            /// of the <see cref="AnnotatedItemAttributeBase.DefaultThrowStringFormatIssues"/> property.
+            /// </summary>
+            public static new bool? DefaultThrowStringFormatIssues { get { return _DefaultThrowStringFormatIssues ?? (_DefaultThrowStringFormatIssues = AnnotatedItemAttributeBase.DefaultThrowStringFormatIssues); } set { _DefaultThrowStringFormatIssues = value; } }
+            private static bool? _DefaultThrowStringFormatIssues;
 
             /// <summary>
             /// This property defines the config key's value update behavior that is used for the identified config key's value as Normal or ReadOnlyOnce (default)

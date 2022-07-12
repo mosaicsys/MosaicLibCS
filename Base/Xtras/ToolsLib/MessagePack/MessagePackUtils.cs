@@ -860,6 +860,14 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// </summary>
     public class E039ObjectFormatter : IMessagePackFormatter<IE039Object>, IMessagePackFormatter<E039Object>, IMessagePackFormatter
     {
+        /// <summary>
+        /// Defines the set of type names for which LinksFromOtherObjects will be serialized.  
+        /// When this set is null all type names will have this feature enabled.  
+        /// When this set is empty, no type names will have this feature enabled (the default).
+        /// Defaults to an empty set.
+        /// </summary>
+        public HashSet<string> EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet { get; set; } = new HashSet<string>();
+
         public static readonly E039ObjectFormatter Instance = new E039ObjectFormatter();
 
         private static readonly IMessagePackFormatter<E039ObjectFlags> e039ObjectFlagsFormatter = new MessagePack.Formatters.EnumAsStringFormatter<E039ObjectFlags>();
@@ -873,7 +881,9 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         {
             if (e039Object != null)
             {
-                mpWriter.WriteArrayHeader(4);
+                var serializeLinksFromOtherObjects = EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet?.Contains(e039Object.ID.Type) ?? true;
+
+                mpWriter.WriteArrayHeader(4 + (serializeLinksFromOtherObjects ? 1 : 0));
 
                 E039ObjectIDFormatter.Instance.Serialize(ref mpWriter, e039Object.ID, options);
                 e039ObjectFlagsFormatter.Serialize(ref mpWriter, e039Object.Flags, options);
@@ -881,10 +891,23 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
                 var linksToOtherObjectsList = e039Object.LinksToOtherObjectsList.MapNullToEmpty();
                 mpWriter.WriteMapHeader(linksToOtherObjectsList.Count);
+
                 foreach (var link in linksToOtherObjectsList)
                 {
                     mpWriter.Write(link.Key);
                     E039ObjectIDFormatter.Instance.Serialize(ref mpWriter, link.ToID, options);
+                }
+
+                if (serializeLinksFromOtherObjects)
+                {
+                    var linksFromOtherObjectsList = e039Object.LinksFromOtherObjectsList.MapNullToEmpty();
+
+                    mpWriter.WriteMapHeader(linksFromOtherObjectsList.Count);
+                    foreach (var link in linksFromOtherObjectsList)
+                    {
+                        mpWriter.Write(link.Key);
+                        E039ObjectIDFormatter.Instance.Serialize(ref mpWriter, link.FromID, options);
+                    }
                 }
             }
             else
@@ -905,7 +928,9 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             var arrayLen = mpReader.ReadArrayHeader();
 
-            if (arrayLen == 4)
+            var haveLinksFromOtherObjectsList = (arrayLen == 5);
+
+            if (arrayLen == 4 || arrayLen == 5)
             {
                 var e039ObjectID = E039ObjectIDFormatter.Instance.Deserialize(ref mpReader, options);
                 var flags = e039ObjectFlagsFormatter.Deserialize(ref mpReader, options);
@@ -913,6 +938,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
                 var linkToOtherMapCount = mpReader.ReadMapHeader();
                 var linksToOtherObjectsList = new List<E039Link>(linkToOtherMapCount);
+
                 for (int idx = 0; idx < linkToOtherMapCount; idx++)
                 {
                     var key = mpReader.ReadString();
@@ -921,7 +947,23 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     linksToOtherObjectsList.Add(new E039Link(e039ObjectID, toID, key));
                 }
 
-                var e039Object = new E039Object(e039ObjectID, flags, attributes, linksToOtherObjectsList);
+                List<E039Link> linksFromOtherObjectsList = null;
+                if (haveLinksFromOtherObjectsList)
+                {
+                    var linkFromOtherMapCount = mpReader.ReadMapHeader();
+                    linksFromOtherObjectsList = new List<E039Link>(linkFromOtherMapCount);
+
+                    for (int idx = 0; idx < linkToOtherMapCount; idx++)
+                    {
+                        var key = mpReader.ReadString();
+                        var fromID = E039ObjectIDFormatter.Instance.Deserialize(ref mpReader, options);
+
+                        linksFromOtherObjectsList.Add(new E039Link(fromID, e039ObjectID, key));
+                    }
+                }
+
+                var e039Object = new E039Object(e039ObjectID, flags, attributes, linksToOtherObjectsList, linksFromOtherObjectsList);
+
                 return e039Object;
             }
             else
@@ -929,7 +971,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                 foreach (var _ in Enumerable.Range(0, arrayLen))
                     mpReader.Skip();
 
-                return new E039Object(new E039ObjectID($"Invalid serialized IE039Object array length [{arrayLen} != 4]", "IE039Object.Deserialize"), E039ObjectFlags.IsFinal, null);
+                return new E039Object(new E039ObjectID($"Invalid serialized IE039Object array length [{arrayLen} != 4 or 5]", "IE039Object.Deserialize"), E039ObjectFlags.IsFinal, null);
             }
         }
     }

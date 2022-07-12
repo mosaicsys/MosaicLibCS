@@ -1909,8 +1909,8 @@ namespace MosaicLib
             /// Gives caller access to the parameters that are passed to the <see cref="CreateConsoleLogMessageHandler"/> method.  
             /// <paramref name="useMutex"/> parameter is passed to the <see cref="LMHLogger"/>.
             /// </summary>
-            public ConsoleLogger(string loggerName = null, string lmhName = null, LogGate? logGate = null, bool data = true, bool nvs = true, bool useMutex = true)
-                : base(loggerName ?? "Console", CreateConsoleLogMessageHandler(name: lmhName, logGate: logGate ?? LogGate.All, data: data, nvs: nvs), useMutex: useMutex)
+            public ConsoleLogger(string loggerName = null, string lmhName = null, LogGate? logGate = null, bool data = true, bool nvs = true, bool useMutex = true, bool useStdErr = false)
+                : base(loggerName ?? "Console", CreateConsoleTextWriterMessageHandler(name: lmhName, logGate: logGate ?? LogGate.All, data: data, nvs: nvs, useStdErr: useStdErr), useMutex: useMutex)
             { }
         }
 

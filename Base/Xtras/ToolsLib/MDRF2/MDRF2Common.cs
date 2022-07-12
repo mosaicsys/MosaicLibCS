@@ -34,6 +34,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace Mosaic.ToolsLib.MDRF2.Common
 {
@@ -638,7 +639,39 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <summary>Type name handler for <see cref="MosaicLib.Semi.E039.IE039Object"/> instances</summary>
         public class IE039ObjectTypeNameHandler : TypeNameHandlerBase<MosaicLib.Semi.E039.IE039Object>
         {
-            public IE039ObjectTypeNameHandler() : base(E039ObjectFormatter.Instance) { }
+            /// <summary>
+            /// This gives the default hash set of type names that is used to determine which type names we are enabling serialization of links from other objects for.
+            /// When null it selects that all types shall enable this feature by default.  When explicitly empty it selects that no types shall enable this feature by default.
+            /// <para/>This proprty is only used when using the <see cref="IE039ObjectTypeNameHandler.IE039ObjectTypeNameHandler"/> default constructor.
+            /// </summary>
+            public static ReadOnlyHashSet<string> DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet { get; set; } = ReadOnlyHashSet<string>.Empty;
+
+            /// <summary>
+            /// Resets the <see cref="DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet"/> back to its default value.
+            /// <para/>primarily used in unit test code.
+            /// </summary>
+            public static void ResetDefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet()
+            {
+                DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet = ReadOnlyHashSet<string>.Empty;
+            }
+
+            /// <summary>
+            /// Default constructor.  
+            /// Creates (and uses) a new <see cref="E039ObjectFormatter"/> using the current <see cref="DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet"/>
+            /// for its <see cref="E039ObjectFormatter.EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet"/>.
+            /// </summary>
+            public IE039ObjectTypeNameHandler()
+                : base(new E039ObjectFormatter() { EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet = DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet.ConvertToHashSet(mapNullToEmpty: false)})
+            { }
+
+            /// <summary>
+            /// Explicit set constructor.
+            /// Creates (and uses) a new <see cref="E039ObjectFormatter"/> using the given <paramref name="enableSerializationOfLinksFromOtherObjectsTypeNameSet"/> to define the contents, and nulledness, of the set 
+            /// for its <see cref="E039ObjectFormatter.EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet"/>.
+            /// </summary>
+            public IE039ObjectTypeNameHandler(IEnumerable<string> enableSerializationOfLinksFromOtherObjectsTypeNameSet) 
+                : base(new E039ObjectFormatter() { EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet = enableSerializationOfLinksFromOtherObjectsTypeNameSet.ConvertToHashSet(mapNullToEmpty: false) }) 
+            { }
         }
 
         /// <summary>Type name handler for <see cref="ValueContainer"/> instances</summary>
@@ -657,6 +690,151 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         public class KVCSetTypeNameHandler : TypeNameHandlerBase<ICollection<KeyValuePair<string, ValueContainer>>>
         {
             public KVCSetTypeNameHandler() : base(KVCSetFormatter.Instance) { }
+        }
+
+        /// <summary>
+        /// Type name handler used with <see cref="MosaicLib.Modular.Part.IBaseState"/> objects.
+        /// </summary>
+        public class IBaseStateTypeNameHandler : TypeNameHandlerQueryRecordReuseHelperBase<MosaicLib.Modular.Part.IBaseState>, IMDRF2TypeNameHandler
+        {
+            /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
+            public const string MDRF2TypeName = "Part.BaseState";
+
+            /// <inheritdoc/>
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                var baseState = (MosaicLib.Modular.Part.IBaseState)value;
+
+                if (baseState == null)
+                {
+                    mpWriter.WriteNil();
+                    return;
+                }
+
+                mpWriter.WriteArrayHeader(8);
+                mpWriter.Write(baseState.PartID);
+                mpWriter.Write(baseState.IsSimulated);
+                mpWriter.Write(baseState.IsPrimaryPart);
+                mpWriter.Write((int)baseState.UseState);
+                mpWriter.Write((int)baseState.ConnState);
+                mpWriter.Write(baseState.ActionName);
+                mpWriter.Write(baseState.Reason);
+                mpWriter.Write(baseState.ExplicitFaultReason);
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
+
+                if (mpReader.TryReadNil())
+                {
+                    record.Data = null;
+                    return record;
+                }
+
+                var arrayLen = mpReader.ReadArrayHeader();
+
+                if (arrayLen == 8)
+                {
+                    var partID = mpReader.ReadString();
+                    var isSimulated = mpReader.ReadBoolean();
+                    var isPrimaryPart = mpReader.ReadBoolean();
+
+                    var baseState = new MosaicLib.Modular.Part.BaseState(isSimulated: isSimulated, isPrimaryPart: isPrimaryPart)
+                    {
+                        PartID = partID,
+                        UseState = unchecked((MosaicLib.Modular.Part.UseState) mpReader.ReadInt32()),
+                        ConnState = unchecked((MosaicLib.Modular.Part.ConnState)mpReader.ReadInt32()),
+                        ActionName = mpReader.ReadString(),
+                        Reason = mpReader.ReadString(),
+                        ExplicitFaultReason = mpReader.ReadString(),
+                    };
+
+                    record.Data = baseState;
+                }
+                else
+                {
+                    new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 8, was {arrayLen}]").Throw();
+                }
+
+                return record;
+            }
+        }
+
+        /// <summary>
+        /// Type name handler used with <see cref="MosaicLib.Semi.E005.IMessage"/> objects.
+        /// </summary>
+        public class E005MessageTypeNameHandler : TypeNameHandlerQueryRecordReuseHelperBase<MosaicLib.Semi.E005.IMessage>, IMDRF2TypeNameHandler
+        {
+            /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
+            public const string MDRF2TypeName = "E005.Message";
+
+            /// <inheritdoc/>
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                var mesg = (MosaicLib.Semi.E005.IMessage)value;
+
+                if (mesg == null)
+                {
+                    mpWriter.WriteNil();
+                    return;
+                }
+
+                mpWriter.WriteArrayHeader(2);
+
+                if (mesg.TenByteHeader != null)
+                    mpWriter.Write(mesg.TenByteHeader.ByteArray);
+                else
+                    mpWriter.Write(mesg.SF.B2B3);
+
+                mpWriter.Write(mesg.ContentBytes);
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
+
+                if (mpReader.TryReadNil())
+                {
+                    record.Data = null;
+                    return record;
+                }
+
+                var arrayLen = mpReader.ReadArrayHeader();
+
+                if (arrayLen == 2)
+                {
+                    MosaicLib.Semi.E005.StreamFunction sf = default;
+                    MosaicLib.Semi.E005.TenByteHeaderBase tbh = default;
+
+                    if (mpReader.NextMessagePackType == MessagePackType.Binary)
+                    {
+                        tbh = new MosaicLib.Semi.E005.TenByteHeaderBase() { ByteArray = mpReader.ReadBytes()?.First.ToArray() };
+                        sf = tbh.SF;
+                    }
+                    else
+                    {
+                        sf.B2B3 = mpReader.ReadUInt16();
+                    }
+
+                    var mesg = new MosaicLib.Semi.E005.Message(sf: sf);
+
+                    if (tbh != null)
+                        mesg.SetTenByteHeader(tbh, keepMessageSF: false, keepMessageSeqNum: false);
+
+                    mesg.SetContentBytes(mpReader.ReadBytes()?.First.ToArray());
+
+                    record.Data = mesg;
+                }
+                else
+                {
+                    new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 2, was {arrayLen}]").Throw();
+                }
+
+                return record;
+            }
         }
 
         /// <summary>Type name handler for <see cref="System.Dynamic.DynamicObject"/> instances</summary>
@@ -717,7 +895,6 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                 return record;
             }
-
         }
 
         /// <summary>
@@ -756,7 +933,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         }
 
         /// <summary>
-        /// This type name handler supports serializaion and deserialization with record generation for all types that support a default constructor and support the <see cref="IMDRF2MessagePackSerializable"/> interface.
+        /// This type name handler supports serialization and deserialization with record generation for all types that support a default constructor and support the <see cref="IMDRF2MessagePackSerializable"/> interface.
         /// </summary>
         public class MDRF2MessagePackSerializableTypeNameHandler<TItemType> 
             : TypeNameHandlerQueryRecordReuseHelperBase<TItemType>, IMDRF2TypeNameHandler

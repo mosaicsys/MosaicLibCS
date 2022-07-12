@@ -708,7 +708,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.Write("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.Write("Write1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -723,7 +723,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.Write("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.Write("Write2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -738,7 +738,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.Write("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.Write("Write3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -753,7 +753,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.Write("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.Write("WriteN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -768,7 +768,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.WriteLine("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.WriteLine("WriteLine1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -783,7 +783,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.WriteLine("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.WriteLine("WriteLine2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -798,7 +798,7 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.WriteLine("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.WriteLine("WriteLine3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
@@ -813,10 +813,134 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                sw.WriteLine("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+                sw.WriteLine("WriteLineN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sw;
+        }
+
+        #endregion
+
+        #region static System.IO.TextWriter CheckedWrite and CheckedWriteLine extension methods
+
+        /// <summary>Invokes System.IO.TextWriter.Write with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWrite(this TextWriter tw, string fmt, object arg0)
+        {
+            try
+            {
+                tw.Write(fmt, arg0);
+            }
+            catch (System.Exception ex)
+            {
+                tw.Write("Write1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.Write with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWrite(this TextWriter tw, string fmt, object arg0, object arg1)
+        {
+            try
+            {
+                tw.Write(fmt, arg0, arg1);
+            }
+            catch (System.Exception ex)
+            {
+                tw.Write("Write2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.Write with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWrite(this TextWriter tw, string fmt, object arg0, object arg1, object arg2)
+        {
+            try
+            {
+                tw.Write(fmt, arg0, arg1, arg2);
+            }
+            catch (System.Exception ex)
+            {
+                tw.Write("Write3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.Write with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWrite(this TextWriter sw, string fmt, params object[] args)
+        {
+            try
+            {
+                sw.Write(fmt, args);
+            }
+            catch (System.Exception ex)
+            {
+                sw.Write("WriteN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.WriteLine with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWriteLine(this TextWriter tw, string fmt, object arg0)
+        {
+            try
+            {
+                tw.WriteLine(fmt, arg0);
+            }
+            catch (System.Exception ex)
+            {
+                tw.WriteLine("WriteLine1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.WriteLine with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWriteLine(this TextWriter tw, string fmt, object arg0, object arg1)
+        {
+            try
+            {
+                tw.WriteLine(fmt, arg0, arg1);
+            }
+            catch (System.Exception ex)
+            {
+                tw.WriteLine("WriteLine2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.WriteLine with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWriteLine(this TextWriter tw, string fmt, object arg0, object arg1, object arg2)
+        {
+            try
+            {
+                tw.WriteLine(fmt, arg0, arg1, arg2);
+            }
+            catch (System.Exception ex)
+            {
+                tw.WriteLine("WriteLine3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
+        }
+
+        /// <summary>Invokes System.IO.TextWriter.WriteLine with the given args within a try/catch pattern.</summary>
+        public static TextWriter CheckedWriteLine(this TextWriter tw, string fmt, params object[] args)
+        {
+            try
+            {
+                tw.WriteLine(fmt, args);
+            }
+            catch (System.Exception ex)
+            {
+                tw.WriteLine("WriteLineN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return tw;
         }
 
         #endregion

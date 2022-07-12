@@ -111,7 +111,7 @@ namespace MosaicLib.Semi.E005
         /// Constructs a message for this given <paramref name="sf"/> which will be sent through the given <paramref name="port"/>.
         /// If the given <paramref name="port"/> is null, the message will be sent to the default Manager's DefaultPort.
         /// </summary>
-        public Message(StreamFunction sf, Port.IPort port = null)
+        public Message(StreamFunction sf = default(StreamFunction), Port.IPort port = null)
         {
             SF = sf;
             Port = port;
@@ -462,7 +462,7 @@ namespace MosaicLib.Semi.E005
         /// <summary>Gets/Sets StreamFunction contained in this TBH (bytes 2..3)</summary>
         StreamFunction SF { get; set; }
 
-        /// <summary>Gets/Sets SystemBytes from TBH (bytes 6..9)</summary>
+        /// <summary>Gets/Sets SystemBytes from TBH (bytes 6..9) [usually used as the sequence number]</summary>
         UInt32 SystemBytes { get; set; }
 
         /// <summary>Gives get/set access to the UInt16 that represents Byte 0 and Byte 1 of the Ten Byte Header - usually the SessionID</summary>
@@ -510,21 +510,25 @@ namespace MosaicLib.Semi.E005
 		private bool sfSet = false;
 		private StreamFunction sf;
 
-        /// <summary>Gets/Sets StreamFunction contained in this TBH</summary>
+        /// <inheritdoc/>
         public StreamFunction SF { get { if (!sfSet) { sf.SetBytes(b2, b3); sfSet = true; } return sf; } set { sf = value; sfSet = true; b2 = sf.Byte2; b3 = sf.Byte3; } }
-        /// <summary>Gets/Sets SystemBytes from TBH (bytes 6..9)</summary>
+
+        /// <inheritdoc/>
         public UInt32 SystemBytes { get { return systemBytes; } set { systemBytes = value; } }
 
-        /// <summary>Gives get/set access to the UInt16 that represents Byte 0 and Byte 1 of the Ten Byte Header - usually the SessionID</summary>
+        /// <inheritdoc/>
         public UInt16 B0B1 { get { return b0b1; } set { b0b1 = value; } }
-        /// <summary>Gets/Sets Byte2 from TBH.  Set triggers SF rebuild.</summary>
+
+        /// <inheritdoc/>
         protected Byte B2 { get { return b2; } set { sfSet = false; b2 = value; } }
-        /// <summary>Gets/Sets Byte3 from TBH.  Set triggers SF rebuild.</summary>
+
+        /// <inheritdoc/>
         protected Byte B3 { get { return b3; } set { sfSet = false; b3 = value; } }
-        /// <summary>Gives get/set access to the UInt16 that represents Byte 4 and Byte 5 of the Ten Byte Header - used as the PType and SType for E037</summary>
+
+        /// <inheritdoc/>
         public UInt16 B4B5 { get { return b4b5; } set { b4b5 = value; } }
 
-        /// <summary>Encodes contents of this object into the given byte array.  Returns true if target array and given offset provide access to 10 usable bytes or false otherwise.</summary>
+        /// <inheritdoc/>
         public bool Encode(byte [] toTenByteHeaderDataArray, int atOffsetIdx)
 		{
             if (!toTenByteHeaderDataArray.IsSafeIndex(atOffsetIdx, 10))
@@ -539,7 +543,7 @@ namespace MosaicLib.Semi.E005
 			return true;
 		}
 
-        /// <summary>Updates contents of this object from the selected bytes in the given source byte array.  Returns true if source array and given offset provide access to 10 usable bytes or false otherwise.</summary>
+        /// <inheritdoc/>
         public bool Decode(byte [] fromTenByteHeaderDataArray, int atOffsetIdx)
 		{
 			b0b1 = 0;
@@ -561,8 +565,12 @@ namespace MosaicLib.Semi.E005
 			return true;
 		}
 
-        /// <summary>Returns a new byte array of 10 bytes containing the encoded contents of this object.</summary>
-        public byte[] ByteArray { get { byte[] bytes = new byte[10]; Encode(bytes, 0); return bytes; } }
+        /// <inheritdoc/>
+        public byte[] ByteArray 
+        { 
+            get { byte[] bytes = new byte[10]; Encode(bytes, 0); return bytes; }
+            set { Decode(value, 0); }
+        }
 
         /// <summary>Returns a string containing the formatted body of the 10 bytes followed by the current SF contents formatted as a string.</summary>
         public override string ToString()

@@ -2332,6 +2332,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     ( Common.Constants.ObjKnownType_NamedValueSet, MapNVSRecordsToVCRecords ? (IMDRF2TypeNameHandler) new TypeNameHandlers.INamedValueSetAsValueContainerTypeNameHandler() : new TypeNameHandlers.INamedValueSetTypeNameHandler(), null),
                     ( Semi.CERP.E116.E116EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E116.E116EventRecord>(), null),
                     ( Semi.CERP.E157.E157EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E157.E157EventRecord>(), null),
+                    ( TypeNameHandlers.E005MessageTypeNameHandler.MDRF2TypeName, new TypeNameHandlers.E005MessageTypeNameHandler(), null),
                 };
 
                 var acceptAllObjectTypes = (ObjectTypeNameSet == null);

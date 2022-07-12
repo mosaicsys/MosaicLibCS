@@ -786,8 +786,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             typeIDByNameDictionary[Common.Constants.ObjKnownType_TypeAndValueCarrier] = typeIDByNameDictionary.Count + 1;
             typeIDByNameDictionary[Semi.CERP.E116.E116EventRecord.MDRF2TypeName] = typeIDByNameDictionary.Count + 1;
             typeIDByNameDictionary[Semi.CERP.E157.E157EventRecord.MDRF2TypeName] = typeIDByNameDictionary.Count + 1;
+            typeIDByNameDictionary[TypeNameHandlers.E005MessageTypeNameHandler.MDRF2TypeName] = typeIDByNameDictionary.Count + 1;
 
-            //  LogMesg, E039Obj, VC, NVS, KVCSet,
+            //  LogMesg, E039Obj, VC, NVS, KVCSet, E116EventRecord, E157EventRecord, E005.IMessage
             var initialSpecSet = new (Type type, string typeName, IMDRF2TypeNameHandler typeNameHandler) []
             {
                 (typeof(MosaicLib.Logging.ILogMessage), Common.Constants.ObjKnownType_LogMessage, new TypeNameHandlers.ILogMessageTypeNameHandler()),
@@ -797,6 +798,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 (typeof(ICollection<KeyValuePair<string, ValueContainer>>), Common.Constants.ObjKnownType_NamedValueSet, new TypeNameHandlers.KVCSetTypeNameHandler()),
                 (typeof(Semi.CERP.E116.E116EventRecord), Semi.CERP.E116.E116EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E116.E116EventRecord>()),
                 (typeof(Semi.CERP.E157.E157EventRecord), Semi.CERP.E157.E157EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E157.E157EventRecord>()),
+                (typeof(MosaicLib.Semi.E005.IMessage), TypeNameHandlers.E005MessageTypeNameHandler.MDRF2TypeName, new TypeNameHandlers.E005MessageTypeNameHandler()),
             };
 
             foreach (var (type, typeName, typeNameHandler) in initialSpecSet)

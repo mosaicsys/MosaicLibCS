@@ -2380,6 +2380,18 @@ namespace MosaicLib.Utils
             return new ReadOnlyIList<TItemType>(iSetIn);
         }
 
+        /// <summary>
+        /// Extension method generates a new <see cref="HashSet{TItemType}"/> from the given <paramref name="iSetIn"/>.
+        /// If <paramref name="iSetIn"/> is null then this method either returns a new empty <see cref="HashSet{TItemType}"/> or returns null depending on the value of the <paramref name="mapNullToEmpty"/> parameter.
+        /// </summary>
+        public static HashSet<TItemType> ConvertToHashSet<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
+        {
+            if (iSetIn != null || mapNullToEmpty)
+                return new HashSet<TItemType>(iSetIn ?? ReadOnlyIList<TItemType>.Empty);
+
+            return null;
+        }
+
         // NOTE: supporting ConvertToReadOnly for ICollection appears to produce a possible conflict with the corresonding version that can be applied to INamedValueSet instances.
 
         /// <summary>
@@ -2543,7 +2555,7 @@ namespace MosaicLib.Utils
         #region ITokenSet<TItemType> (MapNullToEmpty, MapEmtpyToNull, ConverToReadOnly, ConvertToWritable)
 
         /// <summary>
-        /// Extension method either returns the given <paramref name="setIn"/> (if it is not null) or returns an empty ITokenSet{TItemType} if the given <paramref name="setIn"/> is null.
+        /// Extension method either returns the given <paramref name="setIn"/> (if it is not null) or returns an empty <see cref="ITokenSet{TItemType}"/> if the given <paramref name="setIn"/> is null.
         /// </summary>
         public static ITokenSet<TItemType> MapNullToEmpty<TItemType>(this ITokenSet<TItemType> setIn)
         {

@@ -193,7 +193,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
             }
 
             if (part == null && throwOnNotFound)
-                new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name)).Throw();
+                new PartIDNotFoundException("PartID '{0}' was not found in Part Interconnection '{1}'".CheckedFormat(partID, Name)).Throw();
 
             return part;
         }

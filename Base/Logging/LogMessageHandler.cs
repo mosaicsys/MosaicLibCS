@@ -115,6 +115,12 @@ namespace MosaicLib
             return new Handlers.ConsoleLogMesssageHandler(name ?? "LMH.Console", logGate ?? LogGate.All, new Handlers.LineFormat(date: false, qpc: true, source: true, tabStr: " ", data: data, nvs: nvs));
         }
 
+        /// <summary>Creates a TextWriterLogMessageHandler given name (null maps to "LMH.Console.Error" or "LMH.Console.Out") and logGate (null maps to LogGate.All).</summary>
+        public static ILogMessageHandler CreateConsoleTextWriterMessageHandler(string name = null, LogGate? logGate = null, bool data = true, bool nvs = true, bool useStdErr = false)
+        {
+            return new Handlers.ConsoleTextWriterLogMessagehandler(name ?? (useStdErr ? "LMH.Console.Error" : "LMH.Console.Out"), logGate ?? LogGate.All, new Handlers.LineFormat(date: false, qpc: true, source: true, tabStr: " ", data: data, nvs: nvs));
+        }
+
         /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, and given LogGate value (null is mapped to LogGate.All).  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
         public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines = false, LogGate? logGate = null)
         {
@@ -616,8 +622,6 @@ namespace MosaicLib
                 /// <summary>Defiones the format used for the optional message NVS contents</summary>
                 public NamedValueSetFormat NamedValueSetFormat { get { if (_namedValueSetFormat == null) _namedValueSetFormat = DefaultNamedValueSetFormat; return _namedValueSetFormat ?? NamedValueSetFormat.None; } set { _namedValueSetFormat = value; } }
                 private NamedValueSetFormat? _namedValueSetFormat;
-                /// <summary>get/set property:  True if NamedValueSet content should use ToStringSML.  False will cause use of ToString.</summary>
-                public bool NamedValueSetsUseToStringSML { get; set; }
                 /// <summary>True if (optioal) message data converted to base64 and is included in the formatted output lines.</summary>
                 public bool IncludeData { get { return DataEncodingFormat.IsAnySet(Logging.DataEncodingFormat.Base64 | Logging.DataEncodingFormat.EscapedAscii | Logging.DataEncodingFormat.Hex); } set { DataEncodingFormat = (value ? DefaultDataEncodingFormat : Logging.DataEncodingFormat.None); } }
                 /// <summary>Defines the encoding format used for the optional message data block contents</summary>
@@ -674,26 +678,36 @@ namespace MosaicLib
                 /// Formats the given message as configured and incrementally Writes it to the given StreamWriter
                 /// </summary>
                 /// <param name="lm">Gives the LogMessage instance to format and Write</param>
-                /// <param name="os">Gives the StreamWriter instance to Write the formatted message to.</param>
+                /// <param name="os">Gives the <see cref="System.IO.StreamWriter"/> instance to Write the formatted message to.</param>
                 public void FormatLogMessageToOstream(LogMessage lm, System.IO.StreamWriter os)
                 {
                     if (!os.BaseStream.CanWrite)
                         return;
 
+                    FormatLogMessageToTextWriter(lm, os);
+                }
+
+                /// <summary>
+                /// Formats the given message as configured and incrementally Writes it to the given TextWriter
+                /// </summary>
+                /// <param name="lm">Gives the LogMessage instance to format and Write</param>
+                /// <param name="tw">Gives the <see cref="System.IO.TextWriter"/> instance to Write the formatted message to.</param>
+                public void FormatLogMessageToTextWriter(LogMessage lm, System.IO.TextWriter tw)
+                {
                     bool firstItem = true;
                     INamedValueSet nvs = lm.Raw_nvs;
 
-                    if (date) { TabIfNeeded(os, ref firstItem); os.Write(lm.GetFormattedDateTime()); }
-                    if (qpc) { TabIfNeeded(os, ref firstItem); os.Write((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
-                    if (level) { TabIfNeeded(os, ref firstItem); os.Write(ConvertToFixedWidthString(lm.MesgType)); }
-                    if (source) { TabIfNeeded(os, ref firstItem); os.Write(lm.LoggerName); }
-                    { TabIfNeeded(os, ref firstItem); os.Write(lm.MesgEscaped); }
+                    if (date) { TabIfNeeded(tw, ref firstItem); tw.Write(lm.GetFormattedDateTime()); }
+                    if (qpc) { TabIfNeeded(tw, ref firstItem); tw.Write((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
+                    if (level) { TabIfNeeded(tw, ref firstItem); tw.Write(ConvertToFixedWidthString(lm.MesgType)); }
+                    if (source) { TabIfNeeded(tw, ref firstItem); tw.Write(lm.LoggerName); }
+                    { TabIfNeeded(tw, ref firstItem); tw.Write(lm.MesgEscaped); }
                     if (NamedValueSetFormat != Logging.NamedValueSetFormat.None && ((NamedValueSetFormat & Logging.NamedValueSetFormat.Optional) == 0 || nvs != null))
                     {
                         switch (NamedValueSetFormat & ~Logging.NamedValueSetFormat.Optional)
                         {
-                            case Logging.NamedValueSetFormat.ToString: { os.Write(tabStr); os.Write(nvs.ToString(includeROorRW: false)); } break;
-                            case Logging.NamedValueSetFormat.ToStringSML: { os.Write(tabStr); os.Write(nvs.ToStringSML()); } break;
+                            case Logging.NamedValueSetFormat.ToString: { tw.Write(tabStr); tw.Write(nvs.ToString(includeROorRW: false)); } break;
+                            case Logging.NamedValueSetFormat.ToStringSML: { tw.Write(tabStr); tw.Write(nvs.ToStringSML()); } break;
                             default: break;
                         }
                     }
@@ -701,14 +715,14 @@ namespace MosaicLib
                     {
                         switch (DataEncodingFormat & ~Logging.DataEncodingFormat.Optional)
                         {
-                            case DataEncodingFormat.Base64: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else  os.CheckedWrite("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
-                            case DataEncodingFormat.EscapedAscii: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
-                            case DataEncodingFormat.Hex: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
+                            case DataEncodingFormat.Base64: { tw.Write(tabStr); if (lm.Data.IsNullOrEmpty()) tw.Write("[]"); else  tw.CheckedWrite("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
+                            case DataEncodingFormat.EscapedAscii: { tw.Write(tabStr); if (lm.Data.IsNullOrEmpty()) tw.Write("[]"); else tw.CheckedWrite("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
+                            case DataEncodingFormat.Hex: { tw.Write(tabStr); if (lm.Data.IsNullOrEmpty()) tw.Write("[]"); else tw.CheckedWrite("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
                             default: break;
                         }
                     }
-                    if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
-                    { os.Write(endLStr); }
+                    if (IncludeThreadInfo) { tw.Write(tabStr); tw.Write(FormatThreadInfo(lm)); }
+                    { tw.Write(endLStr); }
                 }
 
                 /// <summary>
@@ -749,30 +763,15 @@ namespace MosaicLib
                     { ostr.Append(endLStr); }
                 }
 
-                /// <summary>
-                /// Returns log messages NamedValueSet string contents as:
-                /// <para/>[] - when messages Raw_nvs is null
-                /// <para/>[NVS ...] notation when NamedValueSetsUseToStringSML is true
-                /// <para/>or [key{=value} ...] notation when NamedValueSetsUseToStringSML is false. 
-                /// </summary>
-                private string GetNVSStringContents(LogMessage lm)
-                {
-                    INamedValueSet nvs = lm.Raw_nvs;
-                    if (nvs == null)
-                        return "[]";
-                    else if (NamedValueSetsUseToStringSML)
-                        return nvs.ToStringSML();
-                    else
-                        return nvs.ToString(includeROorRW: false);
-                }
-
-                /// <summary>Method is used to append a TabStr to the given StreamWriter if this is not the first Item in the line.</summary>
-                /// <param name="os">Gives the StreamWriter instance to Write the formatted message to.</param>
+                /// <summary>Method is used to append a TabStr to the given <see cref="System.IO.TextWriter"/> if this is not the first Item in the line.</summary>
+                /// <param name="os">Gives the <see cref="System.IO.TextWriter"/> instance to Write the formatted message to.</param>
                 /// <param name="firstItem">ref boolean that is externally set to true and which is cleared by this method on the first call.</param>
-                protected void TabIfNeeded(System.IO.StreamWriter os, ref bool firstItem)
+                protected void TabIfNeeded(System.IO.TextWriter os, ref bool firstItem)
                 {
-                    if (!firstItem) os.Write(tabStr);
-                    else firstItem = false;
+                    if (!firstItem) 
+                        os.Write(tabStr);
+                    else 
+                        firstItem = false;
                 }
 
                 /// <summary>Method is used to append a TabStr to the given StringBuilder if this is not the first Item in the line.</summary>
@@ -780,8 +779,10 @@ namespace MosaicLib
                 /// <param name="firstItem">ref boolean that is externally set to true and which is cleared by this method on the first call.</param>
                 protected void TabIfNeeded(System.Text.StringBuilder ostr, ref bool firstItem)
                 {
-                    if (!firstItem) ostr.Append(tabStr);
-                    else firstItem = false;
+                    if (!firstItem) 
+                        ostr.Append(tabStr);
+                    else 
+                        firstItem = false;
                 }
 
                 private bool date, qpc, source, level;
@@ -830,7 +831,7 @@ namespace MosaicLib
                 /// <summary>This mechanism is not supported here.  This method returns true immediately.</summary>
                 public override bool WaitForDistributionComplete(TimeSpan timeLimit) { return true; }
 
-                private ILogMessageHandler lmh = null;
+                private readonly ILogMessageHandler lmh;
 
                 /// <summary>Defines the ClassName value that will be used by the LoggerBase when generating trace messages (if enabled).</summary>
                 protected override string ClassName { get { return "LogMesgHandlerLogger"; } }
@@ -910,7 +911,7 @@ namespace MosaicLib
                 /// <summary>Returns true if the given log message <paramref name="lm"/> is non-null and its MesgType is enabled in this handler's LoggerConfig object.</summary>
                 protected bool IsMessageTypeEnabled(LogMessage lm)
                 {
-                    return ((lm != null) ? loggerConfig.IsTypeEnabled(lm.MesgType) : false);
+                    return ((lm != null) && loggerConfig.IsTypeEnabled(lm.MesgType));
                 }
 
                 /// <summary>Implements the required Dispose method from the Utils.DisposableBase class.  Calls Shutdown when called explicitly.</summary>
@@ -933,7 +934,7 @@ namespace MosaicLib
                 /// <summary>Protected storage for this object's internal ILogger object.</summary>
                 protected ILogger logger = null;
 
-                Utils.BasicNotificationList notifyMessageDelivered = new MosaicLib.Utils.BasicNotificationList();
+                readonly Utils.BasicNotificationList notifyMessageDelivered = new MosaicLib.Utils.BasicNotificationList();
 
                 #region Header line helper methods (used by thoese LMH types that support header lines)
 
@@ -1121,6 +1122,78 @@ namespace MosaicLib
                 protected bool flushAfterEachWrite = false;
             };
 
+            /// <summary>
+            /// This class is a customized LMH that is used to write messages using a given <see cref="System.IO.TextWriter"/>
+            /// </summary>
+            public class TextWriterLogMessageHandler : SimpleLogMessageHandlerBase
+            {
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
+                /// <param name="textWriter">Gives the TextWriter instance to which the output text will be written.</param>
+                /// <param name="flushAfterEachWrite">Set to true to flush the ostream after each write, or false to Flush only when explicitly told to by the LogDistribution system.</param>
+                public TextWriterLogMessageHandler(string name, LogGate logGate, LineFormat lineFmt, System.IO.TextWriter textWriter, bool flushAfterEachWrite)
+                    : base(name, logGate)
+                {
+                    this.lineFmt = lineFmt;
+                    this.textWriter = textWriter;
+                    this.flushAfterEachWrite = flushAfterEachWrite;
+
+                    if (lineFmt == null)
+                        Utils.Asserts.TakeBreakpointAfterFault("LineFmt is null");
+
+                    // add an action to close the ostream when this object is disposed.
+                    AddExplicitDisposeAction(
+                        () =>
+                        {
+                            if (this.textWriter != null)
+                            {
+                                this.textWriter.Close();
+                                this.textWriter = null;
+                            }
+                        });
+                }
+
+                /// <summary>
+                /// Takes the given LogMessage, formats it and writes it to the ostream.  Calls Flush if the object was constructed with FlushAfterEachWrite set to true.
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm)
+                {
+                    lineFmt.FormatLogMessageToTextWriter(lm, textWriter);
+
+                    if (flushAfterEachWrite)
+                        Flush();
+                }
+
+                /// <summary>
+                /// Calls Flush on the current textWriter.
+                /// </summary>
+                public override void Flush()
+                {
+                    textWriter.Flush();
+                }
+
+                /// <summary>
+                /// Calls base.Shutdown and then closes the textWriter.  This method does not directly dispose of the textWriter itself.
+                /// </summary>
+                public override void Shutdown()
+                {
+                    base.Shutdown();
+
+                    // shutdown no longer closes the ostream
+                    textWriter.Flush();
+                }
+
+                /// <summary>Gives access to the LineFormat instance that was given to this object at construction time.</summary>
+                protected readonly LineFormat lineFmt ;
+
+                protected System.IO.TextWriter textWriter;
+
+                /// <summary>Gives access to the flushAfterEachWrite flag value that was original assigned at construction time.</summary>
+                protected readonly bool flushAfterEachWrite;
+            };
+
             //-------------------------------------------------------------------
             #endregion
 
@@ -1140,6 +1213,25 @@ namespace MosaicLib
                 /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
                 public ConsoleLogMesssageHandler(string name, LogGate logGate, LineFormat lineFmt)
                     : base(name, logGate, lineFmt, new System.IO.StreamWriter(Console.OpenStandardOutput()), true)
+                { }
+            }
+
+            /// <summary>
+            /// This class provides a standard implementation for a TextWriter basd Console Output LMH that can either use
+            /// <see cref="System.Console.Out"/> or <see cref="System.Console.Error"/>
+            /// </summary>
+            public class ConsoleTextWriterLogMessagehandler : TextWriterLogMessageHandler
+            {
+                /// <summary>Basic Constructor</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
+                /// <param name="useStdErr">
+                /// When true this handler will output to <see cref="System.Console.Error"/>.  
+                /// When false (the default) this handler will output to <see cref="System.Console.Out"/>
+                /// </param>
+                public ConsoleTextWriterLogMessagehandler(string name, LogGate logGate, LineFormat lineFmt, bool useStdErr = false)
+                    : base(name, logGate, lineFmt, useStdErr ? System.Console.Error : System.Console.Out, true)
                 { }
             }
 
@@ -1225,8 +1317,8 @@ namespace MosaicLib
                     BasicFallbackLogging.OutputDebugString(lineBuilder.ToString());
                 }
 
-                string appName = null;
-                LineFormat lineFmt = null;
+                private readonly string appName;
+                private readonly LineFormat lineFmt;
             }
 
             //-------------------------------------------------------------------
@@ -1275,8 +1367,8 @@ namespace MosaicLib
                     }
                 }
 
-                LineFormat lineFmt = null;
-                System.Text.StringBuilder lineBuilder = new System.Text.StringBuilder();
+                private readonly LineFormat lineFmt;
+                private readonly System.Text.StringBuilder lineBuilder = new System.Text.StringBuilder();
             }
 
             //-------------------------------------------------------------------
@@ -1340,7 +1432,7 @@ namespace MosaicLib
                 }
 
                 private readonly object lmListMutex = new object();
-                private List<LogMessage> lmList = new List<LogMessage>();
+                private readonly List<LogMessage> lmList = new List<LogMessage>();
                 private volatile int lmListVolatileCount = 0;
 
                 /// <summary>LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.</summary>
@@ -1444,7 +1536,7 @@ namespace MosaicLib
                 /// </summary>
                 public IReferenceSet<Logging.LogMessage> Set { get; private set; }
 
-                Func<Logging.ILogMessage, bool> messageFilter;
+                private readonly Func<Logging.ILogMessage, bool> messageFilter;
             }
 
             #endregion

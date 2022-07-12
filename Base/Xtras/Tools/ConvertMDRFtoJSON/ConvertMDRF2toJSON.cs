@@ -42,7 +42,7 @@ namespace MosaicLib.Tools.ConvertMDRF2toJSON
     public static class ConvertMDRF2toJSON
     {
         private static string appName = "AppNameNotFound";
-        private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+        private readonly static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
 
         static void Main(string[] args)
         {

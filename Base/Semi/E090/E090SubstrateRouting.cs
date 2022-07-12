@@ -438,7 +438,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     /// <summary>
     /// This class is usable as the implementation class for supporting ITransferPermissionState publication, and/or (possibly) as the base class for derived types that extend this capability.
     /// </summary>
-    public class TransferPermissionState : ITransferPermissionState, IEquatable<ITransferPermissionState>, ICopyable<ITransferPermissionState>
+    public class TransferPermissionState : ITransferPermissionState, IEquatable<ITransferPermissionState>, ICopyable<TransferPermissionState>
     {
         /// <summary>
         /// Default constructor.  optionally constructs a new r/w instance with an empty, writeable GrantedTokenSet.
@@ -512,7 +512,12 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             return this.Equals(other, compareTimeStamps: true);
         }
 
-        public virtual ITransferPermissionState MakeCopyOfThis(bool deepCopy = true)
+        /// <summary>
+        /// Returns a new <see cref="TransferPermissionState"/> instance which is a copy of the current one.
+        /// If <paramref name="deepCopy"/>is true then the returned instance will contain a new RW TokenSet instance.
+        /// If <paramref name="deepCopy"/>is false then the returned instance will cotnains a RW TokenSet instance that may be shared.
+        /// </summary>
+        public virtual TransferPermissionState MakeCopyOfThis(bool deepCopy = true)
         {
             return new TransferPermissionState(createRWTokenSet: false)
             {
@@ -522,7 +527,8 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
                 Reason = Reason.MapNullToEmpty(),
                 EstimatedAvailableAfterPeriod = EstimatedAvailableAfterPeriod,
 
-                GrantedTokenSet = GrantedTokenSet.ConvertToReadOnly(mapNullToEmpty: true),
+                GrantedTokenSet = deepCopy ? new TokenSet<string>(GrantedTokenSet ?? TokenSet<string>.Empty, asReadOnly: false)
+                                           : GrantedTokenSet.ConvertToReadOnly(mapNullToEmpty: false),
             };
         }
 
@@ -570,7 +576,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             _reason = other.Reason.MapEmptyToNull();
             EstimatedAvailableAfterPeriod = other.EstimatedAvailableAfterPeriod;
 
-            GrantedTokenSet = other.GrantedTokenSet.ConvertToWritable(mapNullToEmpty: true);
+            GrantedTokenSet = other.GrantedTokenSet.ConvertToReadOnly(mapNullToEmpty: true);
         }
 
         /// <summary>

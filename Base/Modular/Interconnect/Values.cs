@@ -1869,10 +1869,21 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal,
+            /// ThrowStringFormatIssues = DefaultThrowStringFormatIssues
             /// </summary>
             public ValueSetItemAttribute() 
-            { }
+            {
+                ThrowStringFormatIssues = DefaultThrowStringFormatIssues ?? false;
+            }
+
+            /// <summary>
+            /// Defines the default value that is used when constructing new <see cref="ValueSetItemAttribute"/> instances.
+            /// If this property has not been explicitly set to be non-null before its first (get) use then it will be initialized to the current value 
+            /// of the <see cref="AnnotatedItemAttributeBase.DefaultThrowStringFormatIssues"/> property.
+            /// </summary>
+            public static new bool? DefaultThrowStringFormatIssues { get { return _DefaultThrowStringFormatIssues ?? (_DefaultThrowStringFormatIssues = AnnotatedItemAttributeBase.DefaultThrowStringFormatIssues); } set { _DefaultThrowStringFormatIssues = value; } }
+            private static bool? _DefaultThrowStringFormatIssues;
         }
     }
 

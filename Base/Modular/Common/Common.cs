@@ -48,7 +48,7 @@ namespace MosaicLib.Modular.Common
 
     #region IDType
 
-    /// <summary>This enum is used with ISessionValueSetServices (and other places) to define what the id should be used as for methods that support looking up something by an ID</summary>
+    [Obsolete("This enum is no longer in use (2022-06-09)")]
     [DataContract(Namespace = Constants.ModularNameSpace)]
     public enum IDType
     {

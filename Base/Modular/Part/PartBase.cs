@@ -44,7 +44,7 @@ namespace MosaicLib.Modular.Part
     /// <para/>Undefined (0), Initial (1), AttemptOnline (2), OnlineUninitialized (3), Online (4), OnlineBusy (5), OnlineFailure (6), Offline (7), AttemptOnlineFailed (8), FailedToOffline (9), Shutdown (10), MainThreadFailed (11), Stopped (12)
     /// </summary>
     [DataContract(Namespace=Constants.ModularNameSpace)]
-	public enum UseState
+	public enum UseState : int
 	{
 		/// <summary>no valid value has been given or UseState is not supported by this part (0)</summary>
         [EnumMember]
@@ -111,8 +111,8 @@ namespace MosaicLib.Modular.Part
     /// <para/>Undefined (0), Initial (1), NotApplicable (2), Connecting (3), WaitingForConnect (4), Connected (5), ConnectionFailed (6), ConnectFailed (7), Disconnected (8), DisconnectedByOtherEnd (9), ConnectionDegraded (10)
     /// </summary>
     [DataContract(Namespace = Constants.ModularNameSpace)]
-    public enum ConnState
-	{
+    public enum ConnState : int
+    {
 		/// <summary>no valid value has been given or ConnState is not supported by this part (0)</summary>
         [EnumMember]
         Undefined = 0,

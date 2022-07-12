@@ -58,6 +58,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public string E157EventRecordingKeyNameFormatStr { get; set; } = "{0}.CERP.E157";
 
         public IValuesInterconnection IVI { get; set; }
+ 
+        public bool E157IncludeStepIDOnExecutingToNotActiveTransition { get; set; }
 
         public CombinedEventReportingPartConfig MakeCopyOfThis(bool deepCopy = true)
         {
@@ -170,19 +172,19 @@ namespace Mosaic.ToolsLib.Semi.CERP
             return null;
         }
 
-        private IScopedTokenLogMessageEmitters fallbackScopedTokenLogMessageEmitter = new ScopedTokenLogMessageEmitters(null);
+        private readonly IScopedTokenLogMessageEmitters fallbackScopedTokenLogMessageEmitter = new ScopedTokenLogMessageEmitters(null);
 
         private ReadOnlyIDictionary<string, IScopedTokenLogMessageEmitters> roModuleToEmittersDictionary = ReadOnlyIDictionary<string, IScopedTokenLogMessageEmitters>.Empty;
         private ReadOnlyIDictionary<(string, string), IScopedTokenLogMessageEmitters> roModuleAndPurposeToEmitterDictionary = ReadOnlyIDictionary<(string, string), IScopedTokenLogMessageEmitters>.Empty;
 
-        private Dictionary<string, IScopedTokenLogMessageEmitters> moduleToEmittersDictionary = new Dictionary<string, IScopedTokenLogMessageEmitters>();
-        private Dictionary<(string, string), IScopedTokenLogMessageEmitters> moduleAndPurposeToEmitterDictionary = new Dictionary<(string, string), IScopedTokenLogMessageEmitters>();
+        private readonly Dictionary<string, IScopedTokenLogMessageEmitters> moduleToEmittersDictionary = new Dictionary<string, IScopedTokenLogMessageEmitters>();
+        private readonly Dictionary<(string, string), IScopedTokenLogMessageEmitters> moduleAndPurposeToEmitterDictionary = new Dictionary<(string, string), IScopedTokenLogMessageEmitters>();
 
         #endregion
 
         #region E157 PerformScopedOp variants
 
-        private INamedValueSet e157IDSpecNVS = new NamedValueSet() { "E157" }.MakeReadOnly();
+        private readonly INamedValueSet e157IDSpecNVS = new NamedValueSet() { "E157" }.MakeReadOnly();
 
         private string PerformScopedOp(IProviderFacet ipf, ScopedOp scopedOp, E157.E157ModuleScopedToken moduleToken)
         {
@@ -203,16 +205,16 @@ namespace Mosaic.ToolsLib.Semi.CERP
                             return $"{scopedOp} {moduleToken} failed: module already registered";
 
                         // create a tracker and attempt to look the module instance number for it
-                        var moduleIDSpecPair = PartConfig.IDSpecLookupHelper.GetNameIIDSpecPair(moduleName, IDSpec.IDType.ModuleID, e116IDSpecNVS);
+                        var moduleIDSpecPair = PartConfig.IDSpecLookupHelper.GetNameIIDSpecPair(moduleName, IDSpec.IDType.ModuleID, e157IDSpecNVS);
                         var moduleIDSpec = moduleIDSpecPair.IDSpec;
 
-                        var moduleInstanceNum = moduleIDSpec?.ID ?? -1;
+                        var moduleInstanceNum = moduleIDSpec?.ID ?? 0;
+
+                        if (moduleInstanceNum <= 0)
+                            moduleInstanceNum = -1 * (e157ModuleTrackerByInstanceNumDictionary.Count + 1);
 
                         if (e157ModuleTrackerByInstanceNumDictionary.ContainsKey(moduleInstanceNum))
                             return $"{scopedOp} {moduleToken} failed: found module instance num is not unique";
-
-                        if (moduleInstanceNum <= 0)
-                            moduleInstanceNum = -1 * (e116ModuleTrackerByInstanceNumDictionary.Count + 1);
 
                         moduleToken.ModuleInstanceNum = moduleInstanceNum;
 
@@ -226,15 +228,18 @@ namespace Mosaic.ToolsLib.Semi.CERP
                         var recordingKeyName = PartConfig.E157EventRecordingKeyNameFormatStr.CheckedFormat(moduleName);
                         var recordingKeyID = PartConfig.EventMDRF2Writer?.RegisterAndGetKeyID(recordingKeyName) ?? default;
 
-                        mt = new E157ModuleTracker(moduleIDSpecPair, (recordingKeyID, recordingKeyName), moduleToken, PartConfig);
-
-                        mt.ModuleProcessState = MosaicLib.Semi.E157.ModuleProcessState.NotExecuting;
-                        mt.PrevModuleProcessState = MosaicLib.Semi.E157.ModuleProcessState.NoState;
+                        mt = new E157ModuleTracker(moduleIDSpecPair, (recordingKeyID, recordingKeyName), moduleToken, PartConfig)
+                        {
+                            ModuleProcessState = MosaicLib.Semi.E157.ModuleProcessState.NotExecuting,
+                            PrevModuleProcessState = MosaicLib.Semi.E157.ModuleProcessState.NoState
+                        };
 
                         e157ModuleTrackerByInstanceNumDictionary[moduleInstanceNum] = mt;
                         e157ModuleTrackerByNameDictionary[moduleName] = mt;
 
                         eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
+
+                        eventRecord.DisableReporting = moduleToken.DisableReporting;
 
                         eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.Initial;
 
@@ -276,7 +281,10 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 if (moduleToken.CapturedKVCSet != null)
                     eventRecord.KVCSet.AddRange(moduleToken.CapturedKVCSet);
 
-                AddStandardE157Values(mt, eventRecord, moduleToken);
+                AddStandardE157Values(mt, eventRecord);
+
+                if (mt.ModuleConfig.EnableStatePublication)
+                    mt.ModuleToken._StatePublisher.Object = (E157.E157EventRecord) eventRecord.MakeCopyOfThis();
 
                 if (mt.IVA != null)
                     mt.IVA.Set(eventRecord.MakeCopyOfThis());
@@ -300,9 +308,10 @@ namespace Mosaic.ToolsLib.Semi.CERP
             if (mt == null)
                 return $"{scopedOp} {generalExecutionToken} failed: module not found";
 
-            E157.E157EventRecord eventRecord = default;
             SyncFlags syncFlags;
             ScopedTokenState nextScopedOpState;
+
+            E157.E157EventRecord eventRecord;
 
             switch (scopedOp)
             {
@@ -323,9 +332,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                         eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
 
+                        eventRecord.DisableReporting = generalExecutionToken.DisableReporting;
+
                         eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.ExecutionStarted;
 
                         mt.ActiveGeneralExcutionScopedToken = generalExecutionToken;
+
+                        mt.LastStepCount = 0;
+                        mt.LastStepID = string.Empty;
 
                         syncFlags = generalExecutionToken.BeginSyncFlags;
 
@@ -350,6 +364,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                         eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
 
+                        eventRecord.DisableReporting = generalExecutionToken.DisableReporting;
+
                         if (generalExecutionToken.GeneralExecutionSucceeded)
                             eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.ExecutionCompleted;
                         else
@@ -373,6 +389,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
                     eventRecord.KVCSet.AddRange(generalExecutionToken.CapturedKVCSet);
 
                 AddStandardE157Values(mt, eventRecord, generalExecutionToken);
+
+                if (mt.ModuleConfig.EnableStatePublication)
+                    mt.ModuleToken._StatePublisher.Object = (E157.E157EventRecord) eventRecord.MakeCopyOfThis();
 
                 if (mt.IVA != null)
                     mt.IVA.Set(eventRecord.MakeCopyOfThis());
@@ -405,9 +424,10 @@ namespace Mosaic.ToolsLib.Semi.CERP
             if (mt == null)
                 return $"{scopedOp} {stepActiveToken} failed: module not found";
 
-            E157.E157EventRecord eventRecord = default;
             SyncFlags syncFlags;
             ScopedTokenState nextScopedOpState;
+
+            E157.E157EventRecord eventRecord;
 
             switch (scopedOp)
             {
@@ -424,9 +444,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                         eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
 
+                        eventRecord.DisableReporting = stepActiveToken.DisableReporting;
+
                         eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.StepStarted;
 
                         mt.ActiveStepActiveScopedToken = stepActiveToken;
+
+                        mt.LastStepCount = stepActiveToken.StepCount;
+                        mt.LastStepID = stepActiveToken.StepID;
 
                         syncFlags = stepActiveToken.BeginSyncFlags;
 
@@ -445,12 +470,17 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                         eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
 
+                        eventRecord.DisableReporting = stepActiveToken.DisableReporting;
+
                         if (stepActiveToken.StepSucceeded)
                             eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.StepCompleted;
                         else
                             eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.StepFailed;
 
                         mt.ActiveStepActiveScopedToken = null;
+
+                        mt.LastStepCount = stepActiveToken.StepCount;
+                        mt.LastStepID = stepActiveToken.StepID;
 
                         syncFlags = stepActiveToken.EndSyncFlags;
 
@@ -469,6 +499,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                 AddStandardE157Values(mt, eventRecord, stepActiveToken);
 
+                if (mt.ModuleConfig.EnableStatePublication)
+                    mt.ModuleToken._StatePublisher.Object = (E157.E157EventRecord) eventRecord.MakeCopyOfThis();
+
                 if (mt.IVA != null)
                     mt.IVA.Set(eventRecord.MakeCopyOfThis());
 
@@ -483,11 +516,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
             return string.Empty;
         }
 
-        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157ModuleScopedToken moduleScopedToken)
+        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord)
         {
-            var moduleIDSpecs = mt.ModuleIDSpecPair;
-            var moduleConfig = moduleScopedToken.ModuleConfig;
-
             eventRecord.Module = mt.ModuleIDSpecPair;
             eventRecord.RecordingKeyInfo = mt.RecordingKeyInfo;
             eventRecord.State = mt.ModuleProcessState;
@@ -499,7 +529,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157GeneralExcutionScopedToken generalExcutionScopedToken)
         {
-            AddStandardE157Values(mt, eventRecord, generalExcutionScopedToken.E157ModuleScopedToken);
+            AddStandardE157Values(mt, eventRecord);
 
             var firstSubstEventInfo = eventRecord.E090SubstEventInfoList.FirstOrDefault();
 
@@ -507,6 +537,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
             eventRecord.RecID = generalExcutionScopedToken.RecID ?? firstSubstEventInfo.ProcessJobRecipeName ?? firstSubstEventInfo.PPID;
             eventRecord.ProcessJobID = generalExcutionScopedToken.ProcessJobID ?? firstSubstEventInfo.ProcessJobID;
             eventRecord.RecipeParameters = generalExcutionScopedToken.RecipeParameters.ConvertToReadOnly(mapNullToEmpty: false);
+
+            if (eventRecord.State == MosaicLib.Semi.E157.ModuleProcessState.NotExecuting && eventRecord.PrevState == MosaicLib.Semi.E157.ModuleProcessState.GeneralExecution)
+            {
+                eventRecord.StepCount = mt.LastStepCount;
+
+                if (mt.ModuleConfig.IncludeStepIDOnExecutingToNotActiveTransition || PartConfig.E157IncludeStepIDOnExecutingToNotActiveTransition)
+                    eventRecord.StepID = mt.LastStepID;
+            }
         }
 
         private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157StepActiveScopedToken stepActiveToken)
@@ -551,6 +589,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
             public MosaicLib.Semi.E157.ModuleProcessState ModuleProcessState { get; set; }
             public MosaicLib.Semi.E157.ModuleProcessState PrevModuleProcessState { get; set; }
 
+            public uint LastStepCount { get; set; } = 0;
+            public string LastStepID { get; set; } = string.Empty;
+
             public E157.E157GeneralExcutionScopedToken ActiveGeneralExcutionScopedToken { get; set; }
 
             public E157.E157StepActiveScopedToken ActiveStepActiveScopedToken { get; set; }
@@ -563,7 +604,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         #region E116 PerformScopedOp variants
 
-        private INamedValueSet e116IDSpecNVS = new NamedValueSet() { "E116" }.MakeReadOnly();
+        private readonly INamedValueSet e116IDSpecNVS = new NamedValueSet() { "E116" }.MakeReadOnly();
 
         private string PerformScopedOp(IProviderFacet ipf, ScopedOp scopedOp, E116.E116ModuleScopedToken moduleToken)
         {
@@ -585,13 +626,13 @@ namespace Mosaic.ToolsLib.Semi.CERP
                         var moduleIDSpecPair = PartConfig.IDSpecLookupHelper.GetNameIIDSpecPair(moduleName, IDSpec.IDType.ModuleID, e116IDSpecNVS);
                         var moduleIDSpec = moduleIDSpecPair.IDSpec;
 
-                        var moduleInstanceNum = moduleIDSpec?.ID ?? -1;
-
-                        if (e116ModuleTrackerByInstanceNumDictionary.ContainsKey(moduleInstanceNum))
-                            return $"{scopedOp} {moduleToken} failed: found module instance num is not unique";
+                        var moduleInstanceNum = moduleIDSpec?.ID ?? 0;
 
                         if (moduleInstanceNum <= 0)
                             moduleInstanceNum = -1 * (e116ModuleTrackerByInstanceNumDictionary.Count + 1);
+
+                        if (e116ModuleTrackerByInstanceNumDictionary.ContainsKey(moduleInstanceNum))
+                            return $"{scopedOp} {moduleToken} failed: found module instance num is not unique";
 
                         moduleToken.ModuleInstanceNum = moduleInstanceNum;
 
@@ -786,17 +827,17 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         private ulong eventItemSeqNumGen = 0;
 
-        private List<ICERPEventReport> queuedEventItemList = new List<ICERPEventReport>();
+        private readonly List<ICERPEventReport> queuedEventItemList = new List<ICERPEventReport>();
 
         private ulong queuedEventItemListSeqNum;
 
         private ulong lastDeliveredEventItemSeqNum;
 
-        private List<(ulong seqNum, IProviderFacet ipf)> pendingEventDeliveryItemList = new List<(ulong seqNum, IProviderFacet ipf)>();
+        private readonly List<(ulong seqNum, IProviderFacet ipf)> pendingEventDeliveryItemList = new List<(ulong seqNum, IProviderFacet ipf)>();
 
-        private System.Threading.CancellationTokenSource cancellationTokenSource = new System.Threading.CancellationTokenSource();
+        private readonly System.Threading.CancellationTokenSource cancellationTokenSource = new System.Threading.CancellationTokenSource();
         private System.Threading.Tasks.Task eventDeliveryTask = null;
-        private List<ICERPEventReport> postedEventReportItemList = new List<ICERPEventReport>();
+        private readonly List<ICERPEventReport> postedEventReportItemList = new List<ICERPEventReport>();
         private ulong postedEventReportItemListSeqNum;
 
         private volatile bool eventDeliveryTaskAlmostComplete = false;
@@ -894,7 +935,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
                     perCallList.Clear();
                     perCallList.Add(eventReportItem);
 
-                    if (!eventReportItem.ReportBeforeRecording)
+                    if (eventReportItem.DisableReporting)
+                    {
+                        using (var timerTrace2 = new Logging.TimerTrace(Log.Trace, "HandlePostedEventSet.Record.Only"))
+                        {
+                            PartConfig.EventMDRF2Writer?.RecordObject(eventReportItem);
+                        }
+                    }
+                    else if (!eventReportItem.ReportBeforeRecording)
                     {
                         using (var timerTrace2 = new Logging.TimerTrace(Log.Trace, "HandlePostedEventSet.Record.A"))
                         {
@@ -929,7 +977,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
             }
         }
 
-        List<ICERPEventReport> perCallList = new List<ICERPEventReport>();
+        readonly List<ICERPEventReport> perCallList = new List<ICERPEventReport>();
 
         private void ServicePendingEventDeliveryItems()
         {
@@ -938,12 +986,12 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
             for (; ; )
             {
-                var firstPendingItem = pendingEventDeliveryItemList[0];
+                var (seqNum, ipf) = pendingEventDeliveryItemList[0];
 
-                if (lastDeliveredEventItemSeqNum < firstPendingItem.seqNum)
+                if (lastDeliveredEventItemSeqNum < seqNum)
                     break;
 
-                firstPendingItem.ipf.CompleteRequest(string.Empty);
+                ipf.CompleteRequest(string.Empty);
                 pendingEventDeliveryItemList.RemoveAt(0);
 
                 if (pendingEventDeliveryItemList.Count <= 0)
@@ -952,22 +1000,22 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
             bool anyPendingCancelRequests = false;
 
-            foreach (var pendingItem in pendingEventDeliveryItemList)
-                anyPendingCancelRequests |= pendingItem.ipf.IsCancelRequestActive;
+            foreach (var (seqNum, ipf) in pendingEventDeliveryItemList)
+                anyPendingCancelRequests |= ipf.IsCancelRequestActive;
 
             if (anyPendingCancelRequests || HasStopBeenRequested)
             {
                 // handle cancelation requests
-                foreach (var pendingCancelItem in pendingEventDeliveryItemList.FilterAndRemove(item => item.ipf.IsCancelRequestActive).SafeToArray())
+                foreach (var (seqNum, ipf) in pendingEventDeliveryItemList.FilterAndRemove(item => item.ipf.IsCancelRequestActive).SafeToArray())
                 {
-                    pendingCancelItem.ipf.CompleteRequest("Canceled by request");
+                    ipf.CompleteRequest("Canceled by request");
                 }
 
                 if (HasStopBeenRequested)
                 {
-                    foreach (var pendingCancelItem in pendingEventDeliveryItemList.SafeTakeAll())
+                    foreach (var (seqNum, ipf) in pendingEventDeliveryItemList.SafeTakeAll())
                     {
-                        pendingCancelItem.ipf.CompleteRequest("Canceled because part has been asked to stop");
+                        ipf.CompleteRequest("Canceled because part has been asked to stop");
                     }
                 }
             }
@@ -975,7 +1023,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         private string QueueSyncEventAction(IProviderFacet ipf)
         {
-            pendingEventDeliveryItemList.Add((seqNum: queuedEventItemListSeqNum, ipf: ipf));
+            pendingEventDeliveryItemList.Add((seqNum: queuedEventItemListSeqNum, ipf));
 
             return null;
         }
@@ -1056,7 +1104,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
             public bool Remove(IScopedToken scopedToken)
             {
-                var removed = false;
+                bool removed;
+
                 switch (scopedToken)
                 {
                     case E116.E116BusyScopedToken busyScopedToken:
@@ -1073,8 +1122,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 return removed;
             }
 
-            private IListWithCachedArray<E116.E116BusyScopedToken> busyScopedTokenList = new IListWithCachedArray<E116.E116BusyScopedToken>();
-            private IListWithCachedArray<E116.E116BlockedScopedToken> blockedScopedTokenList = new IListWithCachedArray<E116.E116BlockedScopedToken>();
+            private readonly IListWithCachedArray<E116.E116BusyScopedToken> busyScopedTokenList = new IListWithCachedArray<E116.E116BusyScopedToken>();
+            private readonly IListWithCachedArray<E116.E116BlockedScopedToken> blockedScopedTokenList = new IListWithCachedArray<E116.E116BlockedScopedToken>();
 
             private bool reevaluateState;
 
@@ -1110,26 +1159,26 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 }
                 else if (initialBaseState != null && (ModuleConfig.PartBaseStateUsageBehavior & E116.AutomaticTransitionBehavior.GenerateInitialScopedTokenIfNeeded) != 0)
                 {
-                    var initialBlockedInfo = ModuleConfig.AutomaticBlockedTransitionDelegate?.Invoke(ModuleToken, initialBaseState) ?? default;
-                    var initialBusyInfo = ModuleConfig.AutomaticBusyTransitionDelegate?.Invoke(ModuleToken, initialBaseState) ?? default;
+                    var (blockedReason, blockedReasonText) = ModuleConfig.AutomaticBlockedTransitionDelegate?.Invoke(ModuleToken, initialBaseState) ?? default;
+                    var (taskType, taskName) = ModuleConfig.AutomaticBusyTransitionDelegate?.Invoke(ModuleToken, initialBaseState) ?? default;
 
-                    if (initialBlockedInfo.blockedReason != MosaicLib.Semi.E116.BlockedReasonEx.NotBlocked && !enableAutomaticBlockedTransitions)
+                    if (blockedReason != MosaicLib.Semi.E116.BlockedReasonEx.NotBlocked && !enableAutomaticBlockedTransitions)
                     {
                         ModuleToken.InitialStateScopedToken = new E116.E116BlockedScopedToken(ModuleToken)
                         {
                             Priority = ModuleConfig.AutomaticBlockedTransitionPriorty,
-                            BlockedReason = initialBlockedInfo.blockedReason,
-                            BlockedReasonText = initialBlockedInfo.blockedReasonText ?? $"Part's initial state is blocked [{initialBaseState}]",
+                            BlockedReason = blockedReason,
+                            BlockedReasonText = blockedReasonText ?? $"Part's initial state is blocked [{initialBaseState}]",
                             State = ScopedTokenState.Started,
                         };
                     }
-                    else if (initialBusyInfo.taskType != MosaicLib.Semi.E116.TaskType.NoTask && !enableAutomaticBusyTransitions)
+                    else if (taskType != MosaicLib.Semi.E116.TaskType.NoTask && !enableAutomaticBusyTransitions)
                     {
                         ModuleToken.InitialStateScopedToken = new E116.E116BusyScopedToken(ModuleToken)
                         {
                             Priority = ModuleConfig.AutomaticBusyTransitionPriority,
-                            TaskType = initialBusyInfo.taskType,
-                            TaskName = initialBusyInfo.taskName ?? $"Part's initial state is busy [{initialBaseState}]",
+                            TaskType = taskType,
+                            TaskName = taskName ?? $"Part's initial state is busy [{initialBaseState}]",
                             State = ScopedTokenState.Started,
                         };
                     }
@@ -1153,12 +1202,12 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                     if (enableAutomaticBlockedTransitions)
                     {
-                        var blockedInfo = ModuleConfig.AutomaticBlockedTransitionDelegate?.Invoke(ModuleToken, baseState) ?? default;
-                        var isBlocked = blockedInfo.blockedReason != MosaicLib.Semi.E116.BlockedReasonEx.NotBlocked;
+                        var (blockedReason, blockedReasonText) = ModuleConfig.AutomaticBlockedTransitionDelegate?.Invoke(ModuleToken, baseState) ?? default;
+                        var isBlocked = blockedReason != MosaicLib.Semi.E116.BlockedReasonEx.NotBlocked;
 
                         if (isBlocked)
                         {
-                            if (autoBlockedScopedToken != null && (autoBlockedScopedToken.BlockedReason != blockedInfo.blockedReason || autoBlockedScopedToken.BlockedReasonText != blockedInfo.blockedReasonText))
+                            if (autoBlockedScopedToken != null && (autoBlockedScopedToken.BlockedReason != blockedReason || autoBlockedScopedToken.BlockedReasonText != blockedReasonText))
                             {
                                 Remove(autoBlockedScopedToken);
                                 autoBlockedScopedToken = null;
@@ -1169,8 +1218,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                                 Add(autoBlockedScopedToken = new E116.E116BlockedScopedToken(ModuleToken)
                                 {
                                     Priority = ModuleConfig.AutomaticBlockedTransitionPriorty,
-                                    BlockedReason = blockedInfo.blockedReason,
-                                    BlockedReasonText = blockedInfo.blockedReasonText ?? $"Part is faulted [{baseState}]",
+                                    BlockedReason = blockedReason,
+                                    BlockedReasonText = blockedReasonText ?? $"Part is faulted [{baseState}]",
                                     State = ScopedTokenState.Started,
                                 });
                             }
@@ -1184,12 +1233,12 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                     if (enableAutomaticBusyTransitions)
                     {
-                        var busyInfo = ModuleConfig.AutomaticBusyTransitionDelegate?.Invoke(ModuleToken, baseState) ?? default;
-                        var isBusy = busyInfo.taskType != MosaicLib.Semi.E116.TaskType.NoTask;
+                        var (taskType, taskName) = ModuleConfig.AutomaticBusyTransitionDelegate?.Invoke(ModuleToken, baseState) ?? default;
+                        var isBusy = taskType != MosaicLib.Semi.E116.TaskType.NoTask;
 
                         if (isBusy)
                         {
-                            if (autoBusyScopedToken != null && (autoBusyScopedToken.TaskType != busyInfo.taskType || autoBusyScopedToken.TaskName != busyInfo.taskName))
+                            if (autoBusyScopedToken != null && (autoBusyScopedToken.TaskType != taskType || autoBusyScopedToken.TaskName != taskName))
                             {
                                 Remove(autoBusyScopedToken);
                                 autoBusyScopedToken = null;
@@ -1200,8 +1249,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                                 Add(autoBusyScopedToken = new E116.E116BusyScopedToken(ModuleToken)
                                 {
                                     Priority = ModuleConfig.AutomaticBusyTransitionPriority,
-                                    TaskType = busyInfo.taskType,
-                                    TaskName = busyInfo.taskName ?? $"Part is busy [{baseState}]",
+                                    TaskType = taskType,
+                                    TaskName = taskName ?? $"Part is busy [{baseState}]",
                                     State = ScopedTokenState.Started,
                                 });
                             }
@@ -1397,6 +1446,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 var eventRecord = E116.E116EventRecord.Pool.GetFreeObjectFromPool();
 
                 eventRecord.Module = ModuleIDSpecPair;
+                eventRecord.DisableReporting = (scopedToken ?? lastScopedToken)?.ModuleScopedToken?.DisableReporting ?? default;
                 eventRecord.RecordingKeyInfo = RecordingKeyInfo;
                 eventRecord.Transition = transition;
                 eventRecord.State = eptState;
@@ -1481,6 +1531,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                 prevQpcTimeStamp = qpcTimeStamp;
                 prevEPTState = eptState;
+
+                if (ModuleConfig.EnableStatePublication)
+                    ModuleToken._StatePublisher.Object = (E116.E116EventRecord) eventRecord?.MakeCopyOfThis();
 
                 if (IVA != null)
                     IVA.Set(eventRecord?.MakeCopyOfThis());

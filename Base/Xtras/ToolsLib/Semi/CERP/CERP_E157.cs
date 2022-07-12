@@ -40,7 +40,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
     [DataContract(Namespace = MosaicLib.Constants.ToolsLibNameSpace)]
     public class E157EventRecord : CERPEventReportBase
     {
-        /// <summary>Gives the type name that is used with this object type.</summary>
+        /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
         public const string MDRF2TypeName = "CERP.E157.EventRecord";
 
         /// <summary>Gives the <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition"/> that is being reported here.</summary>
@@ -160,7 +160,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
                 default:
                     return $"E157EventRecord {Module.Name} {Transition} {State} RCID:'{RCID}' RecID:'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}";
                 case MosaicLib.Semi.E157.ModuleProcessState.StepActive:
-                    return $"E157EventRecord {Module.Name} {Transition} {State} step:{StepCount}:'{StepID}' rcp:'{RCID}'/'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}";
+                    return $"E157EventRecord {Module.Name} {Transition} {State} step:{StepCount}:'{StepID}' RCID:'{RCID}' RecID:'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}";
             }
         }
 
@@ -256,6 +256,9 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>Gives the <see cref="ICombinedEventReportingPart"/> instance with which this module name is to be registered.</summary>
         public ICombinedEventReportingPart CERP { get; set; }
 
+        /// <summary>When set to true the CERP will publish new event records, with the current state, to the module scoped token's StatePublisher</summary>
+        public bool EnableStatePublication { get; set; }
+
         /// <summary>Gives the default <see cref="IScopedToken.Priority"/> value for module and other scoped tokens created from this value.</summary>
         public uint DefaultPriority { get; set; }
 
@@ -265,11 +268,14 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>Specifies the <see cref="CERP.E116.E116ModuleScopedToken"/> instance that this E157 instance is to be automatically linked to, if any.</summary>
         public CERP.E116.E116ModuleScopedToken E116ModuleScopedToken { get; set; }
 
-        /// <summary>When non-null this string specifies the substrate attribute name that is used to carry the associated RecipeID (aka the identifier of the master recipe).</summary>
-        public string RecipeIDAttributeName { get; set; }
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157GeneralExcutionScopedToken.GeneralExecutionSucceeded"/> property</summary>
+        public bool DefaultGeneralExecutionScopedTokenSuccess { get; set; } = false;
 
-        /// <summary>When non-null this string specifies the substrate attribute name that is used to carry the associated Process Job ID.</summary>
-        public string ProcessJobIDAttributeName { get; set; }
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157StepActiveScopedToken.StepSucceeded"/> property</summary>
+        public bool DefaultStepActiveScopedTokenSuccess { get; set; } = false;
+
+        /// <summary>When this is true, GeneralExecution to NotActive transitions will carry both the StepCount and the StepID from the last completed step.  Defaults to false.</summary>
+        public bool IncludeStepIDOnExecutingToNotActiveTransition { get; set; }
 
         /// <summary>Explicit copy/clone method</summary>
         public E157ModuleConfig MakeCopyOfThis(bool deepCopy = true)
@@ -306,6 +312,18 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
 
         /// <summary>Gives the contents of the module config object that was used (and was captured) at the construction of this scoped token</summary>
         internal E157ModuleConfig ModuleConfig { get; private set; }
+
+        /// <summary>
+        /// Gives the StatePublisher for this module.
+        /// Use of this publisher requires that the module corresponding <see cref="E157ModuleConfig.EnableStatePublication"/> property was explicitly set to true.
+        /// The initial state will be published after the scoped token has been started.
+        /// </summary>
+        public ISequencedObjectSource<E157EventRecord, int> StatePublisher => _StatePublisher;
+
+        /// <summary>
+        /// Gives the internally settable StatePublisher for this module.
+        /// </summary>
+        internal readonly InterlockedSequencedRefObject<E157EventRecord> _StatePublisher = new InterlockedSequencedRefObject<E157EventRecord>();
     }
 
     /// <summary>
@@ -324,7 +342,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         {
             E157ModuleScopedToken = moduleScopedToken;
 
-            var e116ModuleScopedToken = moduleScopedToken.ModuleConfig.E116ModuleScopedToken;
+            var e116ModuleScopedToken = moduleScopedToken?.ModuleConfig?.E116ModuleScopedToken;
 
             if (e116ModuleScopedToken != null)
             {
@@ -335,8 +353,10 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
                 };
             }
 
-            BeginSyncFlags = moduleScopedToken.DefaultScopedBeginSyncFlags;
-            EndSyncFlags = moduleScopedToken.DefaultScopedEndSyncFlags;
+            BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
+
+            GeneralExecutionSucceeded = moduleScopedToken?.ModuleConfig?.DefaultGeneralExecutionScopedTokenSuccess ?? true;
         }
 
         /// <summary>
@@ -373,7 +393,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>
         /// The client is expected to update this property prior to ending the step in order that it can generate the correspondingly correct event.
         /// </summary>
-        public bool GeneralExecutionSucceeded { get; set; } = true;
+        public bool GeneralExecutionSucceeded { get; set; }
 
         /// <summary>
         /// Gives the, optional, <see cref="CERP.E116.E116BusyScopedToken"/> that is used to perform the linked E116 Busy state request
@@ -414,12 +434,18 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             : base(generalExcutionScopedToken, "E157.StepActive")
         {
             GeneralExcutionScopedToken = generalExcutionScopedToken;
+
+            if (GeneralExcutionScopedToken?.DisableReporting == true)
+                DisableReporting = true;
+
             EnableAutomaticStepCountGeneration = enableAutomaticStepCountGeneration;
 
-            var moduleScopedToken = generalExcutionScopedToken.E157ModuleScopedToken;
+            var moduleScopedToken = generalExcutionScopedToken?.E157ModuleScopedToken;
 
-            BeginSyncFlags = moduleScopedToken.DefaultScopedBeginSyncFlags;
-            EndSyncFlags = moduleScopedToken.DefaultScopedEndSyncFlags;
+            BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
+
+            StepSucceeded = moduleScopedToken?.ModuleConfig?.DefaultStepActiveScopedTokenSuccess ?? true;
         }
 
         private bool EnableAutomaticStepCountGeneration { get; set; }
@@ -433,7 +459,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         {
             base.AboutToBegin();
 
-            if (EnableAutomaticStepCountGeneration)
+            if (EnableAutomaticStepCountGeneration && GeneralExcutionScopedToken != null)
             {
                 StepCount = GeneralExcutionScopedToken.StepCountGenerator++;
             }
@@ -464,7 +490,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>
         /// The client is expected to update this property prior to ending the step in order that it can generate the correspondingly correct event.
         /// </summary>
-        public bool StepSucceeded { get; set; } = true;
+        public bool StepSucceeded { get; set; }
 
         /// <summary>Helper Debug and Logging method</summary>
         public override string ToString()
