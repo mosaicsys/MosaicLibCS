@@ -281,6 +281,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 if (moduleToken.CapturedKVCSet != null)
                     eventRecord.KVCSet.AddRange(moduleToken.CapturedKVCSet);
 
+                eventRecord.AnnotationVC = moduleToken.CapturedAnnotationVC;
+
                 AddStandardE157Values(mt, eventRecord);
 
                 if (mt.ModuleConfig.EnableStatePublication)
@@ -312,6 +314,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
             ScopedTokenState nextScopedOpState;
 
             E157.E157EventRecord eventRecord;
+            E116.E116BusyScopedToken linkedE116BusyScopedToken = generalExecutionToken.E116BusyScopedToken;
 
             switch (scopedOp)
             {
@@ -320,9 +323,18 @@ namespace Mosaic.ToolsLib.Semi.CERP
                         if (mt.ActiveGeneralExcutionScopedToken != null)
                             return $"{scopedOp} {generalExecutionToken} failed: another general excution scoped token is already active [{mt.ActiveGeneralExcutionScopedToken}]";
 
-                        if (generalExecutionToken.E116BusyScopedToken != null)
+                        if (mt.ModuleConfig.InitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin)
                         {
-                            var ec = PerformScopedOp(null, CERP.ScopedOp.Begin, generalExecutionToken.E116BusyScopedToken);
+                            int substCount = 0;
+                            foreach (var slo in mt.substLocObsSet)
+                                substCount += slo.UpdateInline().IsOccupiedAndAccessible.MapToInt();
+
+                            generalExecutionToken.EndWorkCountIncrementOnSuccess = substCount.CreateVC();
+                        }
+
+                        if (linkedE116BusyScopedToken != null)
+                        {
+                            var ec = PerformScopedOp(null, CERP.ScopedOp.Begin, linkedE116BusyScopedToken);
                             if (ec.IsNeitherNullNorEmpty())
                                 return ec;
                         }
@@ -388,6 +400,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 if (generalExecutionToken.CapturedKVCSet != null)
                     eventRecord.KVCSet.AddRange(generalExecutionToken.CapturedKVCSet);
 
+                eventRecord.AnnotationVC = generalExecutionToken.CapturedAnnotationVC;
+
                 AddStandardE157Values(mt, eventRecord, generalExecutionToken);
 
                 if (mt.ModuleConfig.EnableStatePublication)
@@ -399,8 +413,17 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 EnqueueEventItemForDelivery(eventRecord);
             }
 
-            if (generalExecutionToken.E116BusyScopedToken != null && scopedOp == CERP.ScopedOp.End)
+            if (linkedE116BusyScopedToken != null && scopedOp == CERP.ScopedOp.End)
             {
+                if (!generalExecutionToken.EndWorkCountIncrementOnSuccess.IsEmpty)
+                {
+                    ValueContainer endWCIOS = (generalExecutionToken.GeneralExecutionSucceeded ? generalExecutionToken.EndWorkCountIncrementOnSuccess : ValueContainer.Empty);
+
+                    linkedE116BusyScopedToken.EndWorkCountIncrementOnSuccess 
+                        = linkedE116BusyScopedToken.CapturedEndWorkCountIncrementOnSuccess 
+                        = endWCIOS;
+                }
+    
                 var ec = PerformScopedOp(null, CERP.ScopedOp.End, generalExecutionToken.E116BusyScopedToken);
 
                 if (ec.IsNeitherNullNorEmpty())
@@ -496,6 +519,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
             {
                 if (stepActiveToken.CapturedKVCSet != null)
                     eventRecord.KVCSet.AddRange(stepActiveToken.CapturedKVCSet);
+
+                eventRecord.AnnotationVC = stepActiveToken.CapturedAnnotationVC;
 
                 AddStandardE157Values(mt, eventRecord, stepActiveToken);
 
@@ -1455,6 +1480,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 var getKVCSetFromToken = (scopedToken ?? lastScopedToken);
                 if (getKVCSetFromToken is ScopedTokenBase scb && scb.CapturedKVCSet != null)
                     eventRecord.KVCSet.AddRange(scb.CapturedKVCSet);
+
+                eventRecord.AnnotationVC = (scopedToken as ScopedTokenBase ?? lastScopedToken as ScopedTokenBase ?? ModuleToken)?.CapturedAnnotationVC ?? default;
 
                 var isInitialTransition = (transition == MosaicLib.Semi.E116.EPTTransition.Transition1);
 

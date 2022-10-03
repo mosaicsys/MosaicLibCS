@@ -232,9 +232,9 @@ namespace MosaicLib.Semi.E037
             SetupReceiever();
 		}
 
-        E037PortConfig E037PortConfig { get; set; }
+        private E037PortConfig E037PortConfig { get; set; }
 
-        Logging.IMesgEmitter LinkTestEmitter { get; set; }
+        private Logging.IMesgEmitter LinkTestEmitter { get; set; }
 
         #endregion
 
@@ -246,12 +246,12 @@ namespace MosaicLib.Semi.E037
         protected readonly bool isActivePort;
         protected readonly bool isSingleSession;
 
-        IPAddress IPAddress { get; set; }
-        TcpListener tcpListener = null;
-        IAsyncResult pendingAcceptIAR = null;
+        private IPAddress IPAddress { get; set; }
+        private TcpListener tcpListener = null;
+        private IAsyncResult pendingAcceptIAR = null;
 
-        TcpClient tcpClient = null;
-        int maxConcurrentAccepts = 1;
+        private TcpClient tcpClient = null;
+        private readonly int maxConcurrentAccepts = 1;
 
         private string AttemptToSetupAndMakeConnectionIfNeeded()
         {
@@ -706,8 +706,8 @@ namespace MosaicLib.Semi.E037
             slidingBuffer = new SerialIO.SlidingBuffer(PortBaseConfig.MaximumMesgBodySize + 14 + 256) { EnableAutoAlignment = false }; 
         }
 
-        SerialIO.SlidingBuffer slidingBuffer;
-        IAsyncResult pendingReceiveIAR;
+        private SerialIO.SlidingBuffer slidingBuffer;
+        private IAsyncResult pendingReceiveIAR;
 
         protected override void ServiceReceiver(QpcTimeStamp qpcTimeStamp)
         {
@@ -748,15 +748,16 @@ namespace MosaicLib.Semi.E037
                     }
 
                     while (ec.IsNullOrEmpty() && decodedReceiveMesgList.Count > 0)
-                    {                        
-                        ec = HandleReceivedMessage(decodedReceiveMesgList.SafeTakeFirst());     // note: this can call ServiceTransmitter if the received message generates and immediate response (S6F11W -> S6F12 for example)
+                    {
+                        // note: The following method can call ServiceTransmitter if the received message generates and immediate response (S6F11W -> S6F12 for example)
+                        ec = HandleReceivedMessage(decodedReceiveMesgList.SafeTakeFirst());     
                     }
 
                     if (ec.IsNeitherNullNorEmpty())
                     {
                         TerminateTcpClient();
 
-                        SetConnectionState(PortConnectionState.NotConnected, "{0} unable to process received bytes: {1}".CheckedFormat(CurrentMethodName, ec), qpcTimeStamp);
+                        SetConnectionState(PortConnectionState.NotConnected, "{0} unable to process received bytes: {1}".CheckedFormat(CurrentMethodName, ec), qpcTimeStamp, reportIssue: true);
 
                         return;
                     }
@@ -810,11 +811,11 @@ namespace MosaicLib.Semi.E037
             }
         }
 
-        List<IMessage> decodedReceiveMesgList = new List<IMessage>();
-        int lastReceivePostedPutIndex = 0;
-        int lastUsedNCharsGetIndex = 0;
+        private readonly List<IMessage> decodedReceiveMesgList = new List<IMessage>();
+        private int lastReceivePostedPutIndex = 0;
+        private int lastUsedNCharsGetIndex = 0;
 
-        bool enableRxTracking = false;
+        private bool enableRxTracking = false;
         private void AddRxTracker(RxType rxType, int index = -1, int count = 0)
         {
             if (enableRxTracking)
@@ -826,9 +827,13 @@ namespace MosaicLib.Semi.E037
             }
         }
 
-        List<RxTracker> rxTrackerList = new List<RxTracker>();
+        private readonly List<RxTracker> rxTrackerList = new List<RxTracker>();
 
-        enum RxType : int
+        /// <summary>
+        /// Set of Rx activities that are tracked.
+        /// <para/>None (0), PutPosted, AddedN, UsedN, AlignedBuffer
+        /// </summary>
+        private enum RxType : int
         {
             None = 0,
             PutPosted,
@@ -837,7 +842,7 @@ namespace MosaicLib.Semi.E037
             AlignedBuffer,
         }
 
-        struct RxTracker
+        private struct RxTracker
         {
             public RxType rxType;
             public int index, count;
@@ -864,13 +869,13 @@ namespace MosaicLib.Semi.E037
             }
             else
             {
-                SetConnectionState(PortConnectionState.NotConnected, "Connection terminated unexpectedly in state: {0}".CheckedFormat(PortConnectionState), qpcTimeStamp);
+                SetConnectionState(PortConnectionState.NotConnected, "Connection terminated unexpectedly in state: {0}".CheckedFormat(PortConnectionState), qpcTimeStamp, reportIssue: true);
 
                 TerminateTcpClient();
             }
         }
 
-        E037TenByteHeader headerDecoder = new E037TenByteHeader();
+        private readonly E037TenByteHeader headerDecoder = new E037TenByteHeader();
 
         /// <summary>
         /// Attempt to process the current contents of the sliding buffer.  
@@ -893,8 +898,8 @@ namespace MosaicLib.Semi.E037
             if (availableByteCount < nextRequiredByteCount)
                 return null;     // not enought data to even begin to look - we are currently only looking for the length and the first header.
 
-            uint u4 = 0;
-            int e037MessageLength = 0;
+            uint u4;
+            int e037MessageLength;
             int scanIdx = nextGetIdx;
 
             if (Utils.Data.Pack(buffer, scanIdx, out u4))
@@ -941,6 +946,9 @@ namespace MosaicLib.Semi.E037
                 default: TraceHeaders.Emit("Received header {0}", headerDecoder); break;
             }
 
+            if (headerDecoder.SType != SType.DataMessage && PortRecording != null)
+                PortRecording.NoteE005HeaderReceived(this, headerDecoder);
+
             string ec;
             switch (headerDecoder.SType)
             {
@@ -983,7 +991,7 @@ namespace MosaicLib.Semi.E037
             return ec.MapNullToEmpty();
         }
 
-        void ServiceSentRequestEngines(QpcTimeStamp qpcTimeStamp)
+        private void ServiceSentRequestEngines(QpcTimeStamp qpcTimeStamp)
         {
             string ec = null;
 
@@ -1041,7 +1049,7 @@ namespace MosaicLib.Semi.E037
 
             E037TenByteHeader rspHeader = new E037TenByteHeader() { SType = SType.LinktestRsp, PType = PType.SECSII, SystemBytes = reqHeader.SystemBytes, SessionID = 0xffff };
 
-            PostTransmitHeaderBuffer(rspHeader, qpcTimeStamp, useTraceEmitter: LinkTestEmitter);
+            PostTransmitHeaderBuffer(ref rspHeader, qpcTimeStamp, useTraceEmitter: LinkTestEmitter);
 
             return String.Empty;
         }
@@ -1057,7 +1065,7 @@ namespace MosaicLib.Semi.E037
 
             linktestSendTracker.SetHeader(reqHeader, qpcTimeStamp);
 
-            PostTransmitHeaderBuffer(reqHeader, qpcTimeStamp, useTraceEmitter: LinkTestEmitter);
+            PostTransmitHeaderBuffer(ref reqHeader, qpcTimeStamp, useTraceEmitter: LinkTestEmitter);
 
             return String.Empty;
         }
@@ -1286,7 +1294,7 @@ namespace MosaicLib.Semi.E037
 
             SetConnectionState(PortConnectionState.Selecting, reason, qpcTimeStamp);
 
-            PostTransmitHeaderBuffer(reqHeader, qpcTimeStamp);
+            PostTransmitHeaderBuffer(ref reqHeader, qpcTimeStamp);
 
             return String.Empty;
         }
@@ -1301,12 +1309,12 @@ namespace MosaicLib.Semi.E037
 
             SetConnectionState(PortConnectionState.Deselecting, reason, qpcTimeStamp);
 
-            PostTransmitHeaderBuffer(reqHeader, qpcTimeStamp);
+            PostTransmitHeaderBuffer(ref reqHeader, qpcTimeStamp);
 
             return String.Empty;
         }
 
-        string ServiceSelectBackground(QpcTimeStamp qpcTimeStamp)
+        private string ServiceSelectBackground(QpcTimeStamp qpcTimeStamp)
         {
             if (selectSendTracker.Header != null)
             {
@@ -1331,7 +1339,7 @@ namespace MosaicLib.Semi.E037
         {
             E037TenByteHeader rspHeader = new E037TenByteHeader() { SType = SType.SelectRsp, PType = PType.SECSII, SystemBytes = reqHeader.SystemBytes, SessionID = reqHeader.SessionID };
 
-            PostTransmitHeaderBuffer(rspHeader, qpcTimeStamp);
+            PostTransmitHeaderBuffer(ref rspHeader, qpcTimeStamp);
 
             return String.Empty;
         }
@@ -1340,7 +1348,7 @@ namespace MosaicLib.Semi.E037
         {
             E037TenByteHeader rspHeader = new E037TenByteHeader() { SType = SType.DeselectRsp, PType = PType.SECSII, SystemBytes = reqHeader.SystemBytes, SessionID = reqHeader.SessionID };
 
-            PostTransmitHeaderBuffer(rspHeader, qpcTimeStamp);
+            PostTransmitHeaderBuffer(ref rspHeader, qpcTimeStamp);
 
             return String.Empty;
         }
@@ -1385,7 +1393,7 @@ namespace MosaicLib.Semi.E037
 
             rspHeader.SF = sf;
 
-            PostTransmitHeaderBuffer(rspHeader, qpcTimeStamp);
+            PostTransmitHeaderBuffer(ref rspHeader, qpcTimeStamp);
 
             return String.Empty;
         }
@@ -1394,17 +1402,19 @@ namespace MosaicLib.Semi.E037
 
         #region Transmitter (PostTransmit, ServiceTransmitter, SendSeperateHeader)
 
-        private void PostTransmitHeaderBuffer(E037TenByteHeader header, QpcTimeStamp qpcTimeStamp, bool serviceTransmitter = true, Logging.IMesgEmitter useTraceEmitter = null)
+        private void PostTransmitHeaderBuffer(ref E037TenByteHeader header, QpcTimeStamp qpcTimeStamp, bool serviceTransmitter = true, Logging.IMesgEmitter useTraceEmitter = null)
         {
             (useTraceEmitter ?? TraceHeaders).Emit("Sending Header {0}", header);
 
-            pendingTransmitHeaderBuffersQueue.Enqueue(header.ByteArray);
+            pendingTransmitHeaderQueue.Enqueue(header);
             if (serviceTransmitter)
                 ServiceTransmitter(qpcTimeStamp);
+
+            header = null;
         }
 
-        Queue<byte[]> pendingTransmitHeaderBuffersQueue = new Queue<byte[]>();
-        List<IAsyncResult> pendingSendIARList = new List<IAsyncResult>();
+        private readonly Queue<E037TenByteHeader> pendingTransmitHeaderQueue = new Queue<E037TenByteHeader>();
+        private readonly List<IAsyncResult> pendingSendIARList = new List<IAsyncResult>();
 
         protected override void ServiceTransmitter(QpcTimeStamp qpcTimeStamp)
         {
@@ -1439,17 +1449,21 @@ namespace MosaicLib.Semi.E037
                     {
                         break;
                     }
-                    else if (pendingTransmitHeaderBuffersQueue.Count > 0)
+                    else if (pendingTransmitHeaderQueue.Count > 0)
                     {
                         var lengthByteArray = new byte[4];
-                        var headerByteArray = pendingTransmitHeaderBuffersQueue.Dequeue();
+                        var header = pendingTransmitHeaderQueue.Dequeue();
+                        var headerByteArray = header.ByteArray;
 
                         Data.Unpack((UInt32)headerByteArray.Length, lengthByteArray);
 
                         var arraySegmentList = new List<ArraySegment<byte>>()
                             .SafeAddItems(new ArraySegment<byte>(lengthByteArray), new ArraySegment<byte>(headerByteArray));
 
-                        pendingSendIARList.Add(tcpClient.Client.BeginSend(arraySegmentList, SocketFlags.None, iar => this.Notify(), null));
+                        if (PortRecording != null)
+                            PortRecording.NoteSendingE005Header(this, header);
+
+                        pendingSendIARList.Add(tcpClient.Client.BeginSend(arraySegmentList, SocketFlags.None, iar => this.Notify(), header));
                     }
                     else if (readyToSendOpQueue.Count > 0 && permitPostMessageSends)
                     {
@@ -1467,6 +1481,9 @@ namespace MosaicLib.Semi.E037
                         var arraySegmentList = new List<ArraySegment<byte>>()
                             .SafeAddItems(new ArraySegment<byte>(lengthByteArray), new ArraySegment<byte>(headerByteArray))
                             .ConditionalAddItems(!bodyByteArray.IsNullOrEmpty(), new ArraySegment<byte>(bodyByteArray));
+
+                        if (PortRecording != null)
+                            PortRecording.NoteSendingE005Message(this, nextSendMesg);
 
                         pendingSendIARList.Add(tcpClient.Client.BeginSend(arraySegmentList, SocketFlags.None, iar => this.Notify(), nextSendMessageOp));
                         NoteMesgSendPosted(nextSendMessageOp, qpcTimeStamp);
@@ -1492,8 +1509,9 @@ namespace MosaicLib.Semi.E037
             var qpcTimeStamp = QpcTimeStamp.Now;
             UInt32 headerSeqNum = ManagerPortFacet.GetNextMessageSequenceNum();
             E037TenByteHeader header = new E037TenByteHeader() { SType = SType.SeparateReq, PType = PType.SECSII, SystemBytes = headerSeqNum, SessionID = useSessionID };
+            var headerStr = header.ToString();
 
-            PostTransmitHeaderBuffer(header, qpcTimeStamp, serviceTransmitter: false);
+            PostTransmitHeaderBuffer(ref header, qpcTimeStamp, serviceTransmitter: false);
 
             QpcTimer waitLimitTimer = new QpcTimer() { TriggerInterval = (0.5).FromSeconds() }.Start();
 
@@ -1506,11 +1524,11 @@ namespace MosaicLib.Semi.E037
                 bool waitTimeLimitReached = waitLimitTimer.GetIsTriggered(qpcTimeStamp);
                 WaitForSomethingToDo();
 
-                if (pendingTransmitHeaderBuffersQueue.Count == 0 && pendingSendIARList.Count == 0)
+                if (pendingTransmitHeaderQueue.Count == 0 && pendingSendIARList.Count == 0)
                     break;
 
                 if (waitTimeLimitReached)
-                    ec = "{0} {1} failed: wait time limit reached after {2:f3} seconds".CheckedFormat(CurrentMethodName, header, waitLimitTimer.ElapsedTimeAtLastTrigger.TotalSeconds);
+                    ec = "{0} {1} failed: wait time limit reached after {2:f3} seconds".CheckedFormat(CurrentMethodName, headerStr, waitLimitTimer.ElapsedTimeAtLastTrigger.TotalSeconds);
             }
 
             if (ec.IsNullOrEmpty())
@@ -1542,7 +1560,7 @@ namespace MosaicLib.Semi.E037
             TerminateTcpClient();
 
             if (isActivePort)
-                SetConnectionState(PortConnectionState.OutOfService, "{0} encountered unexpected non-socket exception: {1}".CheckedFormat(methodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)), qpcTimeStamp);
+                SetConnectionState(PortConnectionState.OutOfService, "{0} encountered unexpected non-socket exception: {1}".CheckedFormat(methodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)), qpcTimeStamp, reportIssue: true);
             else
                 SetConnectionState(PortConnectionState.Failed, "{0} encountered unexpected non-socket exception (current connection aborted): {1}".CheckedFormat(methodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)), qpcTimeStamp);
         }

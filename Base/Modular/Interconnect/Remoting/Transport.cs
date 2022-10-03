@@ -1759,7 +1759,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             ct.tcpSocket.ReceiveBufferSize = minReceiveBufferSize;
                         if (ct.tcpSocket.SendBufferSize < minSendBufferSize)
                             ct.tcpSocket.SendBufferSize = minSendBufferSize;
-                        
+
                         ct.tcpClient.LingerState = new LingerOption(false, 0);
 
                         ct.localEndPoint = ct.tcpSocket.LocalEndPoint as IPEndPoint;
@@ -1795,7 +1795,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         {
                             ct.SetState(ConnectionTrackerState.ReissuePartiallyCompleteBufferRunHeader, "EndReceive gave {0} bytes of partial BRH [now have {1} of {2}]".CheckedFormat(readCount, ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size));
                         }
-                        else if (readCount != TcpBufferRunHeaderV1.size)
+                        else if (ct.incommingBufferRunHeaderByteCount != TcpBufferRunHeaderV1.size)
                         {
                             new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount)).Throw();
                         }

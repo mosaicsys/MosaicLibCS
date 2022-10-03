@@ -3282,6 +3282,24 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.A</summary>
         public static ValueContainer CreateVC(this string value) { return ValueContainer.CreateA(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.LS</summary>
+        public static ValueContainer CreateVC(this IEnumerable<string> value) { return ValueContainer.CreateLS(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.L</summary>
+        public static ValueContainer CreateVC(this IEnumerable<ValueContainer> value) { return ValueContainer.CreateL(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.NVS</summary>
+        public static ValueContainer CreateVC(this INamedValueSet value) { return ValueContainer.CreateNVS(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.NV</summary>
+        public static ValueContainer CreateVC(this INamedValue value) { return ValueContainer.CreateNV(value); }
+
+        /// <summary>If the given <paramref name="vc"/> is non-empty then its value is returned, otherwise the value of the <paramref name="mapEmptyToVC"/> is returned.</summary>
+        public static ValueContainer MapEmptyTo(this ValueContainer vc, ValueContainer mapEmptyToVC)
+        {
+            return !vc.IsEmpty ? vc : mapEmptyToVC;
+        }
     }
 
     /// <summary>

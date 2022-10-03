@@ -111,6 +111,10 @@
       <Project>{865BD965-5184-4758-A8B7-BD6189E46732}</Project>
       <Name>MosaicLibCS_WPF</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\ToolsLib\Mosaic_ToolsLib.csproj">
+      <Project>{a5bba654-157b-4d3e-a7ca-f44bd36d0ef4}</Project>
+      <Name>Mosaic_ToolsLib</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="HostCycle ReadMe.txt">

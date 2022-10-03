@@ -2238,7 +2238,7 @@ namespace MosaicLib.Semi.E090
 
     /// <summary>
     /// Substrate Type enumeration:
-    /// <para/>Wafer (0), FlatPanel (1), CD (2), Mask (3), Undefined (-1)
+    /// <para/>Wafer (0), FlatPanel (1), CD (2), Mask (3), Undefined (-1), Other (-2), None (-3)
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstType : sbyte
@@ -2258,11 +2258,17 @@ namespace MosaicLib.Semi.E090
         /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
+
+        [EnumMember]
+        Other = -2,
+
+        [EnumMember]
+        None = -3,
     }
 
     /// <summary>
     /// Substrate Usage enumeration:
-    /// <para>Product (0), Test (1), Filler (2), Undefined (-1), Other (-2)</para>
+    /// <para>Product (0), Test (1), Filler (2), Cleaning (3) Undefined (-1), Other (-2), None (-3)</para>
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstUsage : sbyte
@@ -2276,12 +2282,18 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Filler = 2,
 
+        [EnumMember]
+        Cleaning = 3,
+
         /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
 
         [EnumMember]
         Other = -2,
+
+        [EnumMember]
+        None = -3,
     }
 
     public static partial class ExtensionMethods
@@ -2614,6 +2626,18 @@ namespace MosaicLib.Semi.E090
         /// </summary>
         bool IsSrcSameAsDst { get; }
 
+        /// <summary>Gives the <see cref="SubstType"/> for this substrate.</summary>
+        SubstType SubstType { get; }
+
+        /// <summary>Gives the <see cref="SubstUsage"/> for this substrate.</summary>
+        SubstUsage SubstUsage { get; }
+
+        /// <summary>Gives the <see cref="ValueContainer"/> value from the substrate's <see cref="E090SubstEventInfo.SubstTypeAttributeName"/> attribute.</summary>
+        ValueContainer SubstTypeVC { get; }
+
+        /// <summary>Gives the <see cref="ValueContainer"/> value from the substrate's <see cref="E090SubstEventInfo.SubstUsageAttributeName"/> attribute.</summary>
+        ValueContainer SubstUsageVC { get; }
+
         /// <summary>
         /// Gives the PPID that is associatd with this substrate (if any).
         /// <para/>This value is typically used when the process request is generated using typical S2/F41 style patterns (PPSELECT, START)
@@ -2650,6 +2674,9 @@ namespace MosaicLib.Semi.E090
         public static string CarrierIDAttributeName = "CarrierID";
         public static string SlotNumAttributeName = "SlotNum";
         public static string PortIDAttributeName = "PortID";
+
+        public static string SubstTypeAttributeName = "SubstType";
+        public static string SubstUsageAttributeName = "SubstUsage";
 
         public static string PPIDAttributeName = "PPID";
         public static string ProcessJobIDAttributeName = "PJID";
@@ -2703,6 +2730,12 @@ namespace MosaicLib.Semi.E090
                 DstPortID = SrcPortID;
             }
 
+            SubstTypeVC = attributes[SubstTypeAttributeName].VC;
+            SubstType = !SubstTypeVC.IsEmpty ? (SubstTypeVC.GetValue<SubstType?>(rethrow: false) ?? SubstType.Other) : SubstType.None;
+
+            SubstUsageVC = attributes[SubstUsageAttributeName].VC;
+            SubstUsage = !SubstUsageVC.IsEmpty ? (SubstUsageVC.GetValue<SubstUsage?>(rethrow: false) ?? SubstUsage.Other) : SubstUsage = SubstUsage.None;
+
             PPID = attributes[PPIDAttributeName].VC.GetValueA(rethrow: false);
 
             ProcessJobID = attributes[ProcessJobIDAttributeName].VC.GetValueA(rethrow: false);
@@ -2733,6 +2766,18 @@ namespace MosaicLib.Semi.E090
 
         /// <inheritdoc/>
         public bool IsSrcSameAsDst { get { return (SrcCarrierID == DstCarrierID && SrcSlotNum == DstSlotNum && SrcPortID == DstPortID); } }
+
+        /// <inheritdoc/>
+        public SubstType SubstType { get; set; }
+
+        /// <inheritdoc/>
+        public SubstUsage SubstUsage { get; set; }
+
+        /// <inheritdoc/>
+        public ValueContainer SubstTypeVC { get; set; }
+
+        /// <inheritdoc/>
+        public ValueContainer SubstUsageVC { get; set; }
 
         /// <inheritdoc/>
         public string PPID { get; set; }

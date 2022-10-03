@@ -31,6 +31,7 @@ using Mosaic.ToolsLib.MDRF2.Reader;
 using Mosaic.ToolsLib.MessagePackUtils;
 using MosaicLib;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Time;
 using MosaicLib.Utils;
@@ -38,7 +39,7 @@ using MosaicLib.Utils.Collections;
 
 namespace Mosaic.ToolsLib.MDRF2.Common
 {
-    #region Constants (especially LibInfo and related version information)
+    #region Constants (version information)
 
     public static partial class Constants
     {
@@ -46,28 +47,42 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <para/>Type = "Mosaic Data Recording File version 2.1 (MDRF2)",
         /// <para/>Name = "Mosaic Data Recording Engine version 2.1 (MDRE2) CS API",
         /// <para/>Version = {see remarks below},
-        /// <para/>This information is included in the Session record which is found in the second block of each MDRF2 file.
+        /// <para/>This information is included in the "Lib" record which is found in the second block of each MDRF2 file.
         /// </summary>
         /// <remarks>
         /// Version history:
         /// 2.0.0 (2020-06-03) : First MDRF2 version.
         /// 2.1.0 (2022-05-26) : Added KeyID/KeyName concept for use with RecordObject.  Writen files are format compatible with prior version(s) when KeyID/KeyName concept is not actively being used.
-        ///                      Added TypeID/TypeKeyName concept for use with RecordObject in order to support client provided custom object serializers (formatters) and matching deserializers for use during query operations.  Added support for new write behavior option to write TypeIDs in place of TypeKeyName.
+        ///                      Added TypeID/TypeKeyName concept for use with RecordObject in order to support client provided custom object serializers (formatters) and matching deserializers for use during query operations.  
+        ///                      Added support for new write behavior option to write TypeIDs in place of TypeKeyName.
+        /// 2.1.1 (2022-07-28) : Addition of SessionInfo in InlineMap in second header.
+        /// 2.1.2 (2022-10-01) : Addition of optional MDRF2WriterConfigBehavior.SortPointsByDataType concept.
+        ///                      Added IMDRF2Writer.RecordObjects method.
         /// </remarks>
         public static readonly ILibraryInfo Lib2Info = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File version 2.1 (MDRF2)",
             Name = "Mosaic Data Recording Engine version 2.1 (MDRE2) CS API",
-            Version = "2.1.0 (2022-05-26)",
+            Version = "2.1.2 (2022-10-01)",
         };
+    }
 
+    #endregion
+
+    #region Constants (keywords and file extension related constant strings)
+
+    public static partial class Constants
+    {
         /// <summary>Keyword used in InlineMAP to indicate the first record in the file.  This InlineMAP must also contain a DateTime item.</summary>
         public const string FileStartKeyword = "MDRF2.Start";
 
         /// <summary>InlineMAP key name used to contain the DateTimeNVS</summary>
         public const string DateTimeNVSKeyName = "DateTime";
 
-        /// <summary>InlineMAP key name used to contain the Instance UUID.  This is an identifier that is uniquely assigned and recorded at the start of each file.</summary>
+        /// <summary>
+        /// InlineMAP key name used to contain the Instance UUID.  
+        /// This is an identifier that is uniquely assigned and recorded at the start of each file.
+        /// </summary>
         public const string FileInstanceUUIDKeyName = "Instance.UUID";
 
         /// <summary>InlineMAP key name used to contain the LibNVS</summary>
@@ -87,6 +102,9 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
         /// <summary>InlineMAP key name used to contain the ClientNVS (from the SetupInfo).</summary>
         public const string EnvironmentKeyName = "Environment";
+
+        /// <summary>InlineMAP key name used to contain the Session specific information.</summary>
+        public const string SessionInfoKeyName = "SessionInfo";
 
         /// <summary>InlineMAP key name used to contain the SpecItems array of NVS</summary>
         public const string SpecItemsNVSListKey = "SpecItems";
@@ -147,6 +165,132 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
         /// <summary>full file extension for gzip compressed mdrf1 files [.mdrf1.gz]</summary>
         public const string mdrf1AltGZipFileExtension = mdrf1AltFileExtension + Compression.Constants.GZipFileExtension;
+    }
+
+    #endregion
+
+    #region MDRF2 ISessionInfo, SessionInfo
+
+    /// <summary>
+    /// Gives information about the recording session
+    /// </summary>
+    public interface ISessionInfo : IEquatable<ISessionInfo>
+    {
+        /// <summary>
+        /// Gives the ID for this session which is either manually assigned or which uses a single D format UUID generated for this session.
+        /// Each process that starts recording MDRF2 files will generate a single UUID on first use for this session and all recorded files
+        /// for the duration of this process will use this value.
+        /// <para/>The recorded value can be overridden by manually asigning the <see cref="SessionInfo.SharedSessionID"/> proprty prior to its first use.
+        /// </summary>
+        string SessionID { get; }
+
+        /// <summary>
+        /// Gives the ID associated with this writer instance.  
+        /// Normally this is generated at writer construction time to contain a UUID in D format.
+        /// </summary>
+        string WriterInstanceID { get; }
+
+        /// <summary>
+        /// Carries the UTC <see cref="DateTime"/> taken when the the <see cref="SessionID"/> was generated.
+        /// </summary>
+        DateTime UtcDateTime { get; }
+
+        /// <summary>
+        /// Updates the contents of the given <paramref name="nvs"/> using the keys and values based on the names and contents of this object's properties.
+        /// </summary>
+        NamedValueSet UpdateNVSFromThis(NamedValueSet nvs);
+    }
+
+    /// <summary>
+    /// This is the standard implementation object for the <see cref="ISessionInfo"/> interface
+    /// </summary>
+    public class SessionInfo : ISessionInfo
+    {
+        /// <summary>
+        /// Gives the single UUID value that is used for shared session IDs when the client code does not explicitly provided a custom non-empty one.
+        /// </summary>
+        public static readonly string SharedSessionUUID = Guid.NewGuid().ToString("D");
+
+        /// <summary>
+        /// Gives the single UTC <see cref="DateTime"/> that is used for shared session info when client code does not explicitly provide a custom non-empty one.
+        /// </summary>
+        public static readonly DateTime SharedSessionUtcDateTime = DateTime.UtcNow;
+
+        /// <summary>
+        /// Gives the a <see cref="ISessionInfo"/> instance that contains the <see cref="SharedSessionUUID"/> and <see cref="SharedSessionUtcDateTime"/>.
+        /// </summary>
+        public static ISessionInfo SharedSessionInfo => new SessionInfo() { SessionID = SharedSessionUUID, UtcDateTime = SharedSessionUtcDateTime };
+
+        /// <summary>Default constructor.  Sets the NVS, Type, Name and Version to be Empty.</summary>
+        public SessionInfo()
+        {
+            SessionID = string.Empty;
+            WriterInstanceID = string.Empty;
+        }
+
+        /// <summary>Copy constructor.  Sets the NVS to be empty and the Type, Name and Version from the given <paramref name="other"/> instance.</summary>
+        public SessionInfo(ISessionInfo other)
+        {
+            SessionID = other.SessionID;
+            WriterInstanceID = other.WriterInstanceID;
+            UtcDateTime = other.UtcDateTime;
+        }
+
+        /// <summary>
+        /// Initializes the <see cref="WriterInstanceID"/> to contain a UUID.
+        /// If <paramref name="ifNeeded"/> is true and the current <see cref="WriterInstanceID"/> is non-empty then it will not be changed.
+        /// </summary>
+        public SessionInfo SetWriterInstanceUUID(bool ifNeeded = true)
+        {
+            if (!ifNeeded || WriterInstanceID.IsNullOrEmpty())
+                WriterInstanceID = Guid.NewGuid().ToString("D");
+            return this;
+        }
+
+        /// <inheritdoc/>
+        public string SessionID { get; set; }
+
+        /// <inheritdoc/>
+        public string WriterInstanceID { get; set; }
+
+        /// <inheritdoc/>
+        public DateTime UtcDateTime { get; set; }
+
+        /// <summary>Logging and Debugging helper method.</summary>
+        public override string ToString()
+        {
+            return $"SessionInfo SessionID:'{SessionID}' WriterInstanceID:'{WriterInstanceID}' {UtcDateTime.ToLocalTime().CvtToString(Dates.DateTimeFormat.LogDefault)}";
+        }
+
+        /// <summary>Updates this object's contents from the contents of the given NVS using the related keys.</summary>
+        public SessionInfo UpdateFrom(INamedValueSet nvs)
+        {
+            SessionID = nvs["SessionID"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            WriterInstanceID = nvs["WriterInstanceID"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            UtcDateTime = nvs["UtcDateTime"].VC.GetValueDT(rethrow: false);
+
+            return this;
+        }
+
+        /// <inheritdoc/>
+        public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
+        {
+            nvs.SetValue("SessionID", SessionID.CreateVC());
+            nvs.SetValue("WriterInstanceID", WriterInstanceID.CreateVC());
+            nvs.SetValue("UtcDateTime", UtcDateTime.CreateVC());
+
+            return nvs;
+        }
+
+        /// <inheritdoc/>
+        public bool Equals(ISessionInfo other)
+        {
+            return (other != null
+                && SessionID == other.SessionID
+                && WriterInstanceID == other.WriterInstanceID
+                && UtcDateTime == other.UtcDateTime
+                );
+        }
     }
 
     #endregion
@@ -353,10 +497,9 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             return this;
         }
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "used for debugging")]
-        double blockFDTTimeSpan;
-        double oneOverBlockFDTTimeSpan;
-        double blockUDT1601TimeSpan;
+        private double blockFDTTimeSpan;
+        private double oneOverBlockFDTTimeSpan;
+        private double blockUDT1601TimeSpan;
 
         /// <summary>
         /// Updates the given <paramref name="dtPair"/> to contain the given <paramref name="fileDeltaTime"/> and to contain an UTCTimeSince1601 that is calculated
@@ -770,6 +913,8 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
             public const string MDRF2TypeName = "E005.Message";
 
+            private readonly E005TenByteHeaderTypeNameHandler tbhSerializer = new E005TenByteHeaderTypeNameHandler();
+
             /// <inheritdoc/>
             public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
             {
@@ -784,7 +929,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
                 mpWriter.WriteArrayHeader(2);
 
                 if (mesg.TenByteHeader != null)
-                    mpWriter.Write(mesg.TenByteHeader.ByteArray);
+                    tbhSerializer.Serialize(ref mpWriter, mesg.TenByteHeader, mpOptions);
                 else
                     mpWriter.Write(mesg.SF.B2B3);
 
@@ -807,16 +952,14 @@ namespace Mosaic.ToolsLib.MDRF2.Common
                 if (arrayLen == 2)
                 {
                     MosaicLib.Semi.E005.StreamFunction sf = default;
-                    MosaicLib.Semi.E005.TenByteHeaderBase tbh = default;
+                    MosaicLib.Semi.E005.ITenByteHeader tbh = default;
 
-                    if (mpReader.NextMessagePackType == MessagePackType.Binary)
-                    {
-                        tbh = new MosaicLib.Semi.E005.TenByteHeaderBase() { ByteArray = mpReader.ReadBytes()?.First.ToArray() };
-                        sf = tbh.SF;
-                    }
-                    else
-                    {
+                    if (mpReader.NextMessagePackType == MessagePackType.Integer)
                         sf.B2B3 = mpReader.ReadUInt16();
+                    else                        
+                    {
+                        tbh = tbhSerializer.Deserialize(ref mpReader, mpOptions);
+                        sf = tbh.SF;
                     }
 
                     var mesg = new MosaicLib.Semi.E005.Message(sf: sf);
@@ -832,6 +975,71 @@ namespace Mosaic.ToolsLib.MDRF2.Common
                 {
                     new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 2, was {arrayLen}]").Throw();
                 }
+
+                return record;
+            }
+        }
+
+        /// <summary>
+        /// Type name handler used with <see cref="MosaicLib.Semi.E005.ITenByteHeader"/> objects.
+        /// </summary>
+        public class E005TenByteHeaderTypeNameHandler  : TypeNameHandlerQueryRecordReuseHelperBase<MosaicLib.Semi.E005.ITenByteHeader>, IMDRF2TypeNameHandler
+        {
+            /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
+            public const string MDRF2TypeName = "E005.TenByteHeader";
+
+            /// <inheritdoc/>
+            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            {
+                if (value == null)
+                {
+                    mpWriter.WriteNil();
+                }
+                if (value is MosaicLib.Semi.E037.IE037TenByteHeader e037tbh)
+                {
+                    mpWriter.Write(e037tbh.ByteArray);
+                }
+                else
+                {
+                    var tbh = (MosaicLib.Semi.E005.ITenByteHeader)value;
+
+                    mpWriter.WriteArrayHeader(1);
+
+                    mpWriter.Write(tbh.ByteArray);
+                }
+            }
+
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "Placeholder for consistent calling pattern")]
+            public MosaicLib.Semi.E005.ITenByteHeader Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions)
+            {
+                if (mpReader.TryReadNil())
+                    return null;
+
+                if (mpReader.NextMessagePackType == MessagePackType.Binary)
+                {
+                    return new MosaicLib.Semi.E037.E037TenByteHeader() { ByteArray = mpReader.ReadBytes()?.First.ToArray() };
+                }
+                else
+                {
+                    var arrayLen = mpReader.ReadArrayHeader();
+
+                    if (arrayLen == 1)
+                    {
+                        return new MosaicLib.Semi.E005.TenByteHeaderBase() { ByteArray = mpReader.ReadBytes()?.First.ToArray() };
+                    }
+                    else
+                    {
+                        throw new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 1, was {arrayLen}]");
+                    }
+                }
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
+
+                record.Data = Deserialize(ref mpReader, mpOptions);
 
                 return record;
             }
@@ -956,8 +1164,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
                 var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
                 record.Data = item;
 
-                var irki = item as IMDRF2RecoringKeyInfo;
-                if (irki != null)
+                if (item is IMDRF2RecoringKeyInfo irki)
                     irki.RecordingKeyInfo = (record.KeyID, record.KeyName);
 
                 return record;

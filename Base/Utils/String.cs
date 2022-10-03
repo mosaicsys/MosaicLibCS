@@ -979,7 +979,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region string prefix add/remote tools (AddPrefixIfNeeded, RemovePrefixIfNeeded, AddSuffixIfNeeded, RemoveSuffixIfNeeded)
+        #region string prefix add/remote tools (AddPrefixIfNeeded, RemovePrefixIfNeeded, AddSuffixIfNeeded, RemoveSuffixIfNeeded, AddPrefixToErrorCode, AddSuffixToErrorCode)
 
         /// <summary>
         /// This takes the given from string value and adds the given prefix string value if the from string does not already start with the prefix string.
@@ -1047,6 +1047,30 @@ namespace MosaicLib.Utils
                 return from;
 
             return from.Substring(0, from.Length - suffix.Length);
+        }
+
+        /// <summary>
+        /// This EM method takes a given <paramref name="errorCodeIn"/> and if it is neither null nor empty, it return (<paramref name="prefix"/> + <paramref name="errorCodeIn"/>).
+        /// Otherwise it simply returns the given <paramref name="errorCodeIn"/>
+        /// </summary>
+        public static string AddPrefixToErrorCode(this string errorCodeIn, string prefix)
+        {
+            if (errorCodeIn.IsNeitherNullNorEmpty())
+                return string.Concat(prefix, errorCodeIn);
+            else
+                return errorCodeIn;
+        }
+
+        /// <summary>
+        /// This EM method takes a given <paramref name="errorCodeIn"/> and if it is neither null nor empty, it return (<paramref name="errorCodeIn"/> + <paramref name="suffix"/>).
+        /// Otherwise it simply returns the given <paramref name="errorCodeIn"/>
+        /// </summary>
+        public static string AddSuffixToErrorCode(this string errorCodeIn, string suffix)
+        {
+            if (errorCodeIn.IsNeitherNullNorEmpty())
+                return string.Concat(errorCodeIn, suffix);
+            else
+                return errorCodeIn;
         }
 
         #endregion

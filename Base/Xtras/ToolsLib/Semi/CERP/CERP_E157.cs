@@ -277,6 +277,12 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>When this is true, GeneralExecution to NotActive transitions will carry both the StepCount and the StepID from the last completed step.  Defaults to false.</summary>
         public bool IncludeStepIDOnExecutingToNotActiveTransition { get; set; }
 
+        /// <summary>When this is true, the GeneralExecution scoped token will automatically set its own EndWorkCountIncrementOnSuccess property to the number of substrates during begin.</summary>
+        public bool InitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin { get; set; }
+
+        /// <summary>Specifies the default AnnotationVC to be used with the <see cref="E157ModuleScopedToken"/></summary>
+        public ValueContainer DefaultAnnotationVC { get; set; }
+
         /// <summary>Explicit copy/clone method</summary>
         public E157ModuleConfig MakeCopyOfThis(bool deepCopy = true)
         {
@@ -308,6 +314,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             : base(moduleConfig.ModuleName, moduleConfig.CERP, "E157.Module", purposeStr: "E157", defaultScopedBeginSyncFlags: SyncFlags.Events, defaultScopedEndSyncFlags: SyncFlags.Events, defaultPriority: moduleConfig.DefaultPriority)
         {
             ModuleConfig = moduleConfig.MakeCopyOfThis();
+
+            AnnotationVC = ModuleConfig.DefaultAnnotationVC;
         }
 
         /// <summary>Gives the contents of the module config object that was used (and was captured) at the construction of this scoped token</summary>
@@ -342,7 +350,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         {
             E157ModuleScopedToken = moduleScopedToken;
 
-            var e116ModuleScopedToken = moduleScopedToken?.ModuleConfig?.E116ModuleScopedToken;
+            var e157ModuleConfig = moduleScopedToken?.ModuleConfig;
+            var e116ModuleScopedToken = e157ModuleConfig?.E116ModuleScopedToken;
 
             if (e116ModuleScopedToken != null)
             {
@@ -396,8 +405,15 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         public bool GeneralExecutionSucceeded { get; set; }
 
         /// <summary>
+        /// When this value is non-empty, and this module is operating in E116 linked mode, then it will be used to set the 
+        /// related <see cref="E116.E116BusyScopedToken.EndWorkCountIncrementOnSuccess"/> based on the final success of the excution
+        /// when the End is processed.
+        /// </summary>
+        public ValueContainer EndWorkCountIncrementOnSuccess { get; set; }
+
+        /// <summary>
         /// Gives the, optional, <see cref="CERP.E116.E116BusyScopedToken"/> that is used to perform the linked E116 Busy state request
-        /// that is active for the duration of this scoped tokens active period.
+        /// that is active for the duration of this scoped token's active period.
         /// </summary>
         public CERP.E116.E116BusyScopedToken E116BusyScopedToken { get; private set; }
 
@@ -435,8 +451,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         {
             GeneralExcutionScopedToken = generalExcutionScopedToken;
 
-            if (GeneralExcutionScopedToken?.DisableReporting == true)
-                DisableReporting = true;
+            base.DisableReporting = GeneralExcutionScopedToken?.DisableReporting ?? true;
 
             EnableAutomaticStepCountGeneration = enableAutomaticStepCountGeneration;
 
@@ -447,6 +462,9 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
 
             StepSucceeded = moduleScopedToken?.ModuleConfig?.DefaultStepActiveScopedTokenSuccess ?? true;
         }
+
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="GeneralExcutionScopedToken"/> at construction time.</summary>
+        public new bool DisableReporting { get => base.DisableReporting; }
 
         private bool EnableAutomaticStepCountGeneration { get; set; }
 

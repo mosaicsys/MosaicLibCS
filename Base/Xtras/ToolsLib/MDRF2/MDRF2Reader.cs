@@ -228,6 +228,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public MDRF2QueryRecord<TItemType> UpdateFrom(IMDRF2QueryRecord other, bool updateItemType = true, bool updateDTPair = true)
         {
+            FileInfo = FileInfo ?? other.FileInfo;
+
             if (updateItemType)
                 ItemType = other.ItemType;
 
@@ -361,11 +363,17 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// <summary>When non-null this gives the SetupInfo obtained from the file.</summary>
         SetupInfo SetupInfo { get; }
 
+        /// <summary>When non-null this gives the SessionInfo that was obtained from the file.</summary>
+        SessionInfo SessionInfo { get; }
+
         /// <summary>This gives the NVS object that was read from the MDRF file and which contains the information about the SetupInfo.  On MDRF1 files this will also contains the information for the LibraryInfo.</summary>
         INamedValueSet SetupInfoNVS { get; }
 
         /// <summary>Gives the caller direct access to the ClientInfo NVS which is also contained in the SetupInfo.ClientNVS</summary>
         INamedValueSet ClientInfoNVS { get; }
+
+        /// <summary>Gives the NVS object that was read from the MDRF2 file and which contains the information about the current Session.</summary>
+        INamedValueSet SessionInfoNVS { get; }
 
         /// <summary>
         /// Gives the caller a tree structured NVS containing information from the file.  
@@ -429,11 +437,15 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public LibraryInfo LibraryInfo { get; set; }
         /// <inheritdoc>
         public SetupInfo SetupInfo { get; set; }
+        /// <inheritdoc>
+        public SessionInfo SessionInfo { get; set; }
 
         /// <inheritdoc>
         public INamedValueSet SetupInfoNVS { get; set; }
         /// <inheritdoc>
         public INamedValueSet ClientInfoNVS { get; set; }
+        /// <inheritdoc>
+        public INamedValueSet SessionInfoNVS { get; set; }
 
         /// <inheritdoc>
         public INamedValueSet NonSpecMetaNVS { get; set; }
@@ -544,10 +556,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         /// <summary>
         /// Defines the set of point names (subject to lookup and name mapping rules) that the client would like to be given data contents for along with the type of data that shall be returned (VC, F8 or F4) and the nominal sample interval that the client would like to use.  
-        /// When this is null, or its string array is null and its MDRF2PointSetArrayItemType is None, it indicates that all points are to be included in the selected notation.  To select no point data set the point array type selection to None.
+        /// When this is null, or its string array is null and its MDRF2PointSetArrayItemType is not None, it indicates that all points are to be included in the selected notation.  
+        /// To select no point data set the point array type selection to None.
         /// When the client includes the MDRF2PointSetArrayItemType.ResuseArrays flag in the contained point set item type selection field, it will cause the resulting point set query records that are generated to all refer to the same array instance which is directly updated as the group data is processed.
         /// When this flag is not included, each resulting emitted record contents will be given a copy of the array that the data is extracted into so that the client may directly retain these arrays as the representation of the extracted pont time series.
         /// This flag is often used in conjuction with the setting of the AllowRecordReuse query spec property, although these two values may be used seperately from one another.
+        /// <para/>Defaults to (null, <see cref="MDRF2PointSetArrayItemType.None"/>, <see cref="TimeSpan.Zero"/>) which disables point set record generation. 
         /// </summary>
         public Tuple<string[], MDRF2PointSetArrayItemType, TimeSpan> PointSetSpec { get; set; } = Tuple.Create<string[], MDRF2PointSetArrayItemType, TimeSpan>(null, MDRF2PointSetArrayItemType.None, TimeSpan.Zero);
 
@@ -2126,7 +2140,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
             private const int keepRecentEmittedPointSetRecordCount = 0;
             private List<IMDRF2QueryRecord> recentEmittedPointSetRecordList;
-            [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052:Remove unread private members", Justification = "This variable is only used to support internal debugging only when keepRecentEmittedPointSetRecordCount is non-zero")]
             private IMDRF2QueryRecord lastEmittedPointSetRecord;
 
             public void Dispose()
@@ -2333,6 +2346,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     ( Semi.CERP.E116.E116EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E116.E116EventRecord>(), null),
                     ( Semi.CERP.E157.E157EventRecord.MDRF2TypeName, new TypeNameHandlers.MDRF2MessagePackSerializableTypeNameHandler<Semi.CERP.E157.E157EventRecord>(), null),
                     ( TypeNameHandlers.E005MessageTypeNameHandler.MDRF2TypeName, new TypeNameHandlers.E005MessageTypeNameHandler(), null),
+                    ( TypeNameHandlers.E005TenByteHeaderTypeNameHandler.MDRF2TypeName, new TypeNameHandlers.E005TenByteHeaderTypeNameHandler(), null),
                 };
 
                 var acceptAllObjectTypes = (ObjectTypeNameSet == null);
@@ -2861,7 +2875,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 switch (mpHeaderByteCode)
                 {
-                    case MPHeaderByteCode.FixArray1:    // L1 is always used for inline index records: [L1 [L8 ...]]
+                    case MPHeaderByteCode.FixArray1:    // L1 is always used for inline index records: [L1 [L11/L12 ...]]
                         {
                             ReadNextInlineIndexRecord(ref mpReader, mpOptions);
                             fileSummary.InlineIndexCount += 1;
@@ -2887,13 +2901,15 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                             bool blockHasHeaderOrMetaDataOrEnd = ((blockFileIndexRowFlagsBits & (FileIndexRowFlagBits.ContainsHeaderOrMetaData | FileIndexRowFlagBits.ContainsEnd)) != 0);
 
+                            // determine if this block should be processed.
+                            // all blocks that have MetaData/End records will get processed.
                             bool processBlock = blockHasHeaderOrMetaDataOrEnd;
 
                             if (!processBlock && inTimeRange)
                             {
-                                processBlock |= (fileIndexBitsMatch | userRowFlagBitsMatch) 
-                                                 && (blockMayHaveGroupsToProcess || blockMayHaveOccurrencesToProcess || blockMayHaveObjectsToProcess || blockMayHaveMesgsOrErrorsToProcess);
                                 processBlock |= blockHasKeysToProcess;
+                                processBlock |= (fileIndexBitsMatch || userRowFlagBitsMatch) 
+                                                 && (blockMayHaveGroupsToProcess || blockMayHaveOccurrencesToProcess || blockMayHaveObjectsToProcess || blockMayHaveMesgsOrErrorsToProcess);
                             }
 
                             if (processBlock)
@@ -3101,6 +3117,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                 int typeID = 0;
                                 IMDRF2TypeNameHandler typeHandler = null;
                                 bool typeIsEnabled;
+                                bool isEnabledMesgType = false, isEnabledErrorType = false;
 
                                 if (mpReader.NextMessagePackType == MessagePackType.Integer)
                                 {
@@ -3111,6 +3128,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                 {
                                     typeName = mpReader.ReadString();
                                     (typeHandler, typeIsEnabled) = filter.TypeNameToHandlerAndEnabledDictionary.SafeTryGetValue(typeName);
+
+                                    isEnabledMesgType = typeIsEnabled && (typeName == Common.Constants.ObjKnownType_Mesg);
+                                    isEnabledErrorType = typeIsEnabled && (typeName == Common.Constants.ObjKnownType_Error);
                                 }
 
                                 bool urfbSelectsThisObject = (((recordUserRowFlagBits & filter.ObjectSpecificUserRowFlagBitMask) != 0) 
@@ -3122,20 +3142,22 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                 // some of the logic that is used to determine if/when to decode and emit this object is done on a per typeName basis.
                                 bool objectEmitIsEnabled = (filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Object) != 0;
 
-                                bool commonObjectEmitGate = objectEmitIsEnabled
-                                                            && (keyIDSelectsThisObject || urfbSelectsThisObject);
+                                bool emitMesg = isEnabledMesgType && (filter.InlineIndexRowFlagBitMask & FileIndexRowFlagBits.ContainsMessage) != 0;
+                                bool emitError = isEnabledErrorType && (filter.InlineIndexRowFlagBitMask & FileIndexRowFlagBits.ContainsError) != 0;
 
                                 IMDRF2QueryRecord objRecord = null;
 
-                                if (objectEmitIsEnabled)
+                                if (objectEmitIsEnabled || emitMesg || emitError)
                                 {
                                     try
                                     {
                                         if (typeHandler != null)
                                         {
-                                            if (keyIDSelectsThisObject || (urfbSelectsThisObject && typeIsEnabled))
+                                            if (keyIDSelectsThisObject || (urfbSelectsThisObject && typeIsEnabled) || emitMesg || emitError)
                                             {
-                                                refObjectQueryRecord.Update(CurrentQRDTPair, null, recordUserRowFlagBits, recordKeyID, recordKeyName);
+                                                refObjectQueryRecord.Update(CurrentQRDTPair, null, recordUserRowFlagBits, recordKeyID);
+                                                refObjectQueryRecord.FileInfo = fileInfo;
+                                                refObjectQueryRecord.KeyName = recordKeyName;   // null must replace prior keyNames here.
 
                                                 objRecord = typeHandler.DeserializeAndGenerateTypeSpecificRecord(ref mpReader, mpOptions, refObjectQueryRecord, filter.AllowRecordReuse);
                                             }
@@ -3342,6 +3364,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     case Common.Constants.ClientNVSKeyName:
                         fileInfo.ClientInfoNVS = keyVC.GetValueNVS(rethrow: true).BuildDictionary();
                         fileInfo.SetupInfo.ClientNVS = fileInfo.ClientInfoNVS;
+                        break;
+
+                    case Common.Constants.SessionInfoKeyName:
+                        fileInfo.SessionInfoNVS = keyVC.GetValueNVS(rethrow: true).BuildDictionary();
+                        fileInfo.SessionInfo = new SessionInfo().UpdateFrom(fileInfo.SessionInfoNVS);
                         break;
 
                     case Common.Constants.SpecItemsNVSListKey:

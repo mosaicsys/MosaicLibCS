@@ -148,7 +148,7 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
                     {
                         PartID = $"{perfSuiteConfig.PartID}.mdrf2",
                         SetupInfo = perfSuiteConfig.MDRFWriterSetupInfo,
-                        WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID,
+                        WriterBehavior = MDRF2WriterConfigBehavior.EnableAPILocking | MDRF2WriterConfigBehavior.WriteObjectsUsingTypeID | MDRF2WriterConfigBehavior.SortPointsByDataType,
                         CompressorSelect = compressorSelect,
                         CompressionLevel = compressionLevel,
                     };

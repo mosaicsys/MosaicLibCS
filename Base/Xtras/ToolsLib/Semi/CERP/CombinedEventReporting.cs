@@ -20,6 +20,8 @@
  */
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.Serialization;
 
 using MosaicLib;
@@ -29,12 +31,10 @@ using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 
-using Mosaic.ToolsLib.Semi.IDSpec;
 using Mosaic.ToolsLib.MDRF2.Common;
+using Mosaic.ToolsLib.Semi.IDSpec;
+
 using MessagePack;
-using System.Collections.Generic;
-using System.Diagnostics;
-using MosaicLib.Utils.Collections;
 
 namespace Mosaic.ToolsLib.Semi.CERP
 {
@@ -61,6 +61,11 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <summary>This property may be used to adjust the order that this event is reported vs being recorded.</summary>
         /// <remarks>Default (false) is to record the event record before reporting it to the delegate handler.</remarks>
         bool ReportBeforeRecording { get; }
+
+        /// <summary>
+        /// Carries the user specified annotation <see cref="ValueContainer"/>, if any was provided.
+        /// </summary>
+        ValueContainer AnnotationVC { get; }
     }
 
     /// <summary>
@@ -89,6 +94,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public bool ReportBeforeRecording { get; set; }
 
         /// <inheritdoc/>
+        public ValueContainer AnnotationVC { get; set; }
+
+        /// <inheritdoc/>
         public (int id, string name) RecordingKeyInfo { get; set; }
 
         /// <inheritdoc/>
@@ -107,19 +115,24 @@ namespace Mosaic.ToolsLib.Semi.CERP
             DisableReporting = default;
             ReportBeforeRecording = default;
             RecordingKeyInfo = default;
+            AnnotationVC = default;
         }
 
         /// <inheritdoc/>
         public virtual void Serialize(ref MessagePackWriter mpWriter, MessagePackSerializerOptions mpOptions)
         {
-            bool includeDisable = DisableReporting;
+            bool includeAnnotation = !AnnotationVC.IsEmpty;
+            bool includeDisable = includeAnnotation || DisableReporting;
 
-            mpWriter.WriteArrayHeader(2 + (includeDisable ? 1 : 0));
+            mpWriter.WriteArrayHeader(2 + (includeDisable ? 1 : 0) + (includeAnnotation ? 1 : 0));
 
             mpWriter.Write(ModuleName);
             MessagePackUtils.KVCSetFormatter.Instance.Serialize(ref mpWriter, KVCSet, mpOptions);
             if (includeDisable)
                 mpWriter.Write(DisableReporting);
+
+            if (includeAnnotation)
+                MessagePackUtils.VCFormatter.Instance.Serialize(ref mpWriter, AnnotationVC, mpOptions);
 
             // note that RecordingKeyInfo is recorded by MDRF2 outside of the type name specific part of the MP record.
         }
@@ -128,15 +141,18 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public virtual void Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions)
         {
             int arraySize = mpReader.ReadArrayHeader();
-            if (arraySize != 2 && arraySize != 3)
-                new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 2 or 3]").Throw();
+            if (arraySize != 2 && arraySize != 3 && arraySize != 4)
+                new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 2, 3, or 4]").Throw();
 
             ModuleName = mpReader.ReadString();
             KVCSet.AddRange(MessagePackUtils.KVCSetFormatter.Instance.Deserialize(ref mpReader, mpOptions));
-            if (arraySize == 3)
+            if (arraySize >= 3)
                 DisableReporting = mpReader.ReadBoolean();
 
-            // note that RecordingKeyInfo is populated by the MDRF2MessagePackSerializableTypeNameHandler to match the record contents.
+            if (arraySize >= 4)
+                AnnotationVC = MessagePackUtils.VCFormatter.Instance.Deserialize(ref mpReader, mpOptions);
+
+            // note that RecordingKeyInfo is populated by the MDRF2MessagePackSerializableTypeNameHandler as derived from other record contents.
         }
     }
 
@@ -175,9 +191,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
         uint Priority { get; }
 
         /// <summary>
-        /// When non-null, this gives the set of additinal KVC items that will be included in any correspondingly generated <see cref="ICERPEventReport"/> item.
+        /// When non-null, this gives the set of additinal KVC items that will be included in any correspondingly generated <see cref="ICERPEventReport"/> item(s).
         /// </summary>
         IDictionary<string, ValueContainer> KVCDictionary { get; }
+
+        /// <summary>
+        /// When non-empty, this gives information that may be used to annotate any correspondingly generated <see cref="ICERPEventReport"/> item(s).
+        /// </summary>
+        ValueContainer AnnotationVC { get; }
 
         /// <summary>
         /// Clients use this method to inform the related <see cref="IModuleScopedToken.CERP"/> that the application of the scoped conditions and state information is to begin now.
@@ -241,15 +262,17 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// Constructor.  
         /// If provided, it uses the <paramref name="other"/> <see cref="IScopedToken"/> instance to obtain the <see cref="ModuleScopedToken"/> instance to use.
         /// </summary>
-        public ScopedTokenBase(IScopedToken other, string logTypeName)
+        public ScopedTokenBase(IScopedToken other, string logTypeName, bool inheritAnnotationVC = true)
             : this(logTypeName)
         {
             ModuleScopedToken = other?.ModuleScopedToken;
 
-            if (ModuleScopedToken?.DisableReporting == true)
-                DisableReporting = true;
+            DisableReporting = (ModuleScopedToken ?? other)?.DisableReporting ?? true;
 
             priority = ModuleScopedToken?.DefaultPriority ?? 0;
+
+            if (inheritAnnotationVC)
+                AnnotationVC = (other?.AnnotationVC ?? default).MapEmptyTo(ModuleScopedToken?.AnnotationVC ?? default);
         }
 
         protected ScopedTokenBase(string logTypeName, uint defaultPriority = 0)
@@ -335,12 +358,13 @@ namespace Mosaic.ToolsLib.Semi.CERP
         }
         private uint priority;
 
-        /// <summary>
-        /// When non-null, this gives the set of additinal KVC items that will be included in any correspondingly generated <see cref="ICERPEventReport"/> item.
-        /// </summary>
+        /// <inheritdoc/>
         [DebuggerBrowsable(DebuggerBrowsableState.Never)]
         public IDictionary<string, ValueContainer> KVCDictionary { get { return _KVCDictionary ?? (_KVCDictionary = new Dictionary<string, ValueContainer>()); } set { _KVCDictionary = value; } }
         private IDictionary<string, ValueContainer> _KVCDictionary;
+
+        /// <inheritdoc/>
+        public ValueContainer AnnotationVC { get; set; }
 
         /// <summary>
         /// This represents the actual list of KVC values there were found in the <see cref="_KVCDictionary"/> (if any) taken at the start
@@ -348,10 +372,13 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// </summary>
         internal KeyValuePair<string, ValueContainer> [] CapturedKVCSet { get; set; }
 
+        internal ValueContainer CapturedAnnotationVC { get; set; }
+
         /// <summary>
         /// This method clears the <see cref="CapturedKVCSet"/> (if any) and then copies the contents of the <see cref="_KVCDictionary"/> into it, creating it if needed.
+        /// This method also copies the <see cref="AnnotationVC"/> property value into the <see cref="CapturedAnnotationVC"/> property.
         /// </summary>
-        protected void CaptureKVCSet()
+        protected void CaptureKVCSetAndAnnotationVC()
         {
             if (!_KVCDictionary.IsNullOrEmpty())
             {
@@ -366,6 +393,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
             {
                 CapturedKVCSet = null;
             }
+
+            CapturedAnnotationVC = AnnotationVC;
         }
 
         /// <inheritdoc/>
@@ -397,7 +426,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// </summary>
         protected virtual void AboutToBegin() 
         {
-            CaptureKVCSet();
+            CaptureKVCSetAndAnnotationVC();
         }
 
         /// <inheritdoc/>
@@ -429,7 +458,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// </summary>
         protected virtual void AboutToEnd() 
         {
-            CaptureKVCSet();
+            CaptureKVCSetAndAnnotationVC();
         }
 
         /// <summary>

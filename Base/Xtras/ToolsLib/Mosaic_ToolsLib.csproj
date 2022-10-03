@@ -67,6 +67,11 @@
     <Compile Include="Semi\CERP\CombinedEventReporting.cs" />
     <Compile Include="Semi\CERP\CombinedEventReportingPart.cs" />
     <Compile Include="Semi\IDSpec\IDSpec.cs" />
+    <Compile Include="Semi\SMLPD\SMLPD.cs" />
+    <Compile Include="Tasks\ExtensionMethods.cs" />
+    <Compile Include="Tasks\AllocationTool.cs" />
+    <Compile Include="Tasks\ManualTaskScheduler.cs" />
+    <Compile Include="Tasks\DiscreteEventTimeBase.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="K4os.Compression.LZ4">

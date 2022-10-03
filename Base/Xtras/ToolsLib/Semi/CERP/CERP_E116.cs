@@ -267,6 +267,9 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// </summary>
         public Func<E116ModuleScopedToken, IBaseState, (MosaicLib.Semi.E116.TaskType taskType, string taskName)> AutomaticBusyTransitionDelegate { get; set; } = DefaultAutomaticBusyTransitionDelegate;
 
+        /// <summary>Specifies the default AnnotationVC to be used with the <see cref="E116ModuleScopedToken"/></summary>
+        public ValueContainer DefaultAnnotationVC { get; set; }
+
         /// <summary>Explicit copy/clone method</summary>
         public E116ModuleConfig MakeCopyOfThis(bool deepCopy = true)
         {
@@ -362,6 +365,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
             : base(moduleConfig.ModuleName, moduleConfig.CERP, "E116.Module", purposeStr: "E116", defaultScopedBeginSyncFlags: default, defaultScopedEndSyncFlags: default, defaultPriority: moduleConfig.DefaultPriority)
         {
             ModuleConfig = moduleConfig.MakeCopyOfThis();
+
+            AnnotationVC = ModuleConfig.DefaultAnnotationVC;
         }
 
         /// <summary>Gives the contents of the module config object that was used (and was captured) at the construction of this scoped token</summary>
@@ -411,9 +416,14 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         public E116BusyScopedToken(E116ModuleScopedToken moduleScopedToken)
             : base(moduleScopedToken, "E116.Busy")
         {
+            base.DisableReporting = moduleScopedToken?.DisableReporting ?? true;
+
             BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
             EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
+
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="ModuleScopedToken"/> at construction time.</summary>
+        public new bool DisableReporting { get => base.DisableReporting; }
 
         /// <summary>This gives the <see cref="Semi.E116.TaskType"/> that is to be reported with any related Busy transition</summary>
         public MosaicLib.Semi.E116.TaskType TaskType { get; set; }
@@ -465,9 +475,14 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         public E116BlockedScopedToken(E116ModuleScopedToken moduleScopedToken)
             : base(moduleScopedToken, "E116.Blocked")
         {
+            base.DisableReporting = moduleScopedToken?.DisableReporting ?? true;
+
             BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
             EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
+
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="ModuleScopedToken"/> at construction time.</summary>
+        public new bool DisableReporting { get => base.DisableReporting; }
 
         /// <summary>Gives the <see cref="Semi.E116.BlockedReasonEx"/> value to be used while the module is reported as Blocked.</summary>
         public MosaicLib.Semi.E116.BlockedReasonEx BlockedReason { get; set; }

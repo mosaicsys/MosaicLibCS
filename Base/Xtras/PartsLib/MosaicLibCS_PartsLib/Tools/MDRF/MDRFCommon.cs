@@ -359,7 +359,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     }
 
     /// <summary>
-    /// This is the standard implementation class for the ILibraryInfo interface.
+    /// This is the standard implementation class for the <see cref="ILibraryInfo"/> interface.
     /// </summary>
     public class LibraryInfo : ILibraryInfo
     {
@@ -980,6 +980,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// FileID is generally a synonym for BlockTypeID32 for Group and Occurrence MDItemTypes.  
     /// ClientID is only used to index into internal tables for objects that have already been registered.  
     /// </summary>
+
     public interface IMetaDataCommonInfo
     {
         /// <summary>Gives the item type of this item (None, Source, Group, Occurrence)</summary>
@@ -1059,7 +1060,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     }
 
     /// <summary>
-    /// Base implementation class for IMetaDataCommonInfo objects.
+    /// Base implementation class for <see cref="IMetaDataCommonInfo"/> objects.
     /// </summary>
     public class MetaDataCommonInfoBase : IMetaDataCommonInfo
     {

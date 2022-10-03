@@ -68,6 +68,11 @@ namespace MosaicLib.Semi.E005.Manager
 
         /// <summary>Returns true if the manager believes that the given stream function is a high rate stream function</summary>
         bool IsHighRateSF(StreamFunction sf);
+
+        /// <summary>
+        /// Gives the <see cref="IPortRecording"/> instance that ports will use.  May be null.
+        /// </summary>
+        IPortRecording PortRecording { get; }
     }
 
     /// <summary>
@@ -75,6 +80,16 @@ namespace MosaicLib.Semi.E005.Manager
     /// </summary>
     public interface IManager : IDisposable, IPartBase
     {
+        /// <summary>
+        /// Gives the <see cref="IPortRecording"/> instance that ports are passed at construction time.  May be null.
+        /// NOTE: this property may not be set after the first port has been created.
+        /// </summary>
+        /// <remarks>
+        /// If port recording is intended to be used then this property should be set to be non-null before creating the first port.
+        /// Once the first port has been created, this property becomes read-only as its setter will throw a <see cref="ManagerException"/>
+        /// </remarks>
+        IPortRecording PortRecording { get; set; }
+
         /// <summary>
         /// Creates and adds a port to this manager.  The given <paramref name="portConfigNVS"/> contains the set of parameters that are used to configure the type and operation of the created port.
         /// <para/>The caller may explicitly specify the "PortName" and "PortType" or these values may be obtained from the given <paramref name="portConfigNVS"/>.  
@@ -129,6 +144,44 @@ namespace MosaicLib.Semi.E005.Manager
     }
 
     /// <summary>
+    /// This interface is used to report various Port communication related events for recording and/or reporting through alternate means.
+    /// </summary>
+    public interface IPortRecording
+    {
+        /// <summary>The port uses this method to report state changes and other informational messages</summary>
+        void NoteInfoMesg(IPort port, string infoMesg);
+
+        /// <summary>The port uses this method to report messages about issues it detects/encounters including communication related issues and decoding/delivery related issues.</summary>
+        void NoteIssueMesg(IPort port, string issueMesg);
+
+        /// <summary>
+        /// The port calls this method to report just before it starts to write a header to the communication layer.
+        /// </summary>
+        void NoteSendingE005Header(IPort port, ITenByteHeader tbh);
+
+        /// <summary>
+        /// The port calls this method to note when it has received a standalone header for processing (aka one that is not part of a message)
+        /// </summary>
+        void NoteE005HeaderReceived(IPort port, ITenByteHeader tbh);
+
+        /// <summary>
+        /// The port calls this method to report just before it starts to write a message to the communication layer.
+        /// </summary>
+        void NoteSendingE005Message(IPort port, IMessage mesg);
+
+        /// <summary>
+        /// The port calls this method to note when it has sent a message (successfully or not)
+        /// </summary>
+        void NoteE005MessageSent(IPort port, IMessage mesg, string resultCode);
+
+        /// <summary>
+        /// The port calls this method to note when it has received a message.  
+        /// This takes place before it passes the messages to any registered SF handlers.
+        /// </summary>
+        void NoteE005MessageReceived(IPort port, IMessage mesg);
+    }
+
+    /// <summary>
     /// Extension Methods
     /// </summary>
     public static partial class ExtensionMethods
@@ -160,7 +213,7 @@ namespace MosaicLib.Semi.E005.Manager
         /// <summary>Returns an AutoConstructIfNeeded (and thus changable) IManager singleton instance.  When replacing a previously provided, or constructed, instance this setter must be set to null (to dispose of the current instance) before the new instance can be assigned.</summary>
         public static IManager Instance { get { return singletonHelper.Instance; } set { singletonHelper.Instance = value; } }
 
-        private static Utils.SingletonHelperBase<IManager> singletonHelper = new MosaicLib.Utils.SingletonHelperBase<IManager>(Utils.SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ManagerBase("E005DefaultManager"));
+        private static readonly Utils.SingletonHelperBase<IManager> singletonHelper = new MosaicLib.Utils.SingletonHelperBase<IManager>(Utils.SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ManagerBase("E005DefaultManager"));
 
         /// <summary>
         /// This method accepts a given <paramref name="mesg"/>.  If the given <paramref name="mesg"/> expects a reply then this method
@@ -193,6 +246,23 @@ namespace MosaicLib.Semi.E005.Manager
         #region IManager
 
         private readonly object mainAPIMutex = new object();
+
+        /// <inheritdoc/>
+        public IPortRecording PortRecording 
+        {
+            get { return _PortRecording; }
+            set
+            {
+                lock (mainAPIMutex)
+                {
+                    if (portByNameDictionary.Count > 0)
+                        new ManagerException("Cannot change the PortRecording property after the first port has been created").Throw();
+
+                    _PortRecording = value;
+                }
+            }
+        }
+        private IPortRecording _PortRecording;
 
         IPort IManager.CreatePort(string portName, PortType portType, bool makeDefault, INamedValueSet portConfigNVS, bool goOnline)
         {
@@ -367,14 +437,14 @@ namespace MosaicLib.Semi.E005.Manager
             }
         }
 
-        HashSet<ushort> highRateSFSet = new HashSet<ushort>();
-        ReadOnlyHashSet<ushort> roHighRateSFSet = ReadOnlyHashSet<ushort>.Empty;
+        private readonly HashSet<ushort> highRateSFSet = new HashSet<ushort>();
+        private ReadOnlyHashSet<ushort> roHighRateSFSet = ReadOnlyHashSet<ushort>.Empty;
 
         #endregion
 
         #region GetNextDATAID for both IManager and IManagerPortFacet interfaces
 
-        Utils.AtomicUInt32 dataidNumGenerator = new MosaicLib.Utils.AtomicUInt32(0);
+        private Utils.AtomicUInt32 dataidNumGenerator = new MosaicLib.Utils.AtomicUInt32(0);
 
         /// <summary>Returns a sequence number to use as DATAID values in client code.  Will be unique accross all of the ports that make use of this manager instance.</summary>
         public UInt32 GetNextDATAID()
@@ -386,9 +456,9 @@ namespace MosaicLib.Semi.E005.Manager
 
         #region Port list and cleanup (HandleExplicitDispose)
 
-        IDictionaryWithCachedArrays<string, IPort> portByNameDictionary = new IDictionaryWithCachedArrays<string, IPort>();
-        IPort defaultPort = null;
-        ReadOnlyIList<IPort> portSet = null;
+        private readonly IDictionaryWithCachedArrays<string, IPort> portByNameDictionary = new IDictionaryWithCachedArrays<string, IPort>();
+        private IPort defaultPort = null;
+        private ReadOnlyIList<IPort> portSet = null;
 
         private void HandleExplicitDispose()
         {
@@ -408,7 +478,7 @@ namespace MosaicLib.Semi.E005.Manager
 
         #region IManagerPortFacet explicit implementation
 
-        Utils.AtomicUInt32 mesgSeqNumGenerator = new MosaicLib.Utils.AtomicUInt32(0);
+        private Utils.AtomicUInt32 mesgSeqNumGenerator = new MosaicLib.Utils.AtomicUInt32(0);
 
         UInt32 IManagerPortFacet.GetNextMessageSequenceNum()
         {
@@ -476,7 +546,7 @@ namespace MosaicLib.Semi.E005.Manager
             public volatile ReceivedMessageProcessingDelegate fallbackStreamHandler;
         }
 
-        string InnerAddHandler(ReceivedMessageProcessingDelegate handler, StreamFunction sf)
+        private string InnerAddHandler(ReceivedMessageProcessingDelegate handler, StreamFunction sf)
         {
             if (handler == null)
                 return "handler is null";

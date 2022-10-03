@@ -60,10 +60,12 @@ namespace MosaicLib.Utils
             {
                 return (utcTimeSince1601 > 0) ? DateTime.MaxValue : DateTime.MinValue;
             }
+            else
+            {
+                long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
 
-            long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
-
-            return DateTime.FromFileTimeUtc(utcFTime);
+                return DateTime.FromFileTimeUtc(utcFTime);
+            }
         }
 
 		// methods used to provide timestamps for LogMessages

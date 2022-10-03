@@ -239,6 +239,7 @@ namespace MosaicLib.Semi.E005.Port
             PortType = portType;
             PortConfigNVS = PortConfigNVS.ConvertToReadOnly();
 			ManagerPortFacet = managerPortFacet;
+            PortRecording = ManagerPortFacet.PortRecording;
 
             PortBaseConfig = new Port.PortBaseConfig().UpdateFromNVS(portConfigNVS, issueEmitter: Log.Debug, valueNoteEmitter: Log.Trace);
 
@@ -271,6 +272,7 @@ namespace MosaicLib.Semi.E005.Port
 		}
 
         protected Manager.IManagerPortFacet ManagerPortFacet { get; private set; }
+        protected Manager.IPortRecording PortRecording { get; private set; }
 
         public int PortNum { get; private set; }
         public PortType PortType { get; private set; }
@@ -360,6 +362,9 @@ namespace MosaicLib.Semi.E005.Port
                 ec = null;      // completion will be indicated elsewhere.
             }
 
+            if (ec.IsNeitherNullNorEmpty() && PortRecording != null)
+                PortRecording.NoteIssueMesg(this, "SendMessage failed: {0}".CheckedFormat(ec));
+
             return ec;
         }
 
@@ -441,10 +446,13 @@ namespace MosaicLib.Semi.E005.Port
         {
             pendingSendOpsDictionary.Remove(smo.SystemBytes);
 
+            if (PortRecording != null)
+                PortRecording.NoteE005MessageSent(this, smo.Mesg, resultCode);
+
             smo.CompleteRequest(resultCode);
         }
 
-		void CancelPendingSendMessageOps(string reason)
+		private void CancelPendingSendMessageOps(string reason)
 		{
             PerformMainLoopService();
 
@@ -457,7 +465,7 @@ namespace MosaicLib.Semi.E005.Port
 				CompleteMessageAndRemoveFromPendingSet(smo, ec);
 		}
 
-		void ServiceSendMessageOpQueue(QpcTimeStamp qpcTimeStamp, bool verifyPortConnectionStateIsSelected = false)
+		private void ServiceSendMessageOpQueue(QpcTimeStamp qpcTimeStamp, bool verifyPortConnectionStateIsSelected = false)
 		{
             foreach (var smo in pendingSendOpsDictionary.ValueArray)
 			{
@@ -480,6 +488,9 @@ namespace MosaicLib.Semi.E005.Port
         {
             var traceMesgEmitter = GetMesgTraceEmitter(mesg);
             traceMesgEmitter.Emit("Received Mesg {0}", mesg);
+
+            if (PortRecording != null)
+                PortRecording.NoteE005MessageReceived(this, mesg);
 
             StreamFunction sf = mesg.SF;
             UInt32 systemBytes = mesg.TenByteHeader.SystemBytes;
@@ -596,7 +607,7 @@ namespace MosaicLib.Semi.E005.Port
         public PortConnectionState PortConnectionState { get; private set; }
         public QpcTimeStamp PortConnectionStateTimeStamp { get; private set; }
 
-		protected virtual void SetConnectionState(PortConnectionState state, string reason, QpcTimeStamp qpcTimeStamp)
+		protected virtual void SetConnectionState(PortConnectionState state, string reason, QpcTimeStamp qpcTimeStamp, bool reportIssue = false)
 		{
 			PortConnectionState entryState = PortConnectionState;
             bool entryStateIsConnected = PortConnectionState.IsConnected();
@@ -604,7 +615,20 @@ namespace MosaicLib.Semi.E005.Port
             PortConnectionState = state;
             PortConnectionStateTimeStamp = qpcTimeStamp;
 
-			Log.Info.Emit("Connection state changed to:'{0}' [from:'{1}' reason:'{2}']", state, entryState, reason);
+            string mesgStr = "Connection state changed to:'{0}' [from:'{1}' reason:'{2}']".CheckedFormat(state, entryState, reason);
+
+            Log.Info.Emit(mesgStr);
+
+            if (PortRecording != null)
+            {
+                PortRecording.NoteInfoMesg(this, mesgStr);
+
+                if (PortConnectionState == PortConnectionState.Failed)
+                    reportIssue = true;
+
+                if (reportIssue)
+                    PortRecording.NoteIssueMesg(this, mesgStr); 
+            }
 
 			if (!PortConnectionState.IsSelected())
 			{

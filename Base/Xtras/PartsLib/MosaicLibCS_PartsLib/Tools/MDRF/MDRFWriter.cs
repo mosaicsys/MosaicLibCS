@@ -219,6 +219,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         IncrSeqNumOnTouched = 0x04,
     }
 
+    /// <summary>
+    /// MDRF Writer Specification object for a Group.
+    /// </summary>
     public class GroupInfo : MetaDataCommonInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; set; }
@@ -249,7 +252,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     }
 
     /// <summary>
-    /// A GroupPointInfo defines the source of values for the items in a group.  This also called a Source in the MDRF nomenclature
+    /// MDRF Writer Specification object for a Point in a Group.
+    /// A GroupPointInfo defines a source of values for an item in a group.  
+    /// This also called a Source in the MDRF nomenclature
     /// </summary>
     public class GroupPointInfo : MetaDataCommonInfo
     {
@@ -266,6 +271,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         public GroupPointInfo() { ItemType = MDItemType.Source; }
     }
 
+    /// <summary>
+    /// MDRF Writer Specification object for an Occurrence.
+    /// </summary>
     public class OccurrenceInfo : MetaDataCommonInfo, IOccurrenceInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; set; }
@@ -276,6 +284,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         public OccurrenceInfo() { ItemType = MDItemType.Occurrence; }
     }
 
+    /// <summary>
+    /// Common base implementation class for writer specific objects that support the <see cref="IMetaDataCommonInfo"/> interface.
+    /// </summary>
+    /// <remarks>
+    /// This is the base class for the <see cref="GroupInfo"/>, <see cref="GroupPointInfo"/>, and <see cref="OccurrenceInfo"/> classes.
+    /// </remarks>
     public class MetaDataCommonInfo : IMetaDataCommonInfo
     {
         public MetaDataCommonInfo()

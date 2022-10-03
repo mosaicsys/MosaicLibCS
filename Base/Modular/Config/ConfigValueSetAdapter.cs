@@ -128,7 +128,10 @@ namespace MosaicLib.Modular.Config
             public string Description { get; set; }
 
             /// <summary>When non-null set the Custom named meta data value to the given value.</summary>
-            public string Custom { get; set; }
+            public object Custom { get; set; }
+
+            /// <summary>When non-null set the Hidden named meta data value to the given value.</summary>
+            public object Hidden { get; set; }
 
             /// <summary>
             /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
@@ -144,6 +147,7 @@ namespace MosaicLib.Modular.Config
                     .SetValueIfNotNull(UnitOfMeasureKeyword, UnitOfMeasure)
                     .SetValueIfNotNull(DescriptionKeyword, Description)
                     .SetValueIfNotNull(CustomKeyword, Custom)
+                    .SetValueIfNotNull(HiddenKeyword, Hidden)
                     ;
 
                 var mdNvs = base.GetMergedMetaData(mergeWithMetaData, mergeBehavior);
@@ -174,6 +178,9 @@ namespace MosaicLib.Modular.Config
 
             /// <summary>Keyword used for Custom meta data named value</summary>
             public static string CustomKeyword = "Custom";
+
+            /// <summary>Keyword used for Custom meta data named value.</summary>
+            public static string HiddenKeyword = "Hidden";
 
             /// <summary>
             /// Keyword added when a config key access item is using ReadOnlyOnce semantics.
@@ -437,7 +444,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public IBasicNotificationList UpdateNotificationList { get { return updateNotificationList; } }
 
-        private BasicNotificationList updateNotificationList = new BasicNotificationList();
+        private readonly BasicNotificationList updateNotificationList = new BasicNotificationList();
 
         /// <summary>
         /// Must be called by the client to apply any pending updates to dynamic config key's values that this adapter is tracking.  
@@ -856,11 +863,11 @@ namespace MosaicLib.Modular.Config
 
         #region private fields, properties
 
-        Type tConfigValueSetType = typeof(TConfigValueSet);
-        string tConfigValueSetTypeStr = typeof(TConfigValueSet).Name;
+        private readonly Type tConfigValueSetType = typeof(TConfigValueSet);
+        private readonly string tConfigValueSetTypeStr = typeof(TConfigValueSet).Name;
 
-        List<ItemInfo<Attributes.ConfigItemAttribute>> configItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
-        int NumItems { get; set; }
+        private readonly List <ItemInfo<Attributes.ConfigItemAttribute>> configItemInfoList;       // gets built in the constructor using an AnnotatedClassItemAccessHelper.
+        private int NumItems { get; set; }
 
         /// <summary>
         /// Internal class used to capture the key specific setup information for a given annotated property in the ValueSet.
@@ -901,7 +908,7 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <remarks>Non-null elements in this array correspond to fully vetted writable value set items.</remarks>
-        KeySetupInfo[] keySetupInfoArray = null;
+        private readonly KeySetupInfo[] keySetupInfoArray;
 
         #endregion
 

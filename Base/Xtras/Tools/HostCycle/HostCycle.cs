@@ -2029,7 +2029,7 @@ namespace HostCycle
 
                     aiUpdateSet.DoForEach(ai => AsynchHandleRxALIDInfo(ai));
 
-                    firstALID = aiUpdateSet.FirstOrDefault()?.ALID ?? default(ValueContainer);
+                    firstALID = aiUpdateSet.FirstOrDefault()?.ALID ?? default;
                 }
             }
 
@@ -3355,7 +3355,7 @@ namespace HostCycle
             return ec;
         }
 
-        string SpinUntil(IProviderFacet ipf, Func<bool> predicate, TimeSpan timeLimit = default(TimeSpan), bool checkForIPFCancelRequest = true, bool checkForPartStopRequest = true)
+        string SpinUntil(IProviderFacet ipf, Func<bool> predicate, TimeSpan timeLimit = default, bool checkForIPFCancelRequest = true, bool checkForPartStopRequest = true)
         {
             QpcTimer waitLimitTimer = new QpcTimer() { TriggerInterval = timeLimit, SelectedBehavior = QpcTimer.Behavior.ElapsedTimeIsZeroWhenStopped };
             if (timeLimit != TimeSpan.Zero)

@@ -27,6 +27,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Utils;
 using MosaicLib.Semi.E005.Data;
+using MosaicLib.Semi.E005.Port;
 
 namespace MosaicLib.Semi.E005
 {
@@ -47,8 +48,8 @@ namespace MosaicLib.Semi.E005
         /// <summary>TenByteHeader may be provided/assigned in some cases</summary>
         ITenByteHeader TenByteHeader { get; }
 
-        /// <summary>This method can be used to set/update a message's TenByteHeader when needed.  When <paramref name="keepMessageSF"/> and/or <paramref name="keepMessageSeqNum"/> are set then the corresponding properties in the incomming <paramref name="tbh"/> will be udpated/replaced from the message's current values, otherwise the message's SF and/or SeqNum will be updated from the incomming <paramref name="tbh"/>'s corresponding contents.</summary>
-        IMessage SetTenByteHeader(TenByteHeaderBase tbh, bool keepMessageSF = true, bool keepMessageSeqNum = true);
+        /// <summary>This method can be used to set/update a message's <see cref="ITenByteHeader"/> when needed.  When <paramref name="keepMessageSF"/> and/or <paramref name="keepMessageSeqNum"/> are set then the corresponding properties in the incomming <paramref name="tbh"/> will be udpated/replaced from the message's current values, otherwise the message's SF and/or SeqNum will be updated from the incomming <paramref name="tbh"/>'s corresponding contents.</summary>
+        IMessage SetTenByteHeader(ITenByteHeader tbh, bool keepMessageSF = true, bool keepMessageSeqNum = true);
 
         /// <summary>Gives user access to the port to which this message will be sent or from which it was received</summary>
         Port.IPort Port { get; set; }
@@ -69,7 +70,7 @@ namespace MosaicLib.Semi.E005
         IMessage SetReply(IMessage reply, bool replaceReply = false, bool isHighRateReply = false);
 
         /// <summary>Action factory method.  Calls the associated port's (or the default Manager's DefaultPort if null)'s SendMessage action factory method and returns the resulting action.  When this action is run it will ask the port to send this message.</summary>
-        IClientFacet Send();
+        ISendMessageAction Send();
     }
 
     /// <summary>
@@ -81,7 +82,7 @@ namespace MosaicLib.Semi.E005
         public MessageException(string mesg, IMessage e005Message = null, System.Exception innerException = null) 
             : base(mesg, innerException) 
         {
-            E005Message = E005Message;
+            E005Message = e005Message;
         }
 
         public IMessage E005Message { get; private set; }
@@ -156,7 +157,7 @@ namespace MosaicLib.Semi.E005
         public ITenByteHeader TenByteHeader { get; private set; }
 
         /// <summary>This method can be used to set/update a message's TenByteHeader when needed.  When <paramref name="keepMessageSF"/> and/or <paramref name="keepMessageSeqNum"/> are set then the corresponding properties in the incomming <paramref name="tbh"/> will be udpated/replaced from the message's current values, otherwise the message's SF and/or SeqNum will be updated from the incomming <paramref name="tbh"/>'s corresponding contents.</summary>
-        public IMessage SetTenByteHeader(TenByteHeaderBase tbh, bool keepMessageSF = true, bool keepMessageSeqNum = true)
+        public IMessage SetTenByteHeader(ITenByteHeader tbh, bool keepMessageSF = true, bool keepMessageSeqNum = true)
         {
             if (keepMessageSF)
                 tbh.SF = SF;
@@ -240,7 +241,7 @@ namespace MosaicLib.Semi.E005
             return this;
         }
 
-        IClientFacet IMessage.Send() 
+        ISendMessageAction IMessage.Send()
         { 
             return (Port ?? Manager.Manager.Instance.DefaultPort).SendMessage(this); 
         }
@@ -414,7 +415,7 @@ namespace MosaicLib.Semi.E005
             StringScanner scanner = new StringScanner(s);
 
             int stream = 0;
-            if (!(scanner.MatchToken("S", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out stream, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(1, 255)))
+            if (!(scanner.MatchToken("S", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out stream, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(0, 255)))
             {
                 if (throwOnIssue)
                     new MessageException("'{0}' {1} failed: could not parse stream value Snnn".CheckedFormat(s, Fcns.CurrentMethodName)).Throw();
@@ -423,7 +424,7 @@ namespace MosaicLib.Semi.E005
             scanner.MatchToken(@"/", skipLeadingWhiteSpace: false, skipTrailingWhiteSpace: false, requireTokenEnd: false);
 
             int function = 0;
-            if (!(scanner.MatchToken("F", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out function, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(1, 255)))
+            if (!(scanner.MatchToken("F", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out function, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(0, 255)))
             {
                 if (throwOnIssue)
                     new MessageException("'{0}' {1} failed: could not parse function value Fnnn".CheckedFormat(s, Fcns.CurrentMethodName)).Throw();
@@ -787,7 +788,7 @@ namespace MosaicLib.Semi.E005
                     unchecked { Utils.Data.Unpack((UInt16)ihLengthValue, out b1, out b2); }
                     break;
                 case 3:
-                    unchecked { Byte umsb = 0; Utils.Data.Unpack((UInt32)ihLengthValue, out umsb, out b1, out b2, out b3); }
+                    unchecked { Byte umsb; Utils.Data.Unpack((UInt32)ihLengthValue, out umsb, out b1, out b2, out b3); }
                     break;
                 default:
                     FaultCode = "E005.IH Setup Failed: attempt to setup IH with invalid number of length bytes:{0}".CheckedFormat(ihNumLengthBytes);
@@ -983,7 +984,7 @@ namespace MosaicLib.Semi.E005
             return success;
         }
 
-        private static Dictionary<ItemFormatCode, SizeInfo> ifcToSizeInfoMap
+        private static readonly Dictionary<ItemFormatCode, SizeInfo> ifcToSizeInfoMap
             = new Dictionary<ItemFormatCode, SizeInfo>
 			{
 				{ ItemFormatCode.L, new SizeInfo(0,0) }, 
@@ -1005,7 +1006,7 @@ namespace MosaicLib.Semi.E005
         }
 
         /// <summary>Dictionary used to convert between an IFC and the xml Element name to use for that IFC value.</summary>
-        private static Dictionary<ItemFormatCode, string> ifcToElementNameMap
+        private static readonly Dictionary<ItemFormatCode, string> ifcToElementNameMap
             = new Dictionary<ItemFormatCode, string>
 			{
 				{ ItemFormatCode.L, "L" }, 
@@ -1020,7 +1021,8 @@ namespace MosaicLib.Semi.E005
         /// <summary>static method used to convert an IFC to the corresponding XML element name.</summary>
         public static string GetIFCXmlElementName(ItemFormatCode ifc)
         {
-            string elementName = null;
+            string elementName;
+
             if (ifcToElementNameMap.TryGetValue(ifc, out elementName))
                 return elementName;
             else

@@ -54,11 +54,11 @@ namespace MosaicLib.Modular.Action
         /// <summary>Property allows provider to determine if the action cancel request has been set.</summary>
         bool IsCancelRequestActive { get; }
 
-        /// <summary>Property gives access to the dynamically updating IActionState for this action</summary>
+        /// <summary>Property gives access to the dynamically updating <see cref="IActionState"/> for this action</summary>
         IActionState ActionState { get; }
 
         /// <summary>
-        /// Provider invokes this to replace the ActionState's NamedValueSet with a readonly copy of this given value and inform action's clients of the new values.  
+        /// When called, this method replaces the <see cref="IActionState.NamedValues"/> with a readonly copy of the given <paramref name="namedValueSet"/>, publishes the updated <see cref="IActionState"/>, and informs action's client(s) of the action state update.
         /// </summary>
         void UpdateNamedValues(Common.INamedValueSet namedValueSet);
 
@@ -67,7 +67,7 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>
         /// Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/>.
-        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed IActionState's NamedValues.
+        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed <see cref="IActionState.NamedValues"/>.
         /// </summary>
         void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet);
 
