@@ -28,6 +28,7 @@ using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
+using MosaicLib.Semi.E157;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -48,6 +49,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public TimeSpan NominalPartWaitTimeLimit { get; set; } = (0.01).FromSeconds();
 
         public IIDSpecLookupHelper IDSpecLookupHelper { get; set; }
+
+        /// <summary>
+        /// This <see cref="Logging.MesgType"/> value defines the message type used to log each handled <see cref="CERPEventReportBase"/> instance, including <see cref="E116.E116EventRecord"/> and <see cref="E157.E157EventRecord"/> instances.
+        /// Such logging is done immediately after each such record has been both recorded and/or reported (as configured).
+        /// Set this to <see cref="Logging.MesgType.None"/> to disable this behavior entirely.
+        /// Defaults to <see cref="Logging.MesgType.Trace"/>.
+        /// </summary>
+        public Logging.MesgType EventRecordMesgType { get; set; } = Logging.MesgType.Trace;
 
         public EventReportSetHandlerDelegate EventReportSetHandlerDelegate { get; set; }
 
@@ -85,12 +94,16 @@ namespace Mosaic.ToolsLib.Semi.CERP
         {
             PartConfig = partConfig.MakeCopyOfThis();
 
+            EventRecordMesgEmitter = Log.Emitter(partConfig.EventRecordMesgType);
+
             ActionLoggingReference.Config = PartConfig.ActionLoggingConfig;
 
             SetupEventDelivery();
         }
 
         private CombinedEventReportingPartConfig PartConfig { get; set; }
+
+        private Logging.IMesgEmitter EventRecordMesgEmitter { get; set; }
 
         public IClientFacet ScopedOp(ScopedOp scopedOp, IScopedToken scopedToken)
         {
@@ -104,6 +117,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 case E157.E157ModuleScopedToken e157ModuleToken: return PerformScopedOp(ipf, scopedOp, e157ModuleToken);
                 case E157.E157GeneralExcutionScopedToken e157GeneralExecutionToken: return PerformScopedOp(ipf, scopedOp, e157GeneralExecutionToken);
                 case E157.E157StepActiveScopedToken e157StepActiveToken: return PerformScopedOp(ipf, scopedOp, e157StepActiveToken);
+                case E157.E157BlockRecordScopedToken e157BlockRecordToken: return PerformScopedOp(ipf, scopedOp, e157BlockRecordToken);
                 case E116.E116ModuleScopedToken e116moduleToken: return PerformScopedOp(ipf, scopedOp, e116moduleToken);
                 case E116.E116BusyScopedToken e116BusyToken: return PerformScopedOp(ipf, scopedOp, e116BusyToken);
                 case E116.E116BlockedScopedToken e116BlockedToken: return PerformScopedOp(ipf, scopedOp, e116BlockedToken);
@@ -541,29 +555,152 @@ namespace Mosaic.ToolsLib.Semi.CERP
             return string.Empty;
         }
 
+        private string PerformScopedOp(IProviderFacet ipf, ScopedOp scopedOp, E157.E157BlockRecordScopedToken blockRecordToken)
+        {
+            var mt = e157ModuleTrackerByInstanceNumDictionary.SafeTryGetValue(blockRecordToken.ModuleScopedToken.ModuleInstanceNum);
+            if (mt == null)
+                return $"{scopedOp} {blockRecordToken} failed: module not found";
+
+            SyncFlags syncFlags;
+            ScopedTokenState nextScopedOpState;
+
+            E157.E157EventRecord eventRecord = null;
+
+            switch (scopedOp)
+            {
+                case CERP.ScopedOp.Begin:
+                    {
+                        if (blockRecordToken.RecordBeginTransition)
+                        {
+                            eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
+
+                            eventRecord.DisableReporting = true;
+
+                            eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordStarted;
+                        }
+
+                        syncFlags = blockRecordToken.BeginSyncFlags;
+
+                        nextScopedOpState = ScopedTokenState.Started;
+
+                        break;
+                    }
+
+                case CERP.ScopedOp.End:
+                    {
+                        if (blockRecordToken.RecordEndTransition)
+                        {
+                            eventRecord = E157.E157EventRecord.Pool.GetFreeObjectFromPool();
+
+                            eventRecord.DisableReporting = true;
+
+                            if (blockRecordToken.BlockRecordSucceeded)
+                                eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordCompleted;
+                            else
+                                eventRecord.Transition = MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordFailed;
+                        }
+
+                        syncFlags = blockRecordToken.EndSyncFlags;
+
+                        nextScopedOpState = ScopedTokenState.Ended;
+
+                        break;
+                    }
+
+                default: return $"Op '{scopedOp}' is not supported here";
+            }
+
+            if (eventRecord != default)
+            {
+                if (blockRecordToken.CapturedKVCSet != null)
+                    eventRecord.KVCSet.AddRange(blockRecordToken.CapturedKVCSet);
+
+                eventRecord.AnnotationVC = blockRecordToken.CapturedAnnotationVC;
+
+                if (mt.ActiveStepActiveScopedToken != null)
+                    AddStandardE157Values(mt, eventRecord, mt.ActiveStepActiveScopedToken, forBlockRecord: true);
+                else if (mt.ActiveGeneralExcutionScopedToken != null)
+                    AddStandardE157Values(mt, eventRecord, mt.ActiveGeneralExcutionScopedToken, forBlockRecord: true);
+                else
+                    AddStandardE157Values(mt, eventRecord);
+
+                if (mt.ModuleConfig.EnableStatePublication)
+                    mt.ModuleToken._StatePublisher.Object = (E157.E157EventRecord)eventRecord.MakeCopyOfThis(deepCopy: false);
+
+                if (mt.IVA != null)
+                    mt.IVA.Set(eventRecord.MakeCopyOfThis(deepCopy: false));
+
+                EnqueueEventItemForDelivery(eventRecord);
+            }
+
+            blockRecordToken.State = nextScopedOpState;
+
+            if ((syncFlags & SyncFlags.Events) != 0 && ipf != null)
+                return QueueSyncEventAction(ipf);
+
+            return string.Empty;
+        }
+
         private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord)
         {
             eventRecord.Module = mt.ModuleIDSpecPair;
             eventRecord.RecordingKeyInfo = mt.RecordingKeyInfo;
             eventRecord.State = mt.ModuleProcessState;
-            eventRecord.PrevState = mt.PrevModuleProcessState;
 
-            foreach (var slo in mt.substLocObsSet)
-                eventRecord.E090SubstEventInfoList.Add(new MosaicLib.Semi.E090.E090SubstEventInfo(slo.UpdateInline().ContainsSubstInfo));
+            switch (eventRecord.Transition)
+            {
+                case ModuleProcessStateTransition.BlockRecordStarted:
+                case ModuleProcessStateTransition.BlockRecordCompleted:
+                case ModuleProcessStateTransition.BlockRecordFailed:
+                    eventRecord.PrevState = eventRecord.State;
+                    break;
+                default:
+                    eventRecord.PrevState = mt.PrevModuleProcessState;
+                    break;
+            }
+
+            var mask = eventRecord.Transition.ConvertToBitMask();
+
+            var handling = (((mt.ModuleConfig.CaptureE090SubstObjListTransitionMask & mask) != 0) ? E157.E157SubstInfoHandlingSelect.CaptureE090SubstObjList : default)
+                | (((mt.ModuleConfig.CaptureSubstIDSetTransitionMask & mask) != 0) ? E157.E157SubstInfoHandlingSelect.CaptureSubstIDSet : default)
+                | (((mt.ModuleConfig.RecordE090SubstObjListTransitionMask & mask) != 0) ? E157.E157SubstInfoHandlingSelect.RecordE090SubstObjList : default)
+                | (((mt.ModuleConfig.RecordSubstIDSetTransitionMask & mask) != 0) ? E157.E157SubstInfoHandlingSelect.RecordSubstIDSet : default)
+                ;
+
+            eventRecord.SubstInfoHandlingSelect = handling;
+
+            if ((handling & E157.E157SubstInfoHandlingSelect.CaptureE090SubstObjList) != 0)
+            {
+                var e090SubstObjList = eventRecord.E090SubstObjList;
+
+                foreach (var slo in mt.substLocObsSet)
+                    e090SubstObjList.Add(slo.UpdateInline().ContainsObject);
+            }
+            else if ((handling & E157.E157SubstInfoHandlingSelect.CaptureSubstIDSet) != 0)
+            {
+                substIDListBuilder.Clear();
+
+                foreach (var slo in mt.substLocObsSet)
+                    substIDListBuilder.Add(slo.UpdateInline().ContainsSubstInfo.ObjID.Name);
+
+                eventRecord.SubstIDSet = substIDListBuilder.ToArray();
+            }
         }
 
-        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157GeneralExcutionScopedToken generalExcutionScopedToken)
+        private readonly List<string> substIDListBuilder = new List<string>();
+
+        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157GeneralExcutionScopedToken generalExcutionScopedToken, bool forBlockRecord = false)
         {
             AddStandardE157Values(mt, eventRecord);
 
-            var firstSubstEventInfo = eventRecord.E090SubstEventInfoList.FirstOrDefault();
+            var firstSubstEventInfo = eventRecord.E090SubstEventInfoSet.FirstOrDefault();
 
             eventRecord.RCID = generalExcutionScopedToken.RCID;
             eventRecord.RecID = generalExcutionScopedToken.RecID ?? firstSubstEventInfo.ProcessJobRecipeName ?? firstSubstEventInfo.PPID;
             eventRecord.ProcessJobID = generalExcutionScopedToken.ProcessJobID ?? firstSubstEventInfo.ProcessJobID;
             eventRecord.RecipeParameters = generalExcutionScopedToken.RecipeParameters.ConvertToReadOnly(mapNullToEmpty: false);
 
-            if (eventRecord.State == MosaicLib.Semi.E157.ModuleProcessState.NotExecuting && eventRecord.PrevState == MosaicLib.Semi.E157.ModuleProcessState.GeneralExecution)
+            if (eventRecord.State == MosaicLib.Semi.E157.ModuleProcessState.NotExecuting && eventRecord.PrevState == MosaicLib.Semi.E157.ModuleProcessState.GeneralExecution && !forBlockRecord)
             {
                 eventRecord.StepCount = mt.LastStepCount;
 
@@ -572,9 +709,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
             }
         }
 
-        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157StepActiveScopedToken stepActiveToken)
+        private void AddStandardE157Values(E157ModuleTracker mt, E157.E157EventRecord eventRecord, E157.E157StepActiveScopedToken stepActiveToken, bool forBlockRecord = false)
         {
-            AddStandardE157Values(mt, eventRecord, stepActiveToken.GeneralExcutionScopedToken);
+            AddStandardE157Values(mt, eventRecord, stepActiveToken.GeneralExcutionScopedToken, forBlockRecord: true);
 
             eventRecord.StepID = stepActiveToken.StepID;
             eventRecord.StepCount = stepActiveToken.StepCount;
@@ -990,6 +1127,16 @@ namespace Mosaic.ToolsLib.Semi.CERP
                         {
                             PartConfig.EventMDRF2Writer?.RecordObject(eventReportItem);
                         }
+                    }
+
+                    if (EventRecordMesgEmitter.IsEnabled)
+                    {
+                        if (eventReportItem is E157.E157EventRecord e157EventRecord)
+                            EventRecordMesgEmitter.Emit(e157EventRecord.ToString(E157.E157EventRecord.ToStringSelect.IncludeAll));
+                        else if (eventReportItem is E116.E116EventRecord e116EventRecord)
+                            EventRecordMesgEmitter.Emit(e116EventRecord.ToString(E116.E116EventRecord.ToStringSelect.IncludeAll));
+                        else
+                            EventRecordMesgEmitter.Emit(eventReportItem.ToString());
                     }
 
                     if (cancellationToken.IsCancellationRequested)
@@ -1471,7 +1618,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 var eventRecord = E116.E116EventRecord.Pool.GetFreeObjectFromPool();
 
                 eventRecord.Module = ModuleIDSpecPair;
-                eventRecord.DisableReporting = (scopedToken ?? lastScopedToken)?.ModuleScopedToken?.DisableReporting ?? default;
+                eventRecord.DisableReporting = ModuleConfig.DisableReporting;
                 eventRecord.RecordingKeyInfo = RecordingKeyInfo;
                 eventRecord.Transition = transition;
                 eventRecord.State = eptState;

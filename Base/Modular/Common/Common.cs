@@ -6056,15 +6056,22 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static NamedValueSet ConvertToNamedValueSet<TValueType>(this IDictionary<string, TValueType> dictionary)
         {
-            var nvs = new NamedValueSet();
+            NamedValueSet nvs;
 
-            if (typeof(TValueType) != typeof(System.Object))
+            if (typeof(TValueType) == typeof(ValueContainer))
             {
+                ICollection<KeyValuePair<string, ValueContainer>> kvcSet = (IDictionary<string, ValueContainer>)dictionary;
+                nvs = kvcSet.ConvertToNamedValueSet();
+            }
+            else if (typeof(TValueType) != typeof(System.Object))
+            {
+                nvs = new NamedValueSet();
                 foreach (var kvp in dictionary)
                     nvs.SetValue(kvp.Key, ValueContainer.Create(kvp.Value));
             }
             else
             {
+                nvs = new NamedValueSet();
                 foreach (var kvp in dictionary)
                     nvs.SetValue(kvp.Key, ValueContainer.CreateFromObject(kvp.Value));
             }

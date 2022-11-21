@@ -159,6 +159,12 @@ namespace Mosaic.ToolsLib.Tasks.Allocation
 
         private IDiscreteEventTimeBase DiscreteEventTimeBase { get; set; }
 
+        /// <summary>
+        /// Gives the <see cref="TaskCreationOptions"/> that are used with the <see cref="TaskCompletionSource{TResult}"/> instances that are created here.
+        /// Defaults to <see cref="TaskCreationOptions.RunContinuationsAsynchronously"/>.
+        /// </summary>
+        public TaskCreationOptions TaskCreationOptions { get; set; } = TaskCreationOptions.RunContinuationsAsynchronously;
+
         /// <inheritdoc/>
         public Task<IDAllocationToken<TIdentifierType>> AllocateAsync(TIdentifierType id, CancellationToken cancellationToken = default, TimeSpan timeLimit = default)
         {
@@ -174,7 +180,7 @@ namespace Mosaic.ToolsLib.Tasks.Allocation
                     var pai = new PendingAllocationItem()
                     {
                         IDAllocationState = ias,
-                        TCS = tcs = new TaskCompletionSource<IDAllocationToken<TIdentifierType>>(),
+                        TCS = tcs = new TaskCompletionSource<IDAllocationToken<TIdentifierType>>(TaskCreationOptions),
                         CancellationToken = cancellationToken,
                         TimeLimit = timeLimit,
                         DESTimeLimitTimerTask = timeLimitSpecified ? DiscreteEventTimeBase?.WaitAsync(timeLimit, cancellationToken) : null,
@@ -188,7 +194,7 @@ namespace Mosaic.ToolsLib.Tasks.Allocation
                 {
                     ias.IDAllocationToken = new IDAllocationToken<TIdentifierType>() { ID = id, AllocationTool = this };
 
-                    tcs = new TaskCompletionSource<IDAllocationToken<TIdentifierType>>();
+                    tcs = new TaskCompletionSource<IDAllocationToken<TIdentifierType>>(TaskCreationOptions);
 
                     tcs.SetResult(ias.IDAllocationToken);
                 }

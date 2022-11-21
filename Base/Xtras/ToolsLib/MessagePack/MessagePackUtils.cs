@@ -856,7 +856,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     }
 
     /// <summary>
-    /// This class is used as a serialization/deserialization formatter for IE039Object and E039Objcts objects.
+    /// This class is used as a serialization/deserialization formatter for <see cref="IE039Object"/> and <see cref="E039Object"/> objects.
     /// </summary>
     public class E039ObjectFormatter : IMessagePackFormatter<IE039Object>, IMessagePackFormatter<E039Object>, IMessagePackFormatter
     {
@@ -977,7 +977,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     }
 
     /// <summary>
-    /// This class is used as a serialization/deserialization formatter for E039Link objects.
+    /// This class is used as a serialization/deserialization formatter for <see cref="E039Link"/> objects.
     /// </summary>
     public class E039LinkFormatter : IMessagePackFormatter<E039Link>, IMessagePackFormatter
     {
@@ -1016,7 +1016,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     }
 
     /// <summary>
-    /// This class is used as a serialization/deserialization formatter for E039Link objects.
+    /// This class is used as a serialization/deserialization formatter for <see cref="E039ObjectID"/> objects.
     /// </summary>
     public class E039ObjectIDFormatter : IMessagePackFormatter<E039ObjectID>, IMessagePackFormatter
     {

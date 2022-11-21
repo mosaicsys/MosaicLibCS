@@ -19,15 +19,15 @@
  * limitations under the License.
  */
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
-using Mosaic.ToolsLib.Semi.IDSpec;
-using System.Runtime.Serialization;
 using MessagePack;
 
 namespace Mosaic.ToolsLib.Semi.CERP.E157
@@ -103,9 +103,37 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         public uint StepCount { get; set; }
 
         /// <summary>
-        /// This gives the list of <see cref="MosaicLib.Semi.E090.E090SubstEventInfo"/> for the substrate(s) that were in the Module at th time that this event record was populated.
+        /// Gives the <see cref="SubstInfoHandlingSelect"/> flag values that have been configured and selected for this event record's transition.
         /// </summary>
-        public List<MosaicLib.Semi.E090.E090SubstEventInfo> E090SubstEventInfoList { get; set; } = new List<MosaicLib.Semi.E090.E090SubstEventInfo>();
+        public E157SubstInfoHandlingSelect SubstInfoHandlingSelect { get; set; }
+
+        /// <summary>
+        /// This gives the list of <see cref="MosaicLib.Semi.E039.IE039Object"/> instances for the substrate(s) that were in the Module at the time that this event record was populated.
+        /// </summary>
+        /// <remarks>
+        /// Note: This property is intentionally not serialized at a <see cref="DataMember"/>.  
+        /// Recording of this property is only supported using the <see cref="IMDRF2MessagePackSerializable"/> interface support provided elsewhere in this class.
+        /// </remarks>
+        public List<MosaicLib.Semi.E039.IE039Object> E090SubstObjList 
+        { 
+            get { return _E090SubstObjList ?? (_E090SubstObjList = new List<MosaicLib.Semi.E039.IE039Object>()); }
+            set { _E090SubstObjList = value; }
+        }
+        private List<MosaicLib.Semi.E039.IE039Object> _E090SubstObjList;
+
+        /// <summary>
+        /// This gives the array of <see cref="MosaicLib.Semi.E090.E090SubstEventInfo"/> for the substrate(s) that were in the Module at th time that this event record was populated.
+        /// </summary>
+        public MosaicLib.Semi.E090.E090SubstEventInfo [] E090SubstEventInfoSet => GetSubstEventInfoSetFrom(_E090SubstObjList);
+
+        /// <summary>
+        /// Populates the given <paramref name="e090SubstEventInfoList"/> from the set of objects that are contained in this event record.
+        /// </summary>
+        public void Populate(List<MosaicLib.Semi.E090.E090SubstEventInfo> e090SubstEventInfoList)
+        {
+            foreach (var e090SubstObj in _E090SubstObjList.MapNullToEmpty())
+                e090SubstEventInfoList.Add(new MosaicLib.Semi.E090.E090SubstEventInfo(e090SubstObj));
+        }
 
         /// <summary>
         /// Gives a query side usable proprety that will contain the set of substrate IDs for the substrates in the Module at the time the event record was populated.
@@ -113,21 +141,45 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         [DataMember(Name = "SubstIDSet", IsRequired = false, EmitDefaultValue = false)]
         public string[] SubstIDSet
         {
-            get { return _SubstIDSet ?? E090SubstEventInfoList.Select(eventInfo => eventInfo.E090SubstInfo.ObjID.Name).ToArray(); }
+            get { return _SubstIDSet ?? (_SubstIDSet = GetSubstIDSetFrom(_E090SubstObjList)); }
             set { _SubstIDSet = value; }
         }
         private string[] _SubstIDSet;
 
+        /// <summary>
+        /// Takes a, possibly null, <paramref name="e090SubstObjList"/> and returns an array of the substrate IDs from that list.
+        /// </summary>
+        public static string[] GetSubstIDSetFrom(List<MosaicLib.Semi.E039.IE039Object> e090SubstObjList)
+        {
+            return (e090SubstObjList?.Select(obj => obj?.ID.Name)).SafeToArray(mapNullToEmpty: true);
+        }
+
+        /// <summary>
+        /// Takes a, possibly null, <paramref name="e090SubstObjList"/> and returns an array of <see cref="MosaicLib.Semi.E090.E090SubstEventInfo"/> insatnces from that list.
+        /// </summary>
+        public static MosaicLib.Semi.E090.E090SubstEventInfo[] GetSubstEventInfoSetFrom(List<MosaicLib.Semi.E039.IE039Object> e090SubstObjList)
+        {
+            return (e090SubstObjList?.Select(obj => new MosaicLib.Semi.E090.E090SubstEventInfo(obj))).SafeToArray(mapNullToEmpty: true);
+        }
+
         /// <inheritdoc/>
+        /// <remarks>
+        /// When <paramref name="deepCopy"/> is passed as false, this method will only attempt to populate the <see cref="_SubstIDSet"/> but not the <see cref="_E090SubstObjList"/> in the copy.
+        /// It will obtain the copies <see cref="_SubstIDSet"/> from either this instances <see cref="_SubstIDSet"/> or using <see cref="GetSubstIDSetFrom(List{MosaicLib.Semi.E039.IE039Object})"/> on this instances <see cref="_E090SubstObjList"/> if it is non-null.
+        /// </remarks>
         public override ICERPEventReport MakeCopyOfThis(bool deepCopy = true)
         {
             var copy = (E157EventRecord)MemberwiseClone();
 
-            if (KVCSet != null)
-                copy.KVCSet = new List<KeyValuePair<string, ValueContainer>>(KVCSet);
+            if (deepCopy && _E090SubstObjList != null)
+                copy._E090SubstObjList = _E090SubstObjList.SafeToList();
 
-            if (E090SubstEventInfoList.Count > 0)
-                copy.SubstIDSet = SubstIDSet;
+            if (_SubstIDSet != null)
+                copy._SubstIDSet = _SubstIDSet.SafeToArray();
+            else if (!deepCopy && _E090SubstObjList != null)
+                copy._SubstIDSet = GetSubstIDSetFrom(_E090SubstObjList);
+
+            copy._KVCSet = _KVCSet.SafeToList(mapNullToEmpty: false);
 
             return copy;
         }
@@ -146,22 +198,50 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             RecipeParameters = default;
             StepID = default;
             StepCount = default;
-            E090SubstEventInfoList.Clear();
+            SubstInfoHandlingSelect = default;
+            _E090SubstObjList?.Clear();
             _SubstIDSet = null;
         }
 
         /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
-            switch (State)
-            {
-                case MosaicLib.Semi.E157.ModuleProcessState.NotExecuting:
-                case MosaicLib.Semi.E157.ModuleProcessState.GeneralExecution:
-                default:
-                    return $"E157EventRecord {Module.Name} {Transition} {State} RCID:'{RCID}' RecID:'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}";
-                case MosaicLib.Semi.E157.ModuleProcessState.StepActive:
-                    return $"E157EventRecord {Module.Name} {Transition} {State} step:{StepCount}:'{StepID}' RCID:'{RCID}' RecID:'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}";
-            }
+            return ToString(default);
+        }
+
+        /// <summary>
+        /// Defines non-default ToString options that may be selected.
+        /// </summary>
+        [Flags]
+        public enum ToStringSelect : int
+        {
+            Default = 0x00,
+            IncludeSubstEventInfo = 0x01,
+            IncludeKVCSet = 0x02,
+            IncludeAll = (IncludeSubstEventInfo | IncludeKVCSet),
+        }
+
+        /// <summary>Debugging and logging helper method</summary>
+        public string ToString(ToStringSelect toStringSelect)
+        {
+            bool includeSubstEventInfo = (toStringSelect & ToStringSelect.IncludeSubstEventInfo) != 0;
+            bool includeKVCSet = (toStringSelect & ToStringSelect.IncludeKVCSet) != 0 && !_KVCSet.IsNullOrEmpty();
+
+            string annotationVCStr = (AnnotationVC.IsEmpty ? string.Empty : $" annotation:{AnnotationVC}");
+            string substInfoStr;
+            string kvcInfoStr = "";
+
+            if (_SubstIDSet.IsNullOrEmpty() && _E090SubstObjList.IsNullOrEmpty())
+                substInfoStr = "";
+            else if (includeSubstEventInfo && _E090SubstObjList != null)
+                substInfoStr = string.Concat(" subst:[", string.Join(",", E090SubstEventInfoSet.Select(item => $"[{item}]")), "]");
+            else
+                substInfoStr = $" subst:{string.Join(",", SubstIDSet.MapNullToEmpty())}";
+
+            if (includeKVCSet)
+                kvcInfoStr = $" kvcSet:{KVCSet.ConvertToNamedValueSet().ToStringSML()}";
+
+            return $"E157EventRecord {Module.Name} {Transition} {State} step:{StepCount}:'{StepID}' RCID:'{RCID}' RecID:'{RecID}' pjID:'{ProcessJobID}' prev:{PrevState}{annotationVCStr}{substInfoStr}{kvcInfoStr}";
         }
 
         /// <inheritdoc/>
@@ -186,9 +266,13 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <inheritdoc/>
         public override void Serialize(ref MessagePackWriter mpWriter, MessagePackSerializerOptions mpOptions)
         {
-            mpWriter.WriteArrayHeader(11);
+            bool recordE090SubstEventInfoList = (_E090SubstObjList != null) && ((SubstInfoHandlingSelect & E157SubstInfoHandlingSelect.RecordE090SubstObjList) != 0);
+            bool recordSubstIDSet = !recordE090SubstEventInfoList && (_SubstIDSet != null || _E090SubstObjList != null) &&  ((SubstInfoHandlingSelect & (E157SubstInfoHandlingSelect.RecordE090SubstObjList | E157SubstInfoHandlingSelect.RecordSubstIDSet)) != 0);
+
+            mpWriter.WriteArrayHeader(!recordE090SubstEventInfoList ? 11 : 12);
 
             base.Serialize(ref mpWriter, mpOptions);
+
             mpWriter.Write((int)Transition);
             mpWriter.Write((int)State);
             mpWriter.Write((int)PrevState);
@@ -198,7 +282,26 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             MessagePackUtils.NVSFormatter.Instance.Serialize(ref mpWriter, RecipeParameters, mpOptions);
             mpWriter.Write(StepID);
             mpWriter.Write(StepCount);
-            stringArrayFormatter.Serialize(ref mpWriter, SubstIDSet, mpOptions);
+
+            if (!recordSubstIDSet && !recordE090SubstEventInfoList)
+            {
+                mpWriter.WriteNil();        // placeholder for missing SubstIDSet
+            }
+            else if (recordE090SubstEventInfoList)
+            {
+                mpWriter.WriteNil();        // placeholder for older/skipped SubstIDSet
+
+                // write out the objects from which the event info items were extracted.
+                int numItems = _E090SubstObjList.Count;
+
+                mpWriter.WriteArrayHeader(numItems);
+                for (int index = 0; index < numItems; index++)
+                    MessagePackUtils.E039ObjectFormatter.Instance.Serialize(ref mpWriter, _E090SubstObjList[index], mpOptions);
+            }
+            else // recordSubstIDSet
+            {
+                stringArrayFormatter.Serialize(ref mpWriter, SubstIDSet, mpOptions);
+            }
         }
 
         private static readonly MessagePack.Formatters.ArrayFormatter<string> stringArrayFormatter = new MessagePack.Formatters.ArrayFormatter<string>();
@@ -207,10 +310,13 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         public override void Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions)
         {
             int arraySize = mpReader.ReadArrayHeader();
-            if (arraySize != 11)
+            var haveE090SubstEventInfo = (arraySize == 12);
+
+            if (arraySize != 11 && !haveE090SubstEventInfo)
                 new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 11]").Throw();
 
             base.Deserialize(ref mpReader, mpOptions);
+
             Transition = (MosaicLib.Semi.E157.ModuleProcessStateTransition)mpReader.ReadInt32();
             State = (MosaicLib.Semi.E157.ModuleProcessState)mpReader.ReadInt32();
             PrevState = (MosaicLib.Semi.E157.ModuleProcessState)mpReader.ReadInt32();
@@ -220,8 +326,52 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             RecipeParameters = MessagePackUtils.NVSFormatter.Instance.Deserialize(ref mpReader, mpOptions);
             StepID = mpReader.ReadString();
             StepCount = mpReader.ReadUInt32();
-            SubstIDSet = stringArrayFormatter.Deserialize(ref mpReader, mpOptions);
+
+            if (haveE090SubstEventInfo)
+            {
+                mpReader.ReadNil();     // skip over placeholder null SubstIDSet
+
+                int numItems = mpReader.ReadArrayHeader();
+
+                var e090SubstObjListBuilder = new List<MosaicLib.Semi.E039.IE039Object>(numItems);
+
+                for (int index = 0; index < numItems; index++)
+                    e090SubstObjListBuilder.Add(MessagePackUtils.E039ObjectFormatter.Instance.Deserialize(ref mpReader, mpOptions));
+
+                _E090SubstObjList = e090SubstObjListBuilder;
+            }
+            else
+            {
+                _SubstIDSet = stringArrayFormatter.Deserialize(ref mpReader, mpOptions);
+            }
         }
+    }
+
+    /// <summary>
+    /// This flag enumeration is used in <see cref="E157EventRecord"/> processing to determine which "flavor" of substrate information handling is to be used.
+    /// <para/>None (0x00), CaptureE090SubstEventInfoList (0x01), CaptureSubstIDSet (0x02), RecordE090SubstEventInfoList (0x10), RerordSubstIDSet (0x20)
+    /// </summary>
+    /// <remarks>
+    /// In general a selected value must be captured in order for it to be reported during event delivery and in order for it to be recorded.
+    /// If the user has selected capture of only the <see cref="E157EventRecord.SubstIDSet"/> and recording of the <see cref="E157EventRecord.E090SubstObjList"/> then the recording may record the <see cref="E157EventRecord.SubstIDSet"/> instead.
+    /// </remarks>
+    [Flags]
+    public enum E157SubstInfoHandlingSelect : int
+    {
+        /// <summary>Neither the <see cref="E157EventRecord.E090SubstObjList"/> nor the <see cref="E157EventRecord.SubstIDSet"/> will be captured or recorded.</summary>
+        None = 0x00,
+
+        /// <summary></summary>
+        CaptureE090SubstObjList = 0x01,
+
+        /// <summary></summary>
+        CaptureSubstIDSet = 0x02,
+
+        /// <summary></summary>
+        RecordE090SubstObjList = 0x10,
+
+        /// <summary></summary>
+        RecordSubstIDSet = 0x20,
     }
 
     /// <summary>
@@ -253,14 +403,14 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>Gives the name of the module to be registered</summary>
         public string ModuleName { get; set; }
 
-        /// <summary>Gives the <see cref="ICombinedEventReportingPart"/> instance with which this module name is to be registered.</summary>
-        public ICombinedEventReportingPart CERP { get; set; }
+        /// <summary>Gives the <see cref="ICombinedEventReportingPart"/> instance with which this module name is to be registered.  Defaults to <see cref="DefaultCERP"/></summary>
+        public ICombinedEventReportingPart CERP { get; set; } = DefaultCERP;
 
-        /// <summary>When set to true the CERP will publish new event records, with the current state, to the module scoped token's StatePublisher</summary>
-        public bool EnableStatePublication { get; set; }
+        /// <summary>When set to true the CERP will publish new event records, with the current state, to the module scoped token's StatePublisher.  Defaults to <see cref="DefaultEnableStatePublication"/>.</summary>
+        public bool EnableStatePublication { get; set; } = DefaultEnableStatePublication;
 
-        /// <summary>Gives the default <see cref="IScopedToken.Priority"/> value for module and other scoped tokens created from this value.</summary>
-        public uint DefaultPriority { get; set; }
+        /// <summary>Gives the default <see cref="IScopedToken.Priority"/> value for module and other scoped tokens created from this value.  Defaults to <see cref="DefaultDefaultPriority"/>.</summary>
+        public uint DefaultPriority { get; set; } = DefaultDefaultPriority;
 
         /// <summary>Gives the substrate location names (IDs) for the substrate locations that are associated with this module.</summary>
         public ReadOnlyIList<MosaicLib.Semi.E039.E039ObjectID> ModuleSubstLocSet { get; set; }
@@ -268,26 +418,100 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>Specifies the <see cref="CERP.E116.E116ModuleScopedToken"/> instance that this E157 instance is to be automatically linked to, if any.</summary>
         public CERP.E116.E116ModuleScopedToken E116ModuleScopedToken { get; set; }
 
-        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157GeneralExcutionScopedToken.GeneralExecutionSucceeded"/> property</summary>
-        public bool DefaultGeneralExecutionScopedTokenSuccess { get; set; } = false;
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157GeneralExcutionScopedToken.GeneralExecutionSucceeded"/> property.  Defaults to <see cref="DefaultDefaultGeneralExecutionScopedTokenSuccess"/>.</summary>
+        public bool ? DefaultGeneralExecutionScopedTokenSuccess { get; set; } = DefaultDefaultGeneralExecutionScopedTokenSuccess;
 
-        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157StepActiveScopedToken.StepSucceeded"/> property</summary>
-        public bool DefaultStepActiveScopedTokenSuccess { get; set; } = false;
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157StepActiveScopedToken.StepSucceeded"/> property.  Defaults to <see cref="DefaultDefaultStepActiveScopedTokenSuccess"/>.</summary>
+        public bool ? DefaultStepActiveScopedTokenSuccess { get; set; } = DefaultDefaultStepActiveScopedTokenSuccess;
 
-        /// <summary>When this is true, GeneralExecution to NotActive transitions will carry both the StepCount and the StepID from the last completed step.  Defaults to false.</summary>
-        public bool IncludeStepIDOnExecutingToNotActiveTransition { get; set; }
+        /// <summary>When this is true, GeneralExecution to NotActive transitions will carry both the StepCount and the StepID from the last completed step.  Defaults to <see cref="DefaultIncludeStepIDOnExecutingToNotActiveTransition"/>.</summary>
+        public bool IncludeStepIDOnExecutingToNotActiveTransition { get; set; } = DefaultIncludeStepIDOnExecutingToNotActiveTransition;
 
-        /// <summary>When this is true, the GeneralExecution scoped token will automatically set its own EndWorkCountIncrementOnSuccess property to the number of substrates during begin.</summary>
-        public bool InitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin { get; set; }
+        /// <summary>When this is true, the GeneralExecution scoped token will automatically set its own EndWorkCountIncrementOnSuccess property to the number of substrates during begin.  Defaults to <see cref="DefaultInitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin"/>.</summary>
+        public bool InitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin { get; set; } = DefaultInitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin;
 
-        /// <summary>Specifies the default AnnotationVC to be used with the <see cref="E157ModuleScopedToken"/></summary>
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157BlockRecordScopedToken.BlockRecordSucceeded"/> property.  Defaults to <see cref="DefaultDefaultBlockRecordScopedTokenSuccess"/>.</summary>
+        public bool ? DefaultBlockRecordScopedTokenSuccess { get; set; } = DefaultDefaultBlockRecordScopedTokenSuccess;
+
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157BlockRecordScopedToken.RecordBeginTransition"/> property.  Defaults to <see cref="DefaultDefaultBlockRecordScopedTokenRecordsBeginTransition"/>.</summary>
+        public bool ? DefaultBlockRecordScopedTokenRecordsBeginTransition { get; set; } = DefaultDefaultBlockRecordScopedTokenRecordsBeginTransition;
+
+        /// <summary>This value defines the default value that will be used to initialize the <see cref="E157BlockRecordScopedToken.RecordEndTransition"/> property.  Defaults to <see cref="DefaultDefaultBlockRecordScopedTokenRecordsEndTransition"/>.</summary>
+        public bool ? DefaultBlockRecordScopedTokenRecordsEndTransition { get; set; } = DefaultDefaultBlockRecordScopedTokenRecordsEndTransition;
+
+        /// <summary>Specifies the default AnnotationVC to be used with the <see cref="E157ModuleScopedToken"/>.  Defaults to <see cref="ValueContainer.Empty"/>.</summary>
         public ValueContainer DefaultAnnotationVC { get; set; }
+
+        /// <summary>This property specifies which <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition"/>s will cause capturing of <see cref="E157EventRecord.E090SubstObjList"/>.  These will be avilable for reporting and/or recording.  If these are not capture for a given transition then they will not be available for reporting or recording, even if requested.  Defaults to <see cref="DefaultCaptureE090SubstObjListTransitionMask"/></summary>
+        public MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask CaptureE090SubstObjListTransitionMask { get; set; } = DefaultCaptureE090SubstObjListTransitionMask;
+
+        /// <summary>This property specifies which <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition"/>s will cause capturing of the <see cref="E157EventRecord.SubstIDSet"/>.  These will be avilable for reporting and/or recording.  If these are not capture for a given transition then they will not be available for reporting or recording, even if requested.  Defaults to <see cref="DefaultCaptureSubstIDSetTransitionMask"/></summary>
+        public MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask CaptureSubstIDSetTransitionMask { get; set; } = DefaultCaptureSubstIDSetTransitionMask;
+
+        /// <summary>This property specifies which <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition"/>s will cause recording of <see cref="E157EventRecord.E090SubstObjList"/>.  Defaults to <see cref="DefaultRecordE090SubstObjListTransitionMask"/></summary>
+        public MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask RecordE090SubstObjListTransitionMask { get; set; } = DefaultRecordE090SubstObjListTransitionMask;
+
+        /// <summary>This property specifies which <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition"/>s will cause recording of the <see cref="E157EventRecord.SubstIDSet"/>.  Defaults to <see cref="DefaultRecordSubstIDSetTransitionMask"/></summary>
+        public MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask RecordSubstIDSetTransitionMask { get; set; } = DefaultRecordSubstIDSetTransitionMask;
 
         /// <summary>Explicit copy/clone method</summary>
         public E157ModuleConfig MakeCopyOfThis(bool deepCopy = true)
         {
             return (E157ModuleConfig)this.MemberwiseClone();
         }
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.CERP"/> property values.</summary>
+        public static ICombinedEventReportingPart DefaultCERP { get; set; }
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.EnableStatePublication"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool DefaultEnableStatePublication { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultPriority"/> property values.  Defaults to <see langword="0"/></summary>
+        public static uint DefaultDefaultPriority { get; set; } = 0;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultGeneralExecutionScopedTokenSuccess"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool? DefaultDefaultGeneralExecutionScopedTokenSuccess { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultStepActiveScopedTokenSuccess"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool? DefaultDefaultStepActiveScopedTokenSuccess { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.IncludeStepIDOnExecutingToNotActiveTransition"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool DefaultIncludeStepIDOnExecutingToNotActiveTransition { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.InitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool DefaultInitializeEndWorkCountIncrementOnSuccessOnGeneralExecutionBegin { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultBlockRecordScopedTokenSuccess"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool? DefaultDefaultBlockRecordScopedTokenSuccess { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultBlockRecordScopedTokenRecordsBeginTransition"/> property values.  Defaults to <see langword="false"/></summary>
+        public static bool? DefaultDefaultBlockRecordScopedTokenRecordsBeginTransition { get; set; } = false;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.DefaultBlockRecordScopedTokenRecordsEndTransition"/> property values.  Defaults to <see langword="true"/></summary>
+        public static bool? DefaultDefaultBlockRecordScopedTokenRecordsEndTransition { get; set; } = true;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.CaptureE090SubstObjListTransitionMask"/> property values.  Defaults to <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.None"/></summary>
+        public static MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask DefaultCaptureE090SubstObjListTransitionMask { get; set; } = MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.None;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.CaptureSubstIDSetTransitionMask"/> property values.  Defaults to <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.Standard"/></summary>
+        public static MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask DefaultCaptureSubstIDSetTransitionMask { get; set; } = MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.Standard;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.RecordE090SubstObjListTransitionMask"/> property values.  Defaults to <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.None"/></summary>
+        public static MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask DefaultRecordE090SubstObjListTransitionMask { get; set; } = MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.None;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E157ModuleConfig.RecordSubstIDSetTransitionMask"/> property values.  Defaults to <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.Standard"/></summary>
+        public static MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask DefaultRecordSubstIDSetTransitionMask { get; set; } = MosaicLib.Semi.E157.ModuleProcessStateTransitionBitMask.Standard;
+    }
+
+    /// <summary>
+    /// Basic interface that is supported by all E157 Scoped Token types.  This is used as the type of scoped token with the <see cref="E157BlockRecordScopedToken"/> constructor.
+    /// </summary>
+    public interface IE157ScopedToken : IScopedToken
+    {
+        /// <summary>
+        /// Gives client access to the <see cref="E157ModuleScopedToken"/> instance that this token is attached to.
+        /// </summary>
+        E157ModuleScopedToken E157ModuleScopedToken { get; }
     }
 
     /// <summary>
@@ -304,7 +528,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
     /// <para/>
     /// When the client is done using the source they Dispose of the module scoped token to unregister it.
     /// </remarks>
-    public class E157ModuleScopedToken : ModuleScopedTokenBase
+    public class E157ModuleScopedToken : ModuleScopedTokenBase, IE157ScopedToken
     {
         /// <summary>Constructor</summary>
         /// <remarks>
@@ -320,6 +544,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
 
         /// <summary>Gives the contents of the module config object that was used (and was captured) at the construction of this scoped token</summary>
         internal E157ModuleConfig ModuleConfig { get; private set; }
+
+        E157ModuleScopedToken IE157ScopedToken.E157ModuleScopedToken { get => this; }
 
         /// <summary>
         /// Gives the StatePublisher for this module.
@@ -337,7 +563,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
     /// <summary>
     /// This scoped token is used to specify and report E157 General Execution state conditions.
     /// </summary>
-    public class E157GeneralExcutionScopedToken : ScopedTokenBase
+    public class E157GeneralExcutionScopedToken : ScopedTokenBase, IE157ScopedToken
     {
         /// <summary>
         /// Constructor.
@@ -368,10 +594,8 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
             GeneralExecutionSucceeded = moduleScopedToken?.ModuleConfig?.DefaultGeneralExecutionScopedTokenSuccess ?? true;
         }
 
-        /// <summary>
-        /// Gives client access to the <see cref="E157.E157ModuleScopedToken"/> instance that this token is attached to.
-        /// </summary>
-        public E157.E157ModuleScopedToken E157ModuleScopedToken { get; private set; }
+        /// <inheritdoc/>
+        public E157ModuleScopedToken E157ModuleScopedToken { get; private set; }
 
         /// <summary>
         /// Gives the identifier of the Recipe that the module has been told to process.  
@@ -443,7 +667,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
     /// <summary>
     /// This scoped token is used to specify and report E157 Step Active state conditions.
     /// </summary>
-    public class E157StepActiveScopedToken : ScopedTokenBase
+    public class E157StepActiveScopedToken : ScopedTokenBase, IE157ScopedToken
     {
         /// <summary>Constructor</summary>
         public E157StepActiveScopedToken(E157GeneralExcutionScopedToken generalExcutionScopedToken, bool enableAutomaticStepCountGeneration = true)
@@ -455,16 +679,19 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
 
             EnableAutomaticStepCountGeneration = enableAutomaticStepCountGeneration;
 
-            var moduleScopedToken = generalExcutionScopedToken?.E157ModuleScopedToken;
+            E157ModuleScopedToken = generalExcutionScopedToken?.E157ModuleScopedToken;
 
-            BeginSyncFlags = moduleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
-            EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
+            BeginSyncFlags = E157ModuleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = E157ModuleScopedToken?.DefaultScopedEndSyncFlags ?? default;
 
-            StepSucceeded = moduleScopedToken?.ModuleConfig?.DefaultStepActiveScopedTokenSuccess ?? true;
+            StepSucceeded = E157ModuleScopedToken?.ModuleConfig?.DefaultStepActiveScopedTokenSuccess ?? true;
         }
 
         /// <summary>Note: This property is get only.  Its value is determined from the <see cref="GeneralExcutionScopedToken"/> at construction time.</summary>
         public new bool DisableReporting { get => base.DisableReporting; }
+
+        /// <inheritdoc/>
+        public E157ModuleScopedToken E157ModuleScopedToken { get; private set; }
 
         private bool EnableAutomaticStepCountGeneration { get; set; }
 
@@ -501,7 +728,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         public uint StepCount { get; set; }
 
         /// <summary>
-        /// This gives the <see cref="E157GeneralExcutionScopedToken"/> instance within which this step active token is used.
+        /// Gives client access to the <see cref="E157GeneralExcutionScopedToken"/> instance that this token is attached to, or null if there is no such token.
         /// </summary>
         public E157GeneralExcutionScopedToken GeneralExcutionScopedToken { get; private set; }
 
@@ -515,5 +742,51 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         {
             return "{0} StepID:'{1}' StepCount:{2}".CheckedFormat(base.ToString(), StepID, StepCount);
         }
+    }
+
+    /// <summary>
+    /// This scoped token is used to specify and optionally record (but not report) Block Record transitions.
+    /// </summary>
+    public class E157BlockRecordScopedToken : ScopedTokenBase, IE157ScopedToken
+    {
+        /// <summary>Constructor</summary>
+        public E157BlockRecordScopedToken(IE157ScopedToken parentScopedToken)
+            : base(parentScopedToken, "E157.BlockRecord")
+        {
+            ParentScopedToken = parentScopedToken;
+
+            base.DisableReporting = true;
+
+            E157ModuleScopedToken = parentScopedToken?.E157ModuleScopedToken;
+
+            BeginSyncFlags = E157ModuleScopedToken?.DefaultScopedBeginSyncFlags ?? default;
+            EndSyncFlags = E157ModuleScopedToken?.DefaultScopedEndSyncFlags ?? default;
+
+            BlockRecordSucceeded = E157ModuleScopedToken?.ModuleConfig?.DefaultBlockRecordScopedTokenSuccess ?? true;
+            RecordBeginTransition = E157ModuleScopedToken?.ModuleConfig?.DefaultBlockRecordScopedTokenRecordsBeginTransition ?? false;
+            RecordEndTransition = E157ModuleScopedToken?.ModuleConfig?.DefaultBlockRecordScopedTokenRecordsEndTransition ?? true;
+        }
+
+        /// <summary>Note: this property is not usable.  It throws a <see cref="System.NotImplementedException"/>.</summary>
+        public new bool DisableReporting { get => throw new System.NotImplementedException(); }
+
+        /// <inheritdoc/>
+        public E157ModuleScopedToken E157ModuleScopedToken { get; private set; }
+
+        /// <summary>
+        /// This gives the <see cref="IE157ScopedToken"/> instance within which this block record token is used.
+        /// </summary>
+        public IE157ScopedToken ParentScopedToken { get; private set; }
+
+        /// <summary>
+        /// The client is expected to update this property prior to ending the step in order that it can generate the correspondingly correct event.
+        /// </summary>
+        public bool BlockRecordSucceeded { get; set; }
+
+        /// <summary>When this is true the <see cref="IScopedToken.Begin(TimeSpan?, bool)"/> operation will record a <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordStarted"/> transition event.</summary>
+        public bool RecordBeginTransition { get; set; }
+
+        /// <summary>When this is true the <see cref="IScopedToken.End(TimeSpan?, bool)"/> operation will record a <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordCompleted"/> or <see cref="MosaicLib.Semi.E157.ModuleProcessStateTransition.BlockRecordFailed"/> transition event.</summary>
+        public bool RecordEndTransition { get; set; }
     }
 }

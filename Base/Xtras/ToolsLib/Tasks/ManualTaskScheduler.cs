@@ -53,7 +53,14 @@ namespace Mosaic.ToolsLib.Tasks
 
             if (setServiceThreadToCurrentThread)
                 SetSelectedServiceThreadToCurrentThread(captureAndWrapSychronizationContext);
+
+            InternalTaskFactoryForPost = new TaskFactory(CancellationToken.None, TaskCreationOptions.None, TaskContinuationOptions.None, this);
         }
+
+        /// <summary>
+        /// This is the task factory that is used to create the task instances that are used to run the posted <see cref="SendOrPostCallback"/> instances.
+        /// </summary>
+        private TaskFactory InternalTaskFactoryForPost { get; }
 
         /// <summary>
         /// When true, this property allows the <see cref="TryExecuteTaskInline(Task, bool)"/> method to execute inline tasks and inline task continuations when they are already using the current task scheduler and <see cref="SelectedServiceThread"/>.
@@ -149,27 +156,20 @@ namespace Mosaic.ToolsLib.Tasks
             }
         }
 
-        private struct TaskOrPostItem
-        {
-            public Task task;
-            public SendOrPostCallback sendOrPostCallback;
-            public object sendOrPostCallbackState;
-        }
-
-        private readonly object itemQueueMutex = new object();
-        private readonly Queue<TaskOrPostItem> itemQueue = new Queue<TaskOrPostItem>();
-        private volatile int volatileItemQueueCount = 0;
+        private readonly object pendingTaskQueueMutex = new object();
+        private readonly Queue<Task> pendingTaskQueue = new Queue<Task>();
+        private volatile int volatilePendingTaskQueueCount = 0;
 
         /// <summary>
         /// Returns the number of task items that are currently queued in this scheduler instance.
         /// This includes both tasks and related post callback items.
         /// </summary>
-        public int QueuedItemCount => volatileItemQueueCount;
+        public int QueuedItemCount => volatilePendingTaskQueueCount;
 
         /// <summary>Gives the <see cref="Thread"/> that has been selected for use by this task scheduler, or null if no such <see cref="Thread"/> as been selected yet.</summary>
         public System.Threading.Thread SelectedServiceThread { get; private set; }
 
-        private readonly List<TaskOrPostItem> serviceTaskOrPostItemList = new List<TaskOrPostItem>();
+        private readonly List<Task> servicePendingTaskList = new List<Task>();
 
         /// <summary>This <see cref="IBasicNotificationList"/> will be Notified whenever a new task has been queued.</summary>
         public IBasicNotificationList NotifyOnTaskQueued => notifyOnTaskQueued;
@@ -188,18 +188,18 @@ namespace Mosaic.ToolsLib.Tasks
             if (SelectedServiceThread != Thread.CurrentThread)
                 HandleNonMatchingServiceThreadCase(nameof(Service));
 
-            if (volatileItemQueueCount == 0)
+            if (volatilePendingTaskQueueCount == 0)
                 return;
 
-            lock (itemQueueMutex)
+            lock (pendingTaskQueueMutex)
             {
-                serviceTaskOrPostItemList.AddRange(itemQueue);
+                servicePendingTaskList.AddRange(pendingTaskQueue);
 
-                itemQueue.Clear();
-                volatileItemQueueCount = 0;
+                pendingTaskQueue.Clear();
+                volatilePendingTaskQueueCount = 0;
             }
 
-            int listCount = serviceTaskOrPostItemList.Count;
+            int listCount = servicePendingTaskList.Count;
 
             if (listCount > 0)
             {
@@ -213,12 +213,10 @@ namespace Mosaic.ToolsLib.Tasks
                 {
                     for (int index = 0; index < listCount; index++)
                     {
-                        var item = serviceTaskOrPostItemList[index];
+                        var item = servicePendingTaskList[index];
 
-                        if (item.task != null)
-                            base.TryExecuteTask(item.task);
-                        else 
-                            item.sendOrPostCallback?.Invoke(item.sendOrPostCallbackState);
+                        if (item != null)
+                            base.TryExecuteTask(item);
                     }
                 }
                 finally
@@ -228,7 +226,7 @@ namespace Mosaic.ToolsLib.Tasks
                 }
             }
 
-            serviceTaskOrPostItemList.Clear();
+            servicePendingTaskList.Clear();
         }
 
         private void HandleNonMatchingServiceThreadCase(string methodName)
@@ -249,10 +247,16 @@ namespace Mosaic.ToolsLib.Tasks
         /// </summary>
         protected void Post(SendOrPostCallback sendOrPostCallback, object sendOrPostCallbackState)
         {
-            lock (itemQueueMutex)
+            lock (pendingTaskQueueMutex)
             {
-                itemQueue.Enqueue(new TaskOrPostItem() { sendOrPostCallback = sendOrPostCallback, sendOrPostCallbackState = sendOrPostCallbackState });
-                volatileItemQueueCount = itemQueue.Count;
+                var taskForPost = InternalTaskFactoryForPost.StartNew(() =>
+                    { 
+                        sendOrPostCallback(sendOrPostCallbackState); 
+                    });
+ 
+                pendingTaskQueue.Enqueue(taskForPost);
+
+                volatilePendingTaskQueueCount = pendingTaskQueue.Count;
             }
 
             notifyOnTaskQueued.Notify();
@@ -261,10 +265,10 @@ namespace Mosaic.ToolsLib.Tasks
         /// <inheritdoc/>
         protected override void QueueTask(Task task)
         {
-            lock (itemQueueMutex)
+            lock (pendingTaskQueueMutex)
             {
-                itemQueue.Enqueue(new TaskOrPostItem() { task = task });
-                volatileItemQueueCount = itemQueue.Count;
+                pendingTaskQueue.Enqueue(task);
+                volatilePendingTaskQueueCount = pendingTaskQueue.Count;
             }
 
             notifyOnTaskQueued.Notify();
@@ -284,9 +288,9 @@ namespace Mosaic.ToolsLib.Tasks
         {
             Task[] taskArray;
 
-            lock (itemQueueMutex)
+            lock (pendingTaskQueueMutex)
             {
-                taskArray = itemQueue.Select(item => item.task).WhereIsNotDefault().ToArray();
+                taskArray = pendingTaskQueue.WhereIsNotDefault().ToArray();
             }
 
             return taskArray;

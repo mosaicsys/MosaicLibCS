@@ -2626,6 +2626,11 @@ namespace MosaicLib.Semi.E090
         /// </summary>
         bool IsSrcSameAsDst { get; }
 
+        /// <summary>
+        /// Returns true if the Source or Destination CarrierID, SlotNum and/or PortID are not null or empty
+        /// </summary>
+        bool HasSrcOrDst { get; } 
+
         /// <summary>Gives the <see cref="SubstType"/> for this substrate.</summary>
         SubstType SubstType { get; }
 
@@ -2743,6 +2748,13 @@ namespace MosaicLib.Semi.E090
             ControlJobID = attributes[ControlJobIDAttributeName].VC.GetValueA(rethrow: false);
         }
 
+        /// <summary>
+        /// Object constructor.
+        /// </summary>
+        public E090SubstEventInfo(IE039Object obj)
+            : this(new E090SubstInfo(obj))
+        { }
+
         /// <inheritdoc/>
         public E090SubstInfo E090SubstInfo { get; set; }
 
@@ -2766,6 +2778,9 @@ namespace MosaicLib.Semi.E090
 
         /// <inheritdoc/>
         public bool IsSrcSameAsDst { get { return (SrcCarrierID == DstCarrierID && SrcSlotNum == DstSlotNum && SrcPortID == DstPortID); } }
+
+        /// <inheritdoc/>
+        public bool HasSrcOrDst { get { return (SrcCarrierID.IsNeitherNullNorEmpty() || SrcSlotNum != 0 || SrcPortID != 0 || DstCarrierID.IsNeitherNullNorEmpty() || DstSlotNum != 0 || DstPortID != 0); } }
 
         /// <inheritdoc/>
         public SubstType SubstType { get; set; }
@@ -2798,7 +2813,17 @@ namespace MosaicLib.Semi.E090
         {
             StringBuilder sb = new StringBuilder();
 
-            if (IsSrcSameAsDst)
+            sb.CheckedAppendFormatWithDelimiter("", "'{0}'", E090SubstInfo.ObjID.Name);
+
+            if (E090SubstInfo.LotID.IsNeitherNullNorEmpty())
+                sb.CheckedAppendFormatWithDelimiter(" ", "lot:'{0}'", E090SubstInfo.LotID);
+
+            if (E090SubstInfo.SubstUsageStr.IsNeitherNullNorEmpty())
+                sb.CheckedAppendFormatWithDelimiter(" ", "usage:'{0}'", E090SubstInfo.SubstUsageStr);
+
+            if (!HasSrcOrDst)
+                sb.AppendWithDelimiter(" ", "src:empty, dst:empty");
+            else if (IsSrcSameAsDst)
                 sb.CheckedAppendFormatWithDelimiter(" ", "cid:'{0}' slot:{1} LP{2}", SrcCarrierID, SrcSlotNum, SrcPortID);
             else
                 sb.CheckedAppendFormatWithDelimiter(" ", "src cid:'{0}' slot:{1} LP{2}, dst cid:'{3}' slot:{4} LP{5}", SrcCarrierID, SrcSlotNum, SrcPortID, DstCarrierID, DstSlotNum, DstPortID);

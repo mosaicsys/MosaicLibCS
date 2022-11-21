@@ -21,18 +21,14 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.Serialization;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
-using Mosaic.ToolsLib.Semi.IDSpec;
-using System.Runtime.Serialization;
-using Mosaic.ToolsLib.MDRF2.Reader;
 using MessagePack;
-using Mosaic.ToolsLib.MDRF2.Common;
 
 namespace Mosaic.ToolsLib.Semi.CERP.E116
 {
@@ -132,16 +128,41 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
+            return ToString(default);
+        }
+
+        /// <summary>
+        /// Defines non-default ToString options that may be selected.
+        /// </summary>
+        [Flags]
+        public enum ToStringSelect : int
+        {
+            Default = 0x00,
+            IncludeKVCSet = 0x02,
+            IncludeAll = (IncludeKVCSet),
+        }
+
+        /// <summary>Debugging and logging helper method</summary>
+        public string ToString(ToStringSelect toStringSelect)
+        {
+            bool includeKVCSet = (toStringSelect & ToStringSelect.IncludeKVCSet) != 0 && !_KVCSet.IsNullOrEmpty();
+
+            string annotationVCStr = (AnnotationVC.IsEmpty ? string.Empty : $" annotation:{AnnotationVC}");
+            string kvcInfoStr = "";
+
+            if (includeKVCSet)
+                kvcInfoStr = $" kvcSet:{KVCSet.ConvertToNamedValueSet().ToStringSML()}";
+
             switch (State)
             {
                 case MosaicLib.Semi.E116.EPTState.Idle:
-                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {StateTime.TotalSeconds:f1}sec wic:{WorkCountIncrement}";
+                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {StateTime.TotalSeconds:f1}sec wic:{WorkCountIncrement}{annotationVCStr}{kvcInfoStr}";
                 case MosaicLib.Semi.E116.EPTState.Busy:
-                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {TaskType} '{TaskName}' prev:{PrevTaskType} '{PrevTaskName}' wic:{WorkCountIncrement}";
+                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {TaskType} '{TaskName}' prev:{PrevTaskType} '{PrevTaskName}' wic:{WorkCountIncrement}{annotationVCStr}{kvcInfoStr}";
                 case MosaicLib.Semi.E116.EPTState.Blocked:
-                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {BlockedReason} '{BlockedReasonText}' prev:{PrevTaskType} '{PrevTaskName}'";
+                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState} {BlockedReason} '{BlockedReasonText}' prev:{PrevTaskType} '{PrevTaskName}'{annotationVCStr}{kvcInfoStr}";
                 default:
-                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState}";
+                    return $"E116EventRecord {Module.Name} {Transition} {State}<-{PrevState}{annotationVCStr}{kvcInfoStr}";
             }
         }
 
@@ -248,8 +269,9 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
 
         /// <summary>
         /// This value is used in combination with the <see cref="SourcePart"/>, <see cref="AutomaticBlockedTransitionDelegate"/>, and <see cref="AutomaticBusyTransitionDelegate"/> to specify how a <see cref="IPartBase"/> value may be used to automatically generate and remove E116 Busy and Blocked scoped tokens.
+        /// Defaults to <see cref="DefaultPartBaseStateUsageBehavior"/>.
         /// </summary>
-        public AutomaticTransitionBehavior PartBaseStateUsageBehavior { get; set; } = AutomaticTransitionBehavior.GenerateInitialScopedTokenIfNeeded | AutomaticTransitionBehavior.AutomaticWaitingTransitions;
+        public AutomaticTransitionBehavior PartBaseStateUsageBehavior { get; set; } = DefaultPartBaseStateUsageBehavior;
 
         /// <summary>Defines the priority used for all automatically generated blocked scoped tokens</summary>
         public uint AutomaticBlockedTransitionPriorty { get; set; }
@@ -269,6 +291,11 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
 
         /// <summary>Specifies the default AnnotationVC to be used with the <see cref="E116ModuleScopedToken"/></summary>
         public ValueContainer DefaultAnnotationVC { get; set; }
+
+        /// <summary>
+        /// When true this event report will not be passed to the delegate handler.  When false (the default) this event report will be passed to the delegate handler as normal.
+        /// </summary>
+        public bool DisableReporting { get; set; } = DefaultDisableReporting;
 
         /// <summary>Explicit copy/clone method</summary>
         public E116ModuleConfig MakeCopyOfThis(bool deepCopy = true)
@@ -297,6 +324,12 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
             else
                 return (MosaicLib.Semi.E116.TaskType.NoTask, null);
         }
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E116ModuleConfig.PartBaseStateUsageBehavior"/> property values.  Defaults to (<see cref="AutomaticTransitionBehavior.GenerateInitialScopedTokenIfNeeded"/> | <see cref="AutomaticTransitionBehavior.AutomaticWaitingTransitions"/></summary>
+        public static AutomaticTransitionBehavior DefaultPartBaseStateUsageBehavior { get; set; } = AutomaticTransitionBehavior.GenerateInitialScopedTokenIfNeeded | AutomaticTransitionBehavior.AutomaticWaitingTransitions;
+
+        /// <summary>This static property specifies the default value for newly constructed <see cref="E116ModuleConfig.DisableReporting"/> property values.  Defaults to <see langword="false"/>.</summary>
+        public static bool DefaultDisableReporting { get; set; }
     }
 
     /// <summary>
@@ -365,9 +398,13 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
             : base(moduleConfig.ModuleName, moduleConfig.CERP, "E116.Module", purposeStr: "E116", defaultScopedBeginSyncFlags: default, defaultScopedEndSyncFlags: default, defaultPriority: moduleConfig.DefaultPriority)
         {
             ModuleConfig = moduleConfig.MakeCopyOfThis();
+            base.DisableReporting = ModuleConfig.DisableReporting;
 
             AnnotationVC = ModuleConfig.DefaultAnnotationVC;
         }
+
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="E116ModuleConfig.DisableReporting"/>.</summary>
+        public new bool DisableReporting { get => base.DisableReporting; }
 
         /// <summary>Gives the contents of the module config object that was used (and was captured) at the construction of this scoped token</summary>
         internal E116ModuleConfig ModuleConfig { get; private set; }
@@ -422,7 +459,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
             EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
 
-        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="ModuleScopedToken"/> at construction time.</summary>
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="E116ModuleConfig.DisableReporting"/>.</summary>
         public new bool DisableReporting { get => base.DisableReporting; }
 
         /// <summary>This gives the <see cref="Semi.E116.TaskType"/> that is to be reported with any related Busy transition</summary>
@@ -481,7 +518,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
             EndSyncFlags = moduleScopedToken?.DefaultScopedEndSyncFlags ?? default;
         }
 
-        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="ModuleScopedToken"/> at construction time.</summary>
+        /// <summary>Note: This property is get only.  Its value is determined from the <see cref="E116ModuleConfig.DisableReporting"/>.</summary>
         public new bool DisableReporting { get => base.DisableReporting; }
 
         /// <summary>Gives the <see cref="Semi.E116.BlockedReasonEx"/> value to be used while the module is reported as Blocked.</summary>

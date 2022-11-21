@@ -52,6 +52,8 @@
     <Compile Include="Compression\CompressorStream.cs" />
     <Compile Include="Compression\GZipCompressorStream.cs" />
     <Compile Include="Compression\LZ4CompressorStream.cs" />
+    <Compile Include="Dynamic\DynamicKVC.cs" />
+    <Compile Include="Dynamic\ExtensionMethods.cs" />
     <Compile Include="File\FileSync.cs" />
     <Compile Include="File\CrypographicFileHelpers.cs" />
     <Compile Include="JsonDotNet\JsonDotNetConfigProvider.cs" />

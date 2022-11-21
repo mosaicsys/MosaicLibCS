@@ -2267,8 +2267,8 @@ namespace Mosaic.ToolsLib.File.FileSync
             {
                 string clientName = $"TcpClient({tcpClient.Client.RemoteEndPoint})";
 
-                tcpClient.ReceiveTimeout = (int) Config.TcpClientReceiveAndSendTimeout.Milliseconds;
-                tcpClient.SendTimeout = (int)Config.TcpClientReceiveAndSendTimeout.Milliseconds;
+                tcpClient.ReceiveTimeout = (int)Config.TcpClientReceiveAndSendTimeout.TotalMilliseconds;
+                tcpClient.SendTimeout = (int)Config.TcpClientReceiveAndSendTimeout.TotalMilliseconds;
 
                 bool stopRequested = false;
                 System.Exception stoppedByException = null;

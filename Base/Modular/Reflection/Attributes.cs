@@ -482,14 +482,19 @@ namespace MosaicLib.Modular.Reflection
         {
             /// <summary>Set is empty (Default value): 0x00</summary>
             None = 0x00,
+
             /// <summary>Set items include all public fields or properties that carry an Attributes.Item attribute.  0x01</summary>
             IncludeExplicitPublicItems = 0x01,
+
             /// <summary>ValueSet items include all public properties.  0x02</summary>
             IncludeAllPublicProperties = 0x02,
+
             /// <summary>ValueSet items include all public fields.  0x04</summary>
             IncludeAllPublicFields = 0x04,
+
             /// <summary>items include all fields or properties that carry an Attrirbute.Item attribute.  0x08</summary>
             IncludeExplicitItems = 0x08,
+
             /// <summary>
             /// This value must be combined with other values.  
             /// When included it selects that inherited properties and fields should be considered in addition to declared ones.
@@ -497,6 +502,7 @@ namespace MosaicLib.Modular.Reflection
             /// 0x10
             /// </summary>
             IncludeInheritedItems = 0x10,
+
             /// <summary>
             /// When set, only items that are annotated with the specific given type (by reference equality) will be used.  Otherwise the first attribute of the indicated type will be used.
             /// </summary>
@@ -508,6 +514,10 @@ namespace MosaicLib.Modular.Reflection
         /// <para/>None (0x00), UseGetterIfPresent (0x01), UseSetterIfPresent (0x02), Normal (0x03), GetOnly (0x01), SetOnly (0x02)
         /// <para/>None (0x00), Read (0x01), Write(0x02), ReadWrite (Read | Write)
         /// </summary>
+        /// <remarks>
+        /// This enumeration is generally used with "ValueSet" type adapters, especially when harvesting a given "ValueSet" type to obtain the properties and fields that can be accessed using getters and/or setters.
+        /// Please be aware that these terms are viewed in relation to the "ValueSet" class itself and not in relation to how those values might be used elsewhere.
+        /// </remarks>
         [Flags]
         public enum ItemAccess : int
         {
@@ -546,7 +556,7 @@ namespace MosaicLib.Modular.Reflection
             /// </summary>
             public static bool UseGetter(this ItemAccess itemAccess)
             {
-                return itemAccess.IsSet(ItemAccess.UseGetterIfPresent);
+                return (itemAccess & ItemAccess.UseGetterIfPresent) != 0;
             }
 
             /// <summary>
@@ -554,10 +564,9 @@ namespace MosaicLib.Modular.Reflection
             /// </summary>
             public static bool UseSetter(this ItemAccess itemAccess)
             {
-                return itemAccess.IsSet(ItemAccess.UseSetterIfPresent);
+                return (itemAccess & ItemAccess.UseSetterIfPresent) != 0;
             }
         }
-
 
         #endregion
 

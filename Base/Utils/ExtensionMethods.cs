@@ -508,6 +508,22 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method "safe" version of ToList.  
+        /// If the given <paramref name="set"/> is non-null then this method returns a new list containing the given <paramref name="set"/>'s contents.
+        /// If <paramref name="mapNullToEmpty"/> is true and the <paramref name="set"/> is null then this method return a new empty list.
+        /// If <paramref name="mapNullToEmpty"/> is false and the <paramref name="set"/> is null then this method returns null.
+        /// </summary>
+        public static List<ItemType> SafeToList<ItemType>(this IEnumerable<ItemType> set, bool mapNullToEmpty = true)
+        {
+            if (set != null)
+                return new List<ItemType>(set);
+            else if (mapNullToEmpty)
+                return new List<ItemType>();
+            else 
+                return null;
+        }
+
+        /// <summary>
         /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
         public static ItemType SafeTakeFirst<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))

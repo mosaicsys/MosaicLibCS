@@ -82,8 +82,14 @@ namespace Mosaic.ToolsLib.Semi.CERP
         private string ModuleName { get { return Module.Name; } set { Module = new NameIIDSpecPair() { Name = value }; } }
 
         /// <inheritdoc/>
-        [DataMember(IsRequired = false, EmitDefaultValue = false)]
-        public List<KeyValuePair<string, ValueContainer>> KVCSet { get; protected set; } = new List<KeyValuePair<string, ValueContainer>>();
+        public List<KeyValuePair<string, ValueContainer>> KVCSet 
+        {
+            get { return _KVCSet ?? (_KVCSet = new List<KeyValuePair<string, ValueContainer>>()); }
+            protected set { _KVCSet = value; } 
+        }
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false, Name = "KVCSet")]
+        protected List<KeyValuePair<string, ValueContainer>> _KVCSet;
 
         IList<KeyValuePair<string, ValueContainer>> ICERPEventReport.KVCSet => KVCSet;
 
@@ -111,7 +117,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         public virtual void Clear()
         {
             Module = default;
-            KVCSet.Clear();
+            _KVCSet?.Clear();
             DisableReporting = default;
             ReportBeforeRecording = default;
             RecordingKeyInfo = default;
@@ -127,7 +133,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
             mpWriter.WriteArrayHeader(2 + (includeDisable ? 1 : 0) + (includeAnnotation ? 1 : 0));
 
             mpWriter.Write(ModuleName);
-            MessagePackUtils.KVCSetFormatter.Instance.Serialize(ref mpWriter, KVCSet, mpOptions);
+
+            MessagePackUtils.KVCSetFormatter.Instance.Serialize(ref mpWriter, _KVCSet, mpOptions);
+
             if (includeDisable)
                 mpWriter.Write(DisableReporting);
 
@@ -145,7 +153,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 new System.ArgumentException($"Cannot deserialize {Fcns.CurrentClassLeafName}: unexpected list size [{arraySize} != 2, 3, or 4]").Throw();
 
             ModuleName = mpReader.ReadString();
-            KVCSet.AddRange(MessagePackUtils.KVCSetFormatter.Instance.Deserialize(ref mpReader, mpOptions));
+
+            _KVCSet = MessagePackUtils.KVCSetFormatter.Instance.Deserialize(ref mpReader, mpOptions).SafeToList(mapNullToEmpty: false);
+
             if (arraySize >= 3)
                 DisableReporting = mpReader.ReadBoolean();
 

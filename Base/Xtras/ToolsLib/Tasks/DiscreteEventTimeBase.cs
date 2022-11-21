@@ -230,6 +230,12 @@ namespace Mosaic.ToolsLib.Tasks.DiscreteEventTimeBase
             }
         }
 
+        /// <summary>
+        /// Gives the <see cref="TaskCreationOptions"/> that are used with the <see cref="TaskCompletionSource{TResult}"/> instances that are created here.
+        /// Defaults to <see cref="TaskCreationOptions.RunContinuationsAsynchronously"/>.
+        /// </summary>
+        public TaskCreationOptions TaskCreationOptions { get; set; } = TaskCreationOptions.RunContinuationsAsynchronously;
+
         /// <inheritdoc/>
         public Task<TimeSpan> WaitAsync(TimeSpan incrementalWaitTimeSpan, CancellationToken cancellationToken = default)
         {
@@ -240,7 +246,7 @@ namespace Mosaic.ToolsLib.Tasks.DiscreteEventTimeBase
                 waitItemTracker.WaitUntilAfterSyntheticElapsedTime = CurrentSyntheticElapsedTime + incrementalWaitTimeSpan;
                 waitItemTracker.WaitSeqNum = ++waitItemSeqNumGen;
                 waitItemTracker.CancellationToken = cancellationToken;
-                waitItemTracker.TCS_TimeSpan = new TaskCompletionSource<TimeSpan>();
+                waitItemTracker.TCS_TimeSpan = new TaskCompletionSource<TimeSpan>(TaskCreationOptions);
 
                 waitItemSortedList.Add(waitItemTracker, waitItemTracker);
                 if (cancellationToken.CanBeCanceled)
@@ -260,7 +266,7 @@ namespace Mosaic.ToolsLib.Tasks.DiscreteEventTimeBase
                 waitItemTracker.WaitUntilAfterSyntheticElapsedTime = waitUntilAfterDateTime.ToUniversalTime() - startedUtcDateTime;
                 waitItemTracker.WaitSeqNum = ++waitItemSeqNumGen;
                 waitItemTracker.CancellationToken = cancellationToken;
-                waitItemTracker.TCS_UDTDateTime = new TaskCompletionSource<DateTime>();
+                waitItemTracker.TCS_UDTDateTime = new TaskCompletionSource<DateTime>(TaskCreationOptions);
 
                 waitItemSortedList.Add(waitItemTracker, waitItemTracker);
                 if (cancellationToken.CanBeCanceled)
@@ -280,7 +286,7 @@ namespace Mosaic.ToolsLib.Tasks.DiscreteEventTimeBase
                 waitItemTracker.WaitUntilAfterSyntheticElapsedTime = waitUntilAfterQpcTimestamp - startedQpcTimeStamp;
                 waitItemTracker.WaitSeqNum = ++waitItemSeqNumGen;
                 waitItemTracker.CancellationToken = cancellationToken;
-                waitItemTracker.TCS_QpcTimeStamp = new TaskCompletionSource<QpcTimeStamp>();
+                waitItemTracker.TCS_QpcTimeStamp = new TaskCompletionSource<QpcTimeStamp>(TaskCreationOptions);
 
                 waitItemSortedList.Add(waitItemTracker, waitItemTracker);
                 if (cancellationToken.CanBeCanceled)
