@@ -26,6 +26,7 @@ using Mosaic.ToolsLib.MDRF2.Common;
 using Mosaic.ToolsLib.MessagePackUtils;
 
 using MosaicLib;
+using MosaicLib.File;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
@@ -626,8 +627,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public bool MapNVSRecordsToVCRecords { get; set; }
 
         /// <summary>
-        /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="MDRF2ObjectRecordGeneratorDelegate"/> methods that allow
-        /// the client to inject customized type deserialization and record behavior into the system.
+        /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="IMDRF2TypeNameHandler"/> instances that allow
+        /// the client to inject customized type deserialization and record generation behavior into the system.
         /// When a given TypeName value matches one of the default values, the default deserializer will be replaced with the given one.
         /// </summary>
         /// <remarks>
@@ -1086,10 +1087,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public MDRF2QueryFileSummary FileSummary { get; set; }
 
         /// <summary>Gives the set of inline index records that were obtained while reading the file.</summary>
-        public Common.InlineIndexRecord[] InlineIndexRecordArray { get; set; } 
+        public Common.InlineIndexRecord[] InlineIndexRecordArray { get; set; }
 
         /// <summary>Returns true if the FileInfo IsUsable and the FileSummary and InlineIndexRecordArray are both non-null</summary>
         public bool IsUsable { get => (FileInfo?.IsUsable == true && FileSummary != null && InlineIndexRecordArray != null); }
+
+        /// <summary>
+        /// Gives the (nominal) compression ratio for the corresponding <see cref="IMDRF2FileInfo"> <see cref="FileInfo"/>
+        /// as the <see cref="FileSummary"/>.BytesProcessed / <see cref="FileInfo"/>.FileLength;
+        /// </summary>
+        public double CompressionRatio => (FileSummary?.BytesProcessed ?? default) * ((double)(FileInfo?.FileLength ?? default)).SafeOneOver();
     }
 
     #endregion
@@ -1157,12 +1164,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion2)
         {
             Config = config.MakeCopyOfThis();
-            RootDirFullPath = System.IO.Path.GetFullPath(Config.RootDirPath);
+            RootDirFullPath = System.IO.Path.GetFullPath(Config.RootDirPath).CreateDirectoryIfNeeded();
 
             ActionLoggingReference.Config = Config.ActionLoggingConfig;
-
-            if (!System.IO.Directory.Exists(RootDirFullPath))
-                System.IO.Directory.CreateDirectory(RootDirFullPath);
 
             QueryLogger = new Logging.Logger($"{PartID}.query");
 
@@ -2585,7 +2589,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         private readonly NamedValueSet InlineMapUnionNVS = new NamedValueSet();
         private readonly NamedValueSet NonSpecMetaNVS = new NamedValueSet();
 
-        private static readonly MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
+        private readonly MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
 
         public void Dispose()
         {

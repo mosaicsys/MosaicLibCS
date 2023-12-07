@@ -475,14 +475,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
 
         /// <summary>
-        /// Initializes/Updates the given instance using the given <paramref name="qpcTimeStamp"/>, <paramref name="fileDeltaTimeStamp"/>, <paramref name="dtNow"/> normally in UTC format, <paramref name="utcTimeSince1601"/> and  optional <paramref name="useTZI"/>.
+        /// Initializes/Updates the given instance using the given <paramref name="qpcTimeStamp"/>, <paramref name="fileDeltaTimeStamp"/>, <paramref name="utcTimeSince1601"/> and optional <paramref name="useTZI"/>.
         /// When <paramref name="useTZI"/> is given as null (the default), TimeZoneInfo.Local will be used in its place.
         /// </summary>
-        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, DateTime dtNow, double utcTimeSince1601, TimeZoneInfo useTZI = null)
+        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, double utcTimeSince1601, TimeZoneInfo useTZI = null)
+        {
+            return UpdateFrom(qpcTimeStamp, fileDeltaTimeStamp, utcTimeSince1601.GetDateTimeFromUTCTimeSince1601(), utcTimeSince1601, useTZI: useTZI);
+        }
+
+        /// <summary>
+        /// Initializes/Updates the given instance using the given <paramref name="qpcTimeStamp"/>, <paramref name="fileDeltaTimeStamp"/>, <paramref name="dtNowUTC"/> normally in UTC format, <paramref name="utcTimeSince1601"/> and optional <paramref name="useTZI"/>.
+        /// When <paramref name="useTZI"/> is given as null (the default), TimeZoneInfo.Local will be used in its place.
+        /// </summary>
+        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, DateTime dtNowUTC, double utcTimeSince1601, TimeZoneInfo useTZI = null)
         {
             useTZI = useTZI ?? TimeZoneInfo.Local;
-            var isDST = useTZI.IsDaylightSavingTime(dtNow);
-            var utcOffset = useTZI.GetUtcOffset(dtNow);
+            var isDST = useTZI.IsDaylightSavingTime(dtNowUTC);
+            var utcOffset = useTZI.GetUtcOffset(dtNowUTC);
 
             BlockDeltaTimeStamp = fileDeltaTimeStamp;
             QPCTime = qpcTimeStamp.Time;

@@ -307,18 +307,26 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 try
                 {
                     InstanceDataCollection instanceDataCollection = categorySample[pcs.CounterName];
-                    InstanceData instanceData = instanceDataCollection[pcs.InstanceName.MapNullToEmpty()];      // use empty string for counters that only have one value
+                    InstanceData instanceData = (instanceDataCollection != null) ? instanceDataCollection[pcs.InstanceName.MapNullToEmpty()] : null;      // use empty string for counters that only have one value
 
-                    CounterSample counterSample = instanceData.Sample;
+                    if (instanceData != null)
+                    {
+                        CounterSample counterSample = instanceData.Sample;
 
-                    if (!useRawPerfCtrValue)
-                        gpInfo.VC = new ValueContainer(CounterSample.Calculate(lastCounterSample, counterSample));
+                        if (!useRawPerfCtrValue)
+                            gpInfo.VC = CounterSample.Calculate(lastCounterSample, counterSample).CreateVC();
+                        else
+                            gpInfo.VC = counterSample.RawValue.CreateVC();
+
+                        lastCounterSample = counterSample;
+
+                        logExceptionElevationHoldoffTimer.StopIfNeeded();
+                    }
                     else
-                        gpInfo.VC = new ValueContainer(counterSample.RawValue);
-
-                    lastCounterSample = counterSample;
-
-                    logExceptionElevationHoldoffTimer.StopIfNeeded();
+                    {
+                        gpInfo.VC = ValueContainer.Empty;
+                        lastCounterSample = CounterSample.Empty;
+                    }
                 }
                 catch (System.Exception ex)
                 {

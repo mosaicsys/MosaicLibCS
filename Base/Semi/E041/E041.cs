@@ -538,6 +538,9 @@ namespace MosaicLib.Semi.E041
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
     public struct ANSeqAndTimeInfo : IEquatable<ANSeqAndTimeInfo>
     {
+        /// <summary>Returns an <see cref="ANSeqAndTimeInfo"/> instance with its <see cref="ANSeqAndTimeInfo.DateTime"/> initialized to <see cref="Dates.OneDayAfterZeroUTC"/> which can be safely serialized and deserialized in all timezones</summary>
+        public static ANSeqAndTimeInfo SafeDefault { get { return new ANSeqAndTimeInfo() { DateTime = Dates.OneDayAfterZeroUTC }; } }
+
         /// <summary>This gives the sequence number as recorded by the ANManager's at the time that this state object was generated (or last updated)</summary>
         [DataMember(Order = 100)]
         public ulong SeqNum { get; set; }
@@ -638,7 +641,8 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state</summary>
         [DataMember(Order = 500)]
-        public ANSeqAndTimeInfo SeqAndTimeInfo { get; set; }
+        public ANSeqAndTimeInfo SeqAndTimeInfo { get { return _SeqAndTimeInfo; } set { _SeqAndTimeInfo = value; } }
+        private ANSeqAndTimeInfo _SeqAndTimeInfo = ANSeqAndTimeInfo.SafeDefault;
 
         /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state from non-signaling to signaling (from Off to any of the On states)s</summary>
         [DataMember(Order = 600)]

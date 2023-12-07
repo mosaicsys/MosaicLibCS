@@ -820,6 +820,10 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public bool Equals(E039ObjectID other)
         {
+            // if other is null (this one clearly is not) then they are not equal
+            if (other == null) 
+                return false;
+
             // if the stored Name or Type do not match then they are not equal
             if (_name != other._name || _type != other._type)
                 return false;
@@ -3308,7 +3312,7 @@ namespace MosaicLib.Semi.E039
             ObjPublisher = objPublisher;
 
             if (ObjPublisher != null)
-                objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
+                objObserver = ObjPublisher.CreateRefObserver();
 
             this.infoFactoryDelegate = infoFactoryDelegate ?? (obj => default(TObjectInfoType));
 

@@ -261,10 +261,9 @@ namespace MosaicLib.Modular.Common
         private static readonly ValueContainer _null = default(ValueContainer).SetToNullObject();
 
         /// <summary>
-        /// Returns an ValueContainer with cvt set to ContainerStorageType.None
+        /// Returns an <see cref="ValueContainer"/> with cvt set to <see cref="ContainerStorageType.None"/>.  This is the same as <see langword="default"/>(<see cref="ValueContainer"/>).
         /// </summary>
-        public static ValueContainer Empty { get { return _empty; } }
-        private static readonly ValueContainer _empty = default(ValueContainer).SetToEmpty();
+        public static ValueContainer Empty { get { return default(ValueContainer); } }
 
         #endregion
 
@@ -2399,10 +2398,16 @@ namespace MosaicLib.Modular.Common
 
             if (IsNull)
             {
-                if (cvt == ContainerStorageType.Object)
-                    return "[Null]";
-                else
-                    return "[Null:{0}]".CheckedFormat(cvt);
+                switch (cvt)
+                {
+                    case ContainerStorageType.Object: return "[Null]";
+                    case ContainerStorageType.A: return "[Null:A]";
+                    case ContainerStorageType.L: return "[Null:L]";
+                    case ContainerStorageType.LS: return "[Null:LS]";
+                    case ContainerStorageType.NV: return "[Null:NV]";
+                    case ContainerStorageType.NVS: return "[Null:NVS]";
+                    default: return "[Null:{0}]".CheckedFormat(cvt);
+                }
             }
 
             switch (cvt)
@@ -3241,64 +3246,207 @@ namespace MosaicLib.Modular.Common
             return fallbackValue;
         }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.Bo</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.Bo"/></summary>
         public static ValueContainer CreateVC(this bool value) { return ValueContainer.CreateBo(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I1</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I1"/></summary>
         public static ValueContainer CreateVC(this sbyte value) { return ValueContainer.CreateI1(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I2</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I2"/></summary>
         public static ValueContainer CreateVC(this short value) { return ValueContainer.CreateI2(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I4</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I4"/></summary>
         public static ValueContainer CreateVC(this int value) { return ValueContainer.CreateI4(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I8</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I8"/></summary>
         public static ValueContainer CreateVC(this long value) { return ValueContainer.CreateI8(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U1</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U1"/></summary>
         public static ValueContainer CreateVC(this byte value) { return ValueContainer.CreateU1(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U2</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U2"/></summary>
         public static ValueContainer CreateVC(this ushort value) { return ValueContainer.CreateU2(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U4</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U4"/></summary>
         public static ValueContainer CreateVC(this uint value) { return ValueContainer.CreateU4(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U8</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U8"/></summary>
         public static ValueContainer CreateVC(this ulong value) { return ValueContainer.CreateU8(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.F4</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F4"/></summary>
         public static ValueContainer CreateVC(this float value) { return ValueContainer.CreateF4(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.F8</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F8"/></summary>
         public static ValueContainer CreateVC(this double value) { return ValueContainer.CreateF8(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.DateTime</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.DateTime"/></summary>
         public static ValueContainer CreateVC(this DateTime value) { return ValueContainer.CreateDT(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.TimeStamp</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.TimeSpan"/></summary>
         public static ValueContainer CreateVC(this TimeSpan value) { return ValueContainer.CreateTS(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.A</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.Bo"/></summary>
+        public static ValueContainer CreateVC(this bool ? value) { return (value != null) ? ValueContainer.CreateBo(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I1"/></summary>
+        public static ValueContainer CreateVC(this sbyte ? value) { return (value != null) ? ValueContainer.CreateI1(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I2"/></summary>
+        public static ValueContainer CreateVC(this short ? value) { return (value != null) ? ValueContainer.CreateI2(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I4"/></summary>
+        public static ValueContainer CreateVC(this int ? value) { return (value != null) ? ValueContainer.CreateI4(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I8"/></summary>
+        public static ValueContainer CreateVC(this long ? value) { return (value != null) ? ValueContainer.CreateI8(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U1"/></summary>
+        public static ValueContainer CreateVC(this byte ? value) { return (value != null) ? ValueContainer.CreateU1(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U2"/></summary>
+        public static ValueContainer CreateVC(this ushort ? value) { return (value != null) ? ValueContainer.CreateU2(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U4"/></summary>
+        public static ValueContainer CreateVC(this uint ? value) { return (value != null) ? ValueContainer.CreateU4(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U8"/></summary>
+        public static ValueContainer CreateVC(this ulong ? value) { return (value != null) ? ValueContainer.CreateU8(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F4"/></summary>
+        public static ValueContainer CreateVC(this float ? value) { return (value != null) ? ValueContainer.CreateF4(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F8"/></summary>
+        public static ValueContainer CreateVC(this double ? value) { return (value != null) ? ValueContainer.CreateF8(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.DateTime"/></summary>
+        public static ValueContainer CreateVC(this DateTime ? value) { return (value != null) ? ValueContainer.CreateDT(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.TimeSpan"/></summary>
+        public static ValueContainer CreateVC(this TimeSpan ? value) { return (value != null) ? ValueContainer.CreateTS(value.GetValueOrDefault()) : default(ValueContainer); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.A"/></summary>
         public static ValueContainer CreateVC(this string value) { return ValueContainer.CreateA(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.LS</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.LS"/></summary>
         public static ValueContainer CreateVC(this IEnumerable<string> value) { return ValueContainer.CreateLS(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.L</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.L"/></summary>
         public static ValueContainer CreateVC(this IEnumerable<ValueContainer> value) { return ValueContainer.CreateL(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.NVS</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.NVS"/></summary>
         public static ValueContainer CreateVC(this INamedValueSet value) { return ValueContainer.CreateNVS(value); }
 
-        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.NV</summary>
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.NV"/></summary>
         public static ValueContainer CreateVC(this INamedValue value) { return ValueContainer.CreateNV(value); }
 
         /// <summary>If the given <paramref name="vc"/> is non-empty then its value is returned, otherwise the value of the <paramref name="mapEmptyToVC"/> is returned.</summary>
         public static ValueContainer MapEmptyTo(this ValueContainer vc, ValueContainer mapEmptyToVC)
         {
             return !vc.IsEmpty ? vc : mapEmptyToVC;
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is non-null then its value is returned, otherwise <paramref name="mapNullTo"/> is returned in its place.</summary>
+        public static ValueContainer MapNullTo(this ValueContainer vc, ValueContainer mapNullTo = default(ValueContainer))
+        {
+            return !vc.IsNull ? vc : mapNullTo;
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is non-null and non-empty then its value is returned, otherwise <paramref name="mapNullOrEmptyTo"/> is returned in its place.</summary>
+        public static ValueContainer MapNullOrEmptyTo(this ValueContainer vc, ValueContainer mapNullOrEmptyTo)
+        {
+            return !(vc.IsNullOrEmpty) ? vc : mapNullOrEmptyTo;
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueBi(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static byte? GetValueNullableBi(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (byte?)null : vc.GetValueBi(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueBo(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static bool? GetValueNullableBo(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (bool?) null : vc.GetValueBo(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI1(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static sbyte? GetValueNullableI1(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (sbyte?)null : vc.GetValueI1(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI2(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static short? GetValueNullableI2(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (short?)null : vc.GetValueI2(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static int? GetValueNullableI4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (int?)null : vc.GetValueI4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static long? GetValueNullableI8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (long?)null : vc.GetValueI8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU1(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static byte? GetValueNullableU1(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (byte?)null : vc.GetValueU1(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU2(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static ushort? GetValueNullableU2(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (ushort?)null : vc.GetValueU2(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static uint? GetValueNullableU4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (uint?)null : vc.GetValueU4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static ulong? GetValueNullableU8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (ulong?)null : vc.GetValueU8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueF4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static float? GetValueNullableF4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (float?)null : vc.GetValueF4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueF8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static double? GetValueNullableF8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (double?)null : vc.GetValueF8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueTS(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static TimeSpan? GetValueNullableTS(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (TimeSpan?)null : vc.GetValueTS(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueDT (bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        public static DateTime? GetValueNullableDT(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            return vc.IsNullOrEmpty ? (DateTime?)null : vc.GetValueDT(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+        }
+
+        /// <summary>If the given <paramref name="vc"/> contains an NVS, this method converts it to a kvc set and returns it.</summary>
+        public static ICollection<KeyValuePair<string, ValueContainer>> ConvertToKVCSet(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true, bool mapNullToEmpty = true)
+        {
+            var nvs = vc.GetValueNVS(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
+
+            return nvs.ConvertToKVCSet(mapNullToEmpty: mapNullToEmpty);
         }
     }
 
@@ -6435,6 +6583,19 @@ namespace MosaicLib.Modular.Common
             var nv = nvs[name];
             nvs.Remove(name);
             return nv;
+        }
+
+        /// <summary>
+        /// Returns the contents of the given <paramref name="nvs"/> as a kvc set.
+        /// </summary>
+        public static ICollection<KeyValuePair<string, ValueContainer>> ConvertToKVCSet(this INamedValueSet nvs, bool mapNullToEmpty = true)
+        {
+            if (nvs != null)
+                return nvs.Select(nv => KVP.Create(nv.Name, nv.VC)).ToArray();
+            else if (mapNullToEmpty)
+                return EmptyArrayFactory<KeyValuePair<string, ValueContainer>>.Instance;
+            else
+                return null;
         }
     }
 

@@ -338,7 +338,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         private readonly CompressorSelect compressorSelect;
         private readonly bool writeObjectsUsingTypeID;
-        private static readonly MessagePack.MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
+        private readonly MessagePackSerializerOptions mpOptions = Instances.VCDefaultMPOptions;
 
         public void Release()
         {
@@ -1127,6 +1127,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                     InnerWriteURFBAndKeyIDVariantItem(ref mpWriter, derivedUserRowFlagBits, derivedKeyID);
                     InnerWriteObjectKnownTypeAsNameOrID(ref mpWriter, typeInfo);
+
                     typeInfo.TypeNameHandler.Serialize(ref mpWriter, obj, mpOptions);
 
                     mpWriter.Flush();
@@ -1592,7 +1593,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 {
                     UpdateUTCTimeSince1601IfNeeded(ref dtPair);
 
-                    var localDateTime = dtPair.DateTime.ToLocalTime();
+                    var localDateTime = dtPair.DateTimeLocal;
                     int dayOfYear = localDateTime.DayOfYear;
                     bool dayOfYearChanged = (dayOfYear != fileReferenceDayOfYear);
 
@@ -1616,7 +1617,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             {
                 UpdateUTCTimeSince1601IfNeeded(ref dtPair);
 
-                DateTime utcDateTime = dtPair.DateTime;
+                DateTime utcDateTime = dtPair.DateTimeUTC;
                 DateTime localDateTime = utcDateTime.ToLocalTime();
 
                 TimeZoneInfo localTZ = TimeZoneInfo.Local;
@@ -1797,7 +1798,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                 var fileDeltaTime = dtPair.ConvertQPCToFDT(ref fileReferenceQPCDTPair);
 
-                dtInfo.UpdateFrom(dtPair.QpcTimeStamp, fileDeltaTime, dtPair.DateTime, dtPair.UTCTimeSince1601);
+                dtInfo.UpdateFrom(dtPair.QpcTimeStamp, fileDeltaTime, dtPair.UTCTimeSince1601);
 
                 mpWriter.SerializeAsVC(dtInfo.UpdateNVSFromThis(dateTimeBlockNVSet));
             }

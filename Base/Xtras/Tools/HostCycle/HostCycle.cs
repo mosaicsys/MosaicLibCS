@@ -109,7 +109,7 @@ namespace HostCycle
         private void SetupIVAs()
         {
             ivaEqpInfoNVS = ivi.GetValueAccessor($"{PartID}.EqpInfoNVS").Set(NamedValueSet.Empty);
-            ivaPPIDArray = ivi.GetValueAccessor($"{PartID}.PPIDArray").Set(EmptyArrayFactory<string>.Instance);
+            ivaPPIDArray = ivi.GetValueAccessor($"{PartID}.PPIDArray").Set(new string[] { "<None>" });
 
             ivaTermMesgToHostAvailable = ivi.GetValueAccessor<bool>($"{PartID}.TermMesgToHost.Available").Set(false);
             ivaTermMesgToHostBody = ivi.GetValueAccessor($"{PartID}.TermMesgToHost.Body").Set(null);
@@ -222,16 +222,15 @@ namespace HostCycle
 
             StringScanner scanner = new StringScanner(serviceName);
 
-            if (scanner.MatchToken("LP", skipTrailingWhiteSpace: false, requireTokenEnd: false))
+            if (scanner.MatchToken("LPn"))
             {
-                int lpNum = -1;
+                int portID = npv["PortID"].VC.GetValueI4(rethrow: true);
 
-                scanner.ParseValue(out lpNum);
-                int lpIdx = lpNum - 1;
+                int lpIdx = portID - 1;
                 var lpInstance = lpCycleSet.SafeAccess(lpIdx);
 
                 if (lpInstance == null)
-                    return "The given LPNum {0} is not valid in '{1}'".CheckedFormat(lpNum, serviceName);
+                    return $"The given PortID {portID} is not valid in '{serviceName}'";
 
                 var prevICF = lpCycleICFSet.SafeAccess(lpIdx);
                 if (prevICF != null)
@@ -508,18 +507,21 @@ namespace HostCycle
             return ValueContainer.Empty;
         }
 
-        public IList<ValueContainer> ReadSVIDValues(params ValueContainer[] svidParamsArray)
+        public (string ec, IList<ValueContainer> vidValues) ReadSVIDValues(params ValueContainer[] svidParamsArray)
         {
             if (svidParamsArray.IsNullOrEmpty())
-                return EmptyArrayFactory<ValueContainer>.Instance;
+                return ("", EmptyArrayFactory<ValueContainer>.Instance);
+
+
+            string ec = string.Empty;
 
             try
             {
                 var mesg = port.CreateMessage("S1/F3W").SetContentBytes(new VCB() { VC = ValueContainer.Create(svidParamsArray) });
-                string ec = mesg.Send().Run();
+                ec = mesg.Send().Run();
 
                 if (ec.IsNullOrEmpty())
-                    return mesg.Reply.GetDecodedContents().GetValue<IList<ValueContainer>>(rethrow: true);
+                    return (ec, mesg.Reply.GetDecodedContents().GetValue<IList<ValueContainer>>(rethrow: true));
             }
             catch (System.Exception ex)
             {
@@ -527,7 +529,7 @@ namespace HostCycle
                 Log.Debug.Emit("{0} {1} failed with unexpected exception: {2}", CurrentMethodName, svidsInfoStr, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
             }
 
-            return EmptyArrayFactory<ValueContainer>.Instance;
+            return (ec, EmptyArrayFactory<ValueContainer>.Instance);
         }
 
         private string RunS2F41RemoteCmd(string cmd, INamedValueSet nvs = null)
@@ -559,9 +561,9 @@ namespace HostCycle
         {
             base.PerformMainLoopService();
 
-            if (lpCycleICFSet.Any(icf => icf != null && icf.ActionState.IsComplete))
+            if (lpCycleICFSet.Any(icf => icf?.ActionState?.IsComplete == true))
             {
-                lpCycleICFSet.DoForEach((icf, idx) => { if (icf.ActionState.IsComplete) lpCycleICFSet[idx] = null; });
+                lpCycleICFSet.DoForEach((icf, idx) => { if (icf?.ActionState?.IsComplete == true) lpCycleICFSet[idx] = null; });
             }
 
             ServicePendingEvents();
@@ -643,6 +645,9 @@ namespace HostCycle
 
             [ConfigItem]
             public bool CreateJobWithTemporaryRecipe { get; set; } = false;
+
+            [ConfigItem]
+            public TimeSpan CyclePreCarrierReCreateDelay { get; set; }
         }
 
         public readonly Config config = new Config();
@@ -1769,7 +1774,7 @@ namespace HostCycle
                     )).ToArray();
 
                 // set the initial SVID iva values.
-                var svidValues = ReadSVIDValues(includeSVIArray.Select(svi => svi.SVID).ToArray());
+                var (_, svidValues) = ReadSVIDValues(includeSVIArray.Select(svi => svi.SVID).ToArray());
 
                 svidTraceIVAArray.Zip(svidValues, (iva, vc) => iva.VC = vc).DoForEach();
                 SVID_IVI.Set(svidTraceIVAArray);
@@ -2470,37 +2475,37 @@ namespace HostCycle
         public class State
         {
             [ValueSetItem]
-            public LTS LTS { get; set; }
+            public LTS LTS { get; set; }        // we can read this value from an SVID
             [ValueSetItem]
-            public string LTS_CarrierID { get; set; }
+            public string LTS_CarrierID { get; set; } = "";
             [ValueSetItem]
-            public AMS AMS { get; set; }
+            public AMS AMS { get; set; }        // we can read this value from an SVID
             [ValueSetItem]
-            public LRS LRS { get; set; }
+            public LRS LRS { get; set; }        // we can read this value from an SVID
             [ValueSetItem]
-            public LCAS LCAS { get; set; }
+            public LCAS LCAS { get; set; }        // we can read this value from an SVID
             [ValueSetItem]
-            public string LCAS_CarrierID { get; set; }
+            public string LCAS_CarrierID { get; set; } = "";        // we can read this value from an SVID
             [ValueSetItem]
             public CIDS CIDS { get; set; }
             [ValueSetItem]
-            public string CIDS_Reason { get; set; }
+            public string CIDS_Reason { get; set; } = "";
             [ValueSetItem]
-            public string CIDS_CarrierID { get; set; }
+            public string CIDS_CarrierID { get; set; } = "";
             [ValueSetItem]
             public CSMS CSMS { get; set; }
             [ValueSetItem]
-            public string CSMS_Reason { get; set; }
+            public string CSMS_Reason { get; set; } = "";
             [ValueSetItem]
-            public string CSMS_SlotMap { get; set; }
+            public string CSMS_SlotMap { get; set; } = "";
             [ValueSetItem]
-            public string CSMS_LocationID { get; set; }
+            public string CSMS_LocationID { get; set; } = "";
             [ValueSetItem]
             public CAS CAS { get; set; }
             [ValueSetItem]
-            public string CJID { get; set; }
+            public string CJID { get; set; } = "";
             [ValueSetItem]
-            public string CJState { get; set; }
+            public string CJState { get; set; } = "";
             [ValueSetItem]
             public string PJIDs { get { return string.Join(",", PJIDList); } set { } }
             public List<string> PJIDList = new List<string>();
@@ -2508,11 +2513,35 @@ namespace HostCycle
             public string PJStates { get { return string.Join(",", PRJobStateList.Select(prJobState => prJobState.ToString())); } set { } }
             public List<PRJobState> PRJobStateList = new List<PRJobState>();
             [ValueSetItem]
-            public string PPID { get; set; }
+            public string PPID { get; set; } = "";
             [ValueSetItem]
-            public string LastCarrierEventInfo { get; set; }
+            public string LastCarrierEventInfo { get; set; } = "";
             [ValueSetItem]
-            public string E090StateTally { get; set; }
+            public string E090StateTally { get; set; } = "";
+
+            public void ResetStateOnInitialize()
+            {
+                CIDS = CIDS.Undefined;
+                CIDS_Reason = "State has been reset";
+
+                CSMS = CSMS.Undefined;
+                CSMS_Reason = "State has been reset";
+                CSMS_SlotMap = "";
+                CSMS_LocationID = "";
+
+                CAS = CAS.Undefined;
+
+                CJID = "";
+                CJState = "State has been reset";
+
+                PJIDList.Clear();
+                PRJobStateList.Clear();
+
+                PPID = "";
+
+                LastCarrierEventInfo = "State has been reset";
+                E090StateTally = "State has been reset";
+            }
         }
 
         State state = new State();
@@ -2520,9 +2549,11 @@ namespace HostCycle
 
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
+            string ec = string.Empty;
+
             if (andInitialize)
             {
-                ReadPortStatesFromSVIDLists();
+                ec = ResetStateOnInitialize();
 
                 ivaCycleSelected.Set(false);
                 ivaRequestPause.Set(false);
@@ -2531,29 +2562,55 @@ namespace HostCycle
                 ivaRunNumber.Set("");
             }
 
-            return string.Empty;
+            return ec;
         }
 
-        private void ReadPortStatesFromSVIDLists()
+        public string ResetStateOnInitialize()
+        {
+            var ec = ReadPortStatesFromSVIDLists(setStateVSA: false, rethrow: false);      // AMS, LRS, LTS, LCAS, LCAS_CarrierID
+
+            state.ResetStateOnInitialize();
+
+            substInfoDictionary.Clear();
+            UpdateE090StateTally();
+
+            stateVSA.Set();
+
+            return ec;
+        }
+
+        private string ReadPortStatesFromSVIDLists(bool setStateVSA = true, bool rethrow = true)
         {
             int portIdx = lpNum - 1;
             var e087ids = parent.e087IDsConfig;
-            var vidValues = parent.ReadSVIDValues(new[]
+            var carrierIDSVID = e087ids.CarrierID_SVIDList.SafeAccess(portIdx).GetValueNullableI4() ?? 0;
+            var haveCarrierIDSVID = carrierIDSVID != default;
+            var (ec, vidValues) = parent.ReadSVIDValues(new[]
                                     {
                                         e087ids.AccessMode_SVIDList.SafeAccess(portIdx),
                                         e087ids.LoadPortReserverationState_SVIDList.SafeAccess(portIdx),
                                         e087ids.PortTransferState_SVIDList.SafeAccess(portIdx),
                                         e087ids.PortAssociationState_SVIDList.SafeAccess(portIdx),
-                                        e087ids.CarrierID_SVIDList.SafeAccess(portIdx)
-                                    });
+                                    }.ConditionalConcatItems(haveCarrierIDSVID, carrierIDSVID.CreateVC())
+                                    .ToArray());
 
-            state.AMS = vidValues.SafeAccess(0).GetValue<AMS>(rethrow: true);
-            state.LRS = vidValues.SafeAccess(1).GetValue<LRS>(rethrow: true);
-            state.LTS = vidValues.SafeAccess(2).GetValue<LTS>(rethrow: true);
-            state.LCAS = vidValues.SafeAccess(3).GetValue<LCAS>(rethrow: true);
-            state.LCAS_CarrierID = vidValues.SafeAccess(4).GetValue<string>(rethrow: true);
+            state.AMS = vidValues.SafeAccess(0).GetValue<AMS?>(rethrow: rethrow) ?? AMS.Undefined;
+            state.LRS = vidValues.SafeAccess(1).GetValue<LRS?>(rethrow: rethrow) ?? LRS.Undefined;
+            state.LTS = vidValues.SafeAccess(2).GetValue<LTS?>(rethrow: rethrow) ?? LTS.Undefined;
+            state.LCAS = vidValues.SafeAccess(3).GetValue<LCAS?>(rethrow: rethrow) ?? LCAS.Undefined;
+            var carrierID = vidValues.SafeAccess(4).GetValue<string>(rethrow: rethrow).MapNullToEmpty();
 
-            stateVSA.Set();
+            if (haveCarrierIDSVID)
+            {
+                state.CIDS_CarrierID = (state.CIDS != CIDS.IDNotRead && state.CIDS != CIDS.Undefined) ? carrierID : "";
+                state.LCAS_CarrierID = (state.LCAS == LCAS.Associated) ? carrierID : "";
+                state.LTS_CarrierID = (state.LTS == LTS.TransferBlocked || state.LTS == LTS.ReadyToUnload) ? carrierID : "";
+            }
+
+            if (setStateVSA)
+                stateVSA.Set();
+
+            return ec;
         }
 
         protected override void PerformMainLoopService()
@@ -3027,36 +3084,36 @@ namespace HostCycle
 
             ReadPortStatesFromSVIDLists();
 
-            if (state.LCAS != LCAS.Associated || state.LCAS_CarrierID.IsNullOrEmpty())
-                return "{0} failed: there is not valid Carrier ID that is associated with this port".CheckedFormat(description);
-
-            var carrierID = state.LCAS_CarrierID;
+            var carrierID = state.CIDS_CarrierID;
 
             if (state.CIDS != CIDS.WaitingForHost)
-                return "{0} failed: cannot start unless CIDS is WaitingForHost [{1}]".CheckedFormat(description, state.CIDS);
+                return $"{description} failed: cannot start unless CIDS is WaitingForHost [{state.CIDS}]";
+
+            if (carrierID.IsNullOrEmpty())
+                return $"{description} failed: cannot start unless CIDS CarrierID is Non-empty [{state.CIDS}, '{state.CIDS}']";
 
             if (state.LTS != LTS.TransferBlocked)
-                return "{0} failed: cannot start unless LTS is TransferBlocked [{1}]".CheckedFormat(description, state.LTS);
+                return $"{description} failed: cannot start unless LTS is TransferBlocked [{state.LTS}]";
 
             string ec = string.Empty;
 
             ec = RunGenericS3F17(CARRIERACTION.ProceedWithCarrier, new NamedValueSet() { { "CarrierID", carrierID }, { "Capacity", (byte)25 } });
 
             if (ec.IsNeitherNullNorEmpty())
-                return "{0} failed: at attempt to issue PWC1: {1}".CheckedFormat(description, ec);
+                return $"{description} failed: at attempt to issue PWC1: {ec}";
 
             runNumber = 1;
-            ivaRunNumber.Set("{0}".CheckedFormat(runNumber));
+            ivaRunNumber.Set($"{runNumber}");
 
             for (; ; )
             {
-                Log.Signif.Emit("Starting Run {0}", runNumber);
+                Log.Signif.Emit($"Starting Run {runNumber}");
 
                 // wait until CSMS reaches waiting for host
                 ec = SpinUntil(ipf, () => state.CSMS == CSMS.WaitingForHost, timeLimit: (30.0).FromSeconds());
 
                 if (ec.IsNeitherNullNorEmpty())
-                    return "{0} failed: at wait for CSMS.WaitingForHost: {1} [{2} '{3}']".CheckedFormat(description, ec, state.CSMS, state.CSMS_SlotMap);
+                    return $"{description} failed: at wait for CSMS.WaitingForHost: {ec} [{state.CSMS} '{state.CSMS_SlotMap}']";
 
                 // generate content map using mix of LotIDs, and substrateID representations
                 var slotMapStr = state.CSMS_SlotMap;
@@ -3064,8 +3121,8 @@ namespace HostCycle
                 var slotNumArray = Enumerable.Range(1, slotMapArray.Length).ToArray();
                 var nonEmptySlotMapArray = slotMapArray.Select(slotState => slotState == SlotState.CorrectlyOccupied || slotState == SlotState.CrossSlotted || slotState == SlotState.DoubleSlotted).ToArray();
 
-                var substIDMapArray = nonEmptySlotMapArray.Zip(slotNumArray, (present, slotNum) => (!present) ? "" : ((slotNum % 2 == 1) ? "{0}.{1:d2}" : "{0}..{1:d3}").CheckedFormat(carrierID, slotNum)).ToArray();
-                var lotIDMapArray = nonEmptySlotMapArray.Zip(slotNumArray, (present, slotNum) => (!present) ? "" : ("Lot{0:d1}".CheckedFormat(((slotNum - 1) % 3) + 1))).ToArray();
+                var substIDMapArray = nonEmptySlotMapArray.Zip(slotNumArray, (present, slotNum) => (!present) ? "" : ((slotNum % 2 == 1) ? "HC_{0}.{1:d2}" : "HC_{0}_{1:d3}").CheckedFormat(carrierID, slotNum)).ToArray();
+                var lotIDMapArray = nonEmptySlotMapArray.Zip(slotNumArray, (present, slotNum) => (!present) ? "" : ("HC_Lot{0:d1}".CheckedFormat(((slotNum - 1) % 3) + 1))).ToArray();
 
                 var usableSlotsMapArray = slotMapArray.Select(slotState => slotState == SlotState.CorrectlyOccupied).ToArray();
 
@@ -3084,25 +3141,25 @@ namespace HostCycle
                 ec = RunGenericS3F17(CARRIERACTION.ProceedWithCarrier, new NamedValueSet() { { "CarrierID", carrierID }, { "Capacity", (byte)25 }, { "SlotMap", slotMapStr }, { "ContentMap", pwcContentMap.BuildContents() } });
 
                 if (ec.IsNeitherNullNorEmpty())
-                    return "{0} failed: at attempt to issue PWC2 during Run {1}: {2}".CheckedFormat(description, runNumber, ec);
+                    return $"{description} failed: at attempt to issue PWC2 during Run {runNumber}: {ec}";
 
                 // wait for CSMS verified
                 ec = SpinUntil(ipf, () => state.CSMS == CSMS.SlotMapVerificationOk, timeLimit: (30.0).FromSeconds());
 
                 if (ec.IsNeitherNullNorEmpty())
-                    return "{0} failed: at wait for CSMS.SlotMapVerificationOk: {1} [{2} '{3}']".CheckedFormat(description, ec, state.CSMS, state.CSMS_SlotMap);
+                    return $"{description} failed: at wait for CSMS.SlotMapVerificationOk: {ec} [{state.CSMS} '{state.CSMS_SlotMap}']";
 
                 // wait for substrates created
                 ec = SpinUntil(ipf, () => substStateTally.total == occupiedSubstCount, timeLimit: (5.0).FromSeconds());
 
                 if (ec.IsNeitherNullNorEmpty())
-                    return "{0} failed: at wait for Substrates to be created: {1} [have:{2} expected:{3}]".CheckedFormat(description, ec, substStateTally.total, occupiedSubstCount);
+                    return $"{description} failed: at wait for Substrates to be created: {ec} [have:{substStateTally.total} expected:{occupiedSubstCount}]";
 
                 if (correctlyOccupiedSubstCount > 0)
                 {
                     // Create PJ and then CJ
-                    string cjID = "HostRun_LP{0}_CJ{1:d3}".CheckedFormat(lpNum, runNumber);
-                    string pjID = "HostRun_LP{0}_PJ{1:d3}".CheckedFormat(lpNum, runNumber);
+                    string cjID = $"HostRun_LP{lpNum}_CJ{runNumber:d3}";
+                    string pjID = $"HostRun_LP{lpNum}_PJ{runNumber:d3}";
 
                     // future: support selection of autoStart values
 
@@ -3133,11 +3190,11 @@ namespace HostCycle
                             var acka = ackaListVC.SafeAccess(0).GetValue<ACKA>(rethrow: true, defaultValue: ACKA.False);
 
                             if (acka != ACKA.True)
-                                ec = "{0} gave {1}".CheckedFormat(s16F11Mesg, s16F11Mesg.Reply);
+                                ec = $"{s16F11Mesg} gave {s16F11Mesg.Reply}";
                         }
 
                         if (ec.IsNeitherNullNorEmpty())
-                            return "{0} failed: at PJ creation '{1}': {2}".CheckedFormat(description, pjID, ec);
+                            return $"{description} failed: at PJ creation '{pjID}': {ec}";
 
                         state.PJIDList.Add(pjID);
                         state.PRJobStateList.Add(PRJobState.Created);
@@ -3177,11 +3234,11 @@ namespace HostCycle
                             var objAck = objAckListVC.SafeAccess(0).GetValue<OBJACK>(rethrow: true, defaultValue: OBJACK.Denied_Internal);
 
                             if (objAck != OBJACK.Success)
-                                ec = "{0} gave {1}".CheckedFormat(s14F9Mesg, s14F9Mesg.Reply);
+                                ec = $"{s14F9Mesg} gave {s14F9Mesg.Reply}";
                         }
 
                         if (ec.IsNeitherNullNorEmpty())
-                            return "{0} failed: at CJ creation '{1}': {2}".CheckedFormat(description, cjID, ec);
+                            return $"{description} failed: at CJ creation '{cjID}': {ec}";
 
                         state.CJID = cjID;
                         state.CJState = "-Created-";
@@ -3203,7 +3260,7 @@ namespace HostCycle
                                 ec = RunS16F5PRCmd(pjIDToStart, PRCMDNAME.START);
 
                                 if (ec.IsNeitherNullNorEmpty())
-                                    return "{0} failed: at PJ START for '{1}': {2}".CheckedFormat(description, pjIDToStart, ec);
+                                    return $"{description} failed: at PJ START for '{pjIDToStart}': {ec}";
                             }
                         }
 
@@ -3215,7 +3272,7 @@ namespace HostCycle
                             ec = RunS16F27CtlJobCmd(ctlJobCmd);
 
                             if (ec.IsNeitherNullNorEmpty())
-                                return "{0} failed: at CJStart for '{1}': {2}".CheckedFormat(description, state.CJID, ec);
+                                return $"{description} failed: at CJStart for '{state.CJID}': {ec}";
                         }
 
                         if (state.CJState.StartsWith("Complete"))
@@ -3232,7 +3289,7 @@ namespace HostCycle
                             {
                                 if (ivaCycleSelected.Value)
                                 {
-                                    Log.Warning.Emit("Cycling stopped on run {0} [PRStates: {1} sts:{2} sps:{3}]", runNumber, state.PJStates, substStateTally.STSToString(), substStateTally.SPSToString());
+                                    Log.Warning.Emit($"Cycling stopped on run {runNumber} [PRStates: {state.PJStates} sts:{substStateTally.STSToString()} sps:{substStateTally.SPSToString()}]");
                                     ivaCycleSelected.Set(false);
                                 }
 
@@ -3242,7 +3299,7 @@ namespace HostCycle
 
                         if (ivaRequestAbort.Value)
                         {
-                            Log.Warning.Emit("Cycling aborted by request on run {0}: [PRStates: {1} sts:{2} sps:{3}]", runNumber, state.PJStates, substStateTally.STSToString(), substStateTally.SPSToString());
+                            Log.Warning.Emit($"Cycling aborted by request on run {runNumber}: [PRStates: {state.PJStates} sts:{substStateTally.STSToString()} sps:{substStateTally.SPSToString()}]");
                             ivaCycleSelected.Set(false);
                             break;
                         }
@@ -3260,7 +3317,7 @@ namespace HostCycle
                     ec = RunGenericS3F17(CARRIERACTION.CancelCarrier, new NamedValueSet() { { "CarrierID", carrierID } });
 
                     if (ec.IsNeitherNullNorEmpty())
-                        return "{0} failed: in Run {1} at attempt to issue CancelCarrier: {1}".CheckedFormat(description, runNumber, ec);
+                        return $"{description} failed: in Run {runNumber} at attempt to issue CancelCarrier: {ec}";
                 }
 
                 bool aborting = ivaRequestAbort.Value;
@@ -3268,19 +3325,19 @@ namespace HostCycle
                 // wait LTS to reach ReadyToUnload (PJs and CJs have already reached a completion state)
                 if (!aborting)
                 {
-                    ec = SpinUntil(ipf, () => state.LTS == LTS.ReadyToUnload || state.LTS == LTS.ReadyToLoad || state.CIDS == CIDS.IDVerificationFailed || state.CSMS == CSMS.SlotMapVerificationFailed || ivaRequestAbort.Value);
+                    ec = SpinUntil(ipf, () => state.LTS == LTS.ReadyToUnload || state.LTS == LTS.ReadyToLoad || state.CIDS == CIDS.IDVerificationFailed || state.CSMS == CSMS.SlotMapVerificationFailed || ivaRequestAbort.Value, timeLimit: (30.0).FromSeconds());
 
                     if (ec.IsNullOrEmpty() && state.LTS != LTS.ReadyToUnload)
-                        ec = "Unexpected LTS:{0}, CIDs:{1}, CSMS:{2}".CheckedFormat(state.LTS, state.CIDS, state.CSMS);
+                        ec = $"Unexpected LTS:{state.LTS}, CIDs:{state.CIDS}, CSMS:{state.CSMS}";
 
                     if (ec.IsNeitherNullNorEmpty())
-                        return "{0} failed: in Run {1} at wait until LTS.ReadToUnload: {1}".CheckedFormat(description, runNumber, ec);
+                        return $"{description} failed: in Run {runNumber} at wait until LTS.ReadToUnload: {ec}";
 
-                    Log.Signif.Emit("Completed at Run {0} [{1} {2}, {3} {4}, sts:({5}) sps:({6})]", runNumber, state.CJID, state.CJState, state.PJIDs, state.PJStates, substStateTally.STSToString(), substStateTally.SPSToString());
+                    Log.Signif.Emit($"Completed at Run {runNumber} [{state.CJID} {state.CJState}, {state.PJIDs} {state.PJStates}, sts:({substStateTally.STSToString()}) sps:({substStateTally.SPSToString()})]");
                 }
                 else
                 {
-                    Log.Signif.Emit("Aborted at Run {0} [{1} {2}, {3} {4}, sts:({5}) sps:({6})]", runNumber, state.CJID, state.CJState, state.PJIDs, state.PJStates, substStateTally.STSToString(), substStateTally.SPSToString());
+                    Log.Signif.Emit($"Aborted at Run {runNumber} [{state.CJID} {state.CJState}, {state.PJIDs} {state.PJStates}, sts:({substStateTally.STSToString()}) sps:({substStateTally.SPSToString()})]");
                 }
 
                 // if Cycle is requested (and PJs and CJ have reached success state?) then issue ReCreate1 and loop back to top.
@@ -3290,13 +3347,23 @@ namespace HostCycle
                     return string.Empty;
                 }
 
+                var waitTimer = new QpcTimer() { TriggerInterval = parent.config.CyclePreCarrierReCreateDelay, SelectedBehavior = QpcTimer.Behavior.ZeroTriggerIntervalRunsTimer }.Start();
+
+                while (!waitTimer.IsTriggered)
+                {
+                    WaitForSomethingToDo();
+                    PerformMainLoopService();
+                }
+
+                Log.Debug.Emit($"Issuing CarrierReCreate: CAS:{state.CAS} LTS:{state.LTS} CIDS:{state.CIDS} CSMS:{state.CSMS} LCAS:{state.LCAS} CID:{state.LCAS_CarrierID}");
+
                 ec = RunGenericS3F17(CARRIERACTION.CarrierReCreate, new NamedValueSet() { { "CarrierID", carrierID }, { "Capacity", (byte)25 } });
 
                 if (ec.IsNeitherNullNorEmpty())
-                    return "{0} failed: at attempt to issue ReCreate1: {1}".CheckedFormat(description, ec);
+                    return $"{description} failed: at attempt to issue ReCreate1: {ec}";
 
                 runNumber++;
-                ivaRunNumber.Set("{0}".CheckedFormat(runNumber));
+                ivaRunNumber.Set($"{runNumber}");
             }
         }
 
@@ -3514,7 +3581,7 @@ namespace HostCycle
         private void HandleE87LTSEventReport(EventInfo eventInfo, EventReport eventReport, INamedValueSet nvs)
         {
             state.LTS = nvs["LTS"].VC.GetValue<LTS>(rethrow: true);
-            state.LTS_CarrierID = ((state.LTS == LTS.ReadyToUnload) ? nvs["CID"].VC.GetValue<string>(rethrow: true) : string.Empty);
+            state.LTS_CarrierID = ((state.LTS == LTS.ReadyToUnload) ? nvs["CID"].VC.GetValue<string>(rethrow: true).MapNullToEmpty() : string.Empty);
 
             stateVSA.Set();
         }
@@ -3656,7 +3723,7 @@ namespace HostCycle
         private void HandleE87LCASEventReport(EventInfo eventInfo, EventReport eventReport, INamedValueSet nvs)
         {
             state.LCAS = nvs["LCAS"].VC.GetValue<LCAS>(rethrow: true);
-            state.LCAS_CarrierID = nvs["CID"].VC.GetValue<string>(rethrow: true);
+            state.LCAS_CarrierID = nvs["CID"].VC.GetValue<string>(rethrow: true).MapNullToEmpty();
 
             stateVSA.Set();
         }
@@ -3796,13 +3863,13 @@ namespace HostCycle
                 if (extinctionEvent && substIsKnownHere)
                 {
                     substInfoDictionary.Remove(substID);
-                    UpdateTally();
+                    UpdateE090StateTally();
                     stateVSA.Set();
                 }
                 else if (creationEvent || substIsKnownHere)
                 {
                     substInfoDictionary[substID] = substInfo;
-                    UpdateTally();
+                    UpdateE090StateTally();
                     stateVSA.Set();
                 }
                 else if (!extinctionEvent)
@@ -3812,7 +3879,7 @@ namespace HostCycle
             }
         }
 
-        private void UpdateTally()
+        private void UpdateE090StateTally()
         {
             substStateTally.Clear();
             substInfoDictionary.ValueArray.DoForEach(substInfo => substStateTally.Add(substInfo, SubstrateJobState.Initial));

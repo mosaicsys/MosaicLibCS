@@ -2908,12 +2908,18 @@ namespace MosaicLib
             /// <summary>Constructor.  Uses given logger name, and group name.  Use LogGate.All and enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
             /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
-            public Logger(string name, string groupName = "") : base(name, groupName, LogGate.All, traceLoggerCtor: true) { }
+            /// <param name="callerProvidedLMD">can be used to define the ILogMessageDistributionForLoggers instance that this object will be used with</param>
+            public Logger(string name, string groupName = "", ILogMessageDistributionForLoggers callerProvidedLMD = null) 
+                : base(name, groupName, LogGate.All, traceLoggerCtor: true, callerProvidedLMD: callerProvidedLMD) 
+            { }
 
             /// <summary>Constructor.  Uses given logger name, and initialInstanceLogGate.  Enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
             /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
-            public Logger(string name, LogGate initialInstanceLogGate) : base(name, string.Empty, initialInstanceLogGate, traceLoggerCtor: true) { }
+            /// <param name="callerProvidedLMD">can be used to define the ILogMessageDistributionForLoggers instance that this object will be used with</param>
+            public Logger(string name, LogGate initialInstanceLogGate, ILogMessageDistributionForLoggers callerProvidedLMD = null) 
+                : base(name, string.Empty, initialInstanceLogGate, traceLoggerCtor: true, callerProvidedLMD: callerProvidedLMD) 
+            { }
 
             /// <summary>Constructor.  Uses given logger name, group name, and initialInstanceLogGate.  Use default group name and enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>

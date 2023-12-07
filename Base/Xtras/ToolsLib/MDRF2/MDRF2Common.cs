@@ -369,10 +369,28 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             get { return (UTCTimeSince1601 == 0.0 && FileDeltaTime == 0.0); }
         }
 
-        public DateTime DateTime
+        /// <summary>
+        /// This property is the old name for the new <see cref="DateTimeUTC"/> property, who's value it now returns
+        /// </summary>
+        [Obsolete("This property is obsolete.  Please use the DateTimeUTC or DateTimeLocal properties in its place (2023-09-26)")]
+        public DateTime DateTime => DateTimeUTC;
+
+        /// <summary>
+        /// Returns the contains <see cref="UTCTimeSince1601"/> converted to a UTC <see cref="System.DateTime"/> using the double.GetDateTimeFromUTCTimeSince1601() extension method
+        /// </summary>
+        public DateTime DateTimeUTC
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); }
+            get => UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601();
+        }
+
+        /// <summary>
+        /// Returns the contains <see cref="UTCTimeSince1601"/> converted to a Local <see cref="System.DateTime"/> using the <see cref="System.DateTime.ToLocalTime()"/> method on the <see cref="DateTimeUTC"/> property value.
+        /// </summary>
+        public DateTime DateTimeLocal
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => DateTimeUTC.ToLocalTime();
         }
 
         public QpcTimeStamp QpcTimeStamp
@@ -776,7 +794,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <summary>Type name handler for <see cref="Logging.ILogMessage"/> instances</summary>
         public class ILogMessageTypeNameHandler : TypeNameHandlerBase<Logging.ILogMessage>
         {
-            public ILogMessageTypeNameHandler() : base(LogMessageFormatter.Instance) { }
+            public ILogMessageTypeNameHandler() : base(new LogMessageFormatter()) { }
         }
 
         /// <summary>Type name handler for <see cref="MosaicLib.Semi.E039.IE039Object"/> instances</summary>
@@ -820,19 +838,19 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <summary>Type name handler for <see cref="ValueContainer"/> instances</summary>
         public class ValueContainerTypeNameHandler : TypeNameHandlerBase<ValueContainer>
         {
-            public ValueContainerTypeNameHandler() : base(VCFormatter.Instance) { }
+            public ValueContainerTypeNameHandler() : base(new VCFormatter()) { }
         }
 
         /// <summary>Type name handler for <see cref="INamedValueSet"/> instances</summary>
         public class INamedValueSetTypeNameHandler : TypeNameHandlerBase<INamedValueSet>
         {
-            public INamedValueSetTypeNameHandler() : base(NVSFormatter.Instance) { }
+            public INamedValueSetTypeNameHandler() : base(new NVSFormatter()) { }
         }
 
         /// <summary>Type name handler for KVCSet (aka <see cref="ICollection{KeyValuePair{string,ValueContainer}}"/>) instances</summary>
         public class KVCSetTypeNameHandler : TypeNameHandlerBase<ICollection<KeyValuePair<string, ValueContainer>>>
         {
-            public KVCSetTypeNameHandler() : base(KVCSetFormatter.Instance) { }
+            public KVCSetTypeNameHandler() : base(new KVCSetFormatter()) { }
         }
 
         /// <summary>
@@ -1137,7 +1155,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// </summary>
         public class DataContractJsonSerializationTypeNameHandler<TItemType> : TypeNameHandlerBase<TItemType>, IMDRF2TypeNameHandler
         {
-            public DataContractJsonSerializationTypeNameHandler() : base(DataContractJsonSerializationFormatter<TItemType>.Instance) { }
+            public DataContractJsonSerializationTypeNameHandler() : base(new DataContractJsonSerializationFormatter<TItemType>()) { }
         }
 
         /// <summary>
@@ -1148,7 +1166,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             where TItemType : IMDRF2MessagePackSerializable, new()
         {
             /// <inheritdoc/>
-            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            public virtual void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
             {
                 var item = (IMDRF2MessagePackSerializable)value;
 
@@ -1156,9 +1174,9 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             }
 
             /// <inheritdoc/>
-            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            public virtual IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
             {
-                var item = new TItemType();
+                var item = FactoryMethod();
                 item.Deserialize(ref mpReader, mpOptions);
 
                 var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
@@ -1169,6 +1187,8 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                 return record;
             }
+
+            protected Func<TItemType> FactoryMethod { get; set; } = () => new TItemType();
         }
 
         /// <summary>
@@ -1185,7 +1205,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             public MessagePack.Formatters.IMessagePackFormatter<TItemType> MPFormatter { get; protected set; }
 
             /// <inheritdoc/>
-            public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
+            public virtual void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
             {
                 var item = (TItemType)value;
 
@@ -1193,7 +1213,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             }
 
             /// <inheritdoc/>
-            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refRecord, bool allowRecordReuse)
+            public virtual IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refRecord, bool allowRecordReuse)
             {
                 var record = GetOrCreateAndUpdateQueryRecord(refRecord, allowRecordReuse);
 

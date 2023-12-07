@@ -261,7 +261,7 @@ namespace MosaicLib.Modular.Config
             };
 
             if (ckai.HasValue)
-                ckai.ValueSeqNum = ckai.CurrentSeqNum = dItem.seqNumGen = dItem.seqNumGen.IncrementSkipZero();
+                ckai.CurrentSeqNum = dItem.seqNumGen = dItem.seqNumGen.IncrementSkipZero();
 
             keyItemDictionary[ckai.Key] = dItem;
 
@@ -344,7 +344,7 @@ namespace MosaicLib.Modular.Config
                     string ec = EnsureItemExists(keyAccessSpec, initialValue, ref item, "Key created by request using EnsureExists");
 
                     if (!ec.IsNullOrEmpty())
-                        return new ConfigKeyAccessImpl(keyAccessSpec, this) { ResultCode = ec, ProviderFlags = new ConfigKeyProviderFlags(item.ckai.ProviderFlags) { KeyWasNotFound = true } };
+                        return new ConfigKeyAccessImpl(keyAccessSpec, this, initialMetaDataSeqNum: 0) { ResultCode = ec, ProviderFlags = new ConfigKeyProviderFlags(item.ckai.ProviderFlags) { KeyWasNotFound = true } };
 
                     HandleSetValuesChangedContents();
 
@@ -418,7 +418,7 @@ namespace MosaicLib.Modular.Config
                         ValueContainer entryValue = item.ckai.VC;
 
                         item.ckai.VC = kvp.Value;
-                        item.ckai.CurrentSeqNum = item.ckai.ValueSeqNum = item.seqNumGen = item.seqNumGen.IncrementSkipZero();
+                        item.ckai.CurrentSeqNum = item.seqNumGen = item.seqNumGen.IncrementSkipZero();
                         item.comment = commentStr;
 
                         numChangedItems++;
@@ -446,14 +446,19 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
         {
-            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks, this) { VC = initialValue };
+            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks, this) 
+            { 
+                VC = initialValue, 
+                CurrentSeqNum = (!initialValue.IsEmpty).MapToInt(), 
+            };
 
             item = new DictionaryKeyItem() 
             { 
                 key = icks.Key, 
                 ckai = ckai,
                 initialContainedValue = initialValue, 
-                comment = commentStr 
+                comment = commentStr,
+                seqNumGen = ckai.CurrentSeqNum,
             };
 
             string ec = VerifyAndNoteItemAdded(item);
@@ -1095,7 +1100,7 @@ namespace MosaicLib.Modular.Config
             }
         }
 
-        private readonly IPersistentStorage<ConfigKeyStore> ringAdapter;
+        protected readonly IPersistentStorage<ConfigKeyStore> ringAdapter;
         private readonly ConfigKeyStore configKeyStore;
         private readonly List<PersistKeyTracker> persistKeyTrackerList = new List<PersistKeyTracker>();
         private bool regenerateConfigKeyStoreKeySetOnNextSave = false;

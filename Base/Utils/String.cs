@@ -576,7 +576,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static System.Text.StringBuilder.CheckedAppendFormat extension methods
+        #region static System.Text.StringBuilder.CheckedAppendFormat variants, AppendWithDelimiter, CheckedAppendFormatWithDelimiter, ConditionalAppend, and ConditionalAppendWithDelimiter
 
         /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
         public static StringBuilder CheckedAppendFormat(this StringBuilder sb, string fmt, object arg0)
@@ -945,7 +945,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region string and string array size estimate methods
+        #region string and string array size estimate methods (EstimatedContentSizeInBytes variants)
 
         /// <summary>Returns the estimated size of the contents of the given string in bytes, assuming that each character in the string will consume 2 bytes</summary>
         public static int EstimatedContentSizeInBytes(this String s)
@@ -1250,6 +1250,46 @@ namespace MosaicLib.Utils
             {
                 return "stringDelegate() generated exception: {0}".CheckedFormat(ex.ToString(caughtExceptionToStringFormat));
             }
+        }
+
+        #endregion
+
+        #region CondidtionalConcat variants
+
+        /// <summary>
+        /// If the given <paramref name="condition"/> is true then this method returns the concatination of given <paramref name="s0"/> and <paramref name="s1"/>
+        /// otherwisse the method simply returns the given <paramref name="s0"/>.
+        /// </summary>
+        public static string ConditionalConcat(this string s0, bool condition, string s1)
+        {
+            return (!condition) ? s0.MapNullToEmpty() : string.Concat(s0, s1);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="condition"/> is true then this method returns the concatination of given <paramref name="s0"/>, <paramref name="s1"/>, and <paramref name="s2"/>
+        /// otherwisse the method simply returns the given <paramref name="s0"/>.
+        /// </summary>
+        public static string ConditionalConcat(this string s0, bool condition, string s1, string s2)
+        {
+            return (!condition) ? s0.MapNullToEmpty() : string.Concat(s0, s1, s2);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="condition"/> is true then this method returns the concatination of given <paramref name="s0"/>, <paramref name="s1"/>, <paramref name="s2"/>, and <paramref name="s3"/>
+        /// otherwisse the method simply returns the given <paramref name="s0"/>.
+        /// </summary>
+        public static string ConditionalConcat(this string s0, bool condition, string s1, string s2, string s3)
+        {
+            return (!condition) ? s0.MapNullToEmpty() : string.Concat(s0, s1, s2, s3);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="condition"/> is true then this method returns the concatination of given <paramref name="s0"/> with each of the strings in the given <paramref name="stringParamsArray"/>
+        /// otherwisse the method simply returns the given <paramref name="s0"/>.
+        /// </summary>
+        public static string ConditionalConcat(this string s0, bool condition, params string[] stringParamsArray)
+        {
+            return (!condition) ? s0.MapNullToEmpty() : string.Concat(s0, string.Concat(stringParamsArray));
         }
 
         #endregion

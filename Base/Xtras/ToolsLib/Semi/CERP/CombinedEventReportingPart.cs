@@ -1221,10 +1221,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                 if (ModuleConfig.SourcePart != null && (enableAutomaticBlockedTransitions || enableAutomaticBusyTransitions))
                 {
-                    partBaseStateObserver = new SequencedRefObjectSourceObserver<IBaseState, int>(ModuleConfig.SourcePart.BaseStateNotifier)
-                    {
-                        IsUpdateNeeded = true,
-                    };
+                    partBaseStateObserver = ModuleConfig.SourcePart.BaseStateNotifier.CreateRefObserver(setIsUpdateNeeded: true);
                 }
 
                 substLocObsSet = ModuleConfig.ModuleSubstLocSet.Select(substLocID => new MosaicLib.Semi.E090.E090SubstLocObserver(substLocID)).ToArray();
@@ -1545,10 +1542,10 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
             public MosaicLib.Semi.E116.EPTState eptState = MosaicLib.Semi.E116.EPTState.NoState;
 
-            QpcTimeStamp prevQpcTimeStamp;
-            MosaicLib.Semi.E116.EPTState prevEPTState = MosaicLib.Semi.E116.EPTState.NoState;
-            MosaicLib.Semi.E116.TaskType prevTaskType = MosaicLib.Semi.E116.TaskType.NoTask;
-            string prevTaskName;
+            private QpcTimeStamp prevEPTStateStartQPCTimeStamp;
+            private MosaicLib.Semi.E116.EPTState prevEPTState = MosaicLib.Semi.E116.EPTState.NoState;
+            private MosaicLib.Semi.E116.TaskType prevTaskType = MosaicLib.Semi.E116.TaskType.NoTask;
+            private string prevTaskName;
 
             public void IssueTransitionEvent(IScopedToken scopedToken, IScopedToken lastScopedToken, QpcTimeStamp qpcTimeStamp)
             {
@@ -1557,6 +1554,8 @@ namespace Mosaic.ToolsLib.Semi.CERP
                 string taskName = null;
                 MosaicLib.Semi.E116.BlockedReasonEx blockedReason = default;
                 string blockedReasonStr = null;
+
+                bool transitionAccumulatesStateTime = false;
 
                 switch (scopedToken)
                 {
@@ -1584,7 +1583,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
                             {
                                 case MosaicLib.Semi.E116.EPTState.NoState: transition = MosaicLib.Semi.E116.EPTTransition.Transition1; break;
                                 case MosaicLib.Semi.E116.EPTState.Idle: transition = MosaicLib.Semi.E116.EPTTransition.Transition2; break;
-                                case MosaicLib.Semi.E116.EPTState.Busy: transition = MosaicLib.Semi.E116.EPTTransition.Transition4; break;
+                                case MosaicLib.Semi.E116.EPTState.Busy: transition = MosaicLib.Semi.E116.EPTTransition.Transition4; transitionAccumulatesStateTime = true; break;
                                 case MosaicLib.Semi.E116.EPTState.Blocked: transition = MosaicLib.Semi.E116.EPTTransition.Transition6; break;
                                 default: transition = 0; break;
                             }
@@ -1602,7 +1601,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
                                 case MosaicLib.Semi.E116.EPTState.NoState: transition = MosaicLib.Semi.E116.EPTTransition.Transition1; break;
                                 case MosaicLib.Semi.E116.EPTState.Idle: transition = MosaicLib.Semi.E116.EPTTransition.Transition8; break;
                                 case MosaicLib.Semi.E116.EPTState.Busy: transition = MosaicLib.Semi.E116.EPTTransition.Transition5; break;
-                                case MosaicLib.Semi.E116.EPTState.Blocked: transition = MosaicLib.Semi.E116.EPTTransition.Transition9; break;
+                                case MosaicLib.Semi.E116.EPTState.Blocked: transition = MosaicLib.Semi.E116.EPTTransition.Transition9; transitionAccumulatesStateTime = true; break;
                                 default: transition = 0; break;
                             }
 
@@ -1632,7 +1631,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
                 var isInitialTransition = (transition == MosaicLib.Semi.E116.EPTTransition.Transition1);
 
-                eventRecord.StateTime = (!isInitialTransition) ? qpcTimeStamp - prevQpcTimeStamp : TimeSpan.Zero;
+                eventRecord.StateTime = (!isInitialTransition) ? qpcTimeStamp - prevEPTStateStartQPCTimeStamp : TimeSpan.Zero;
 
                 if (isInitialTransition)
                 {
@@ -1703,8 +1702,9 @@ namespace Mosaic.ToolsLib.Semi.CERP
                     AccumulatedWorkCountIncrementOnSuccess = default;
                 }
 
-                prevQpcTimeStamp = qpcTimeStamp;
                 prevEPTState = eptState;
+                if (!transitionAccumulatesStateTime)
+                    prevEPTStateStartQPCTimeStamp = qpcTimeStamp;
 
                 if (ModuleConfig.EnableStatePublication)
                     ModuleToken._StatePublisher.Object = (E116.E116EventRecord) eventRecord?.MakeCopyOfThis();

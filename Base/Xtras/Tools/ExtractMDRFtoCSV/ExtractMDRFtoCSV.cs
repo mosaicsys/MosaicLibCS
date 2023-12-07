@@ -275,7 +275,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
                         sw.CheckedWriteLine("$File.Size,{0}", fileInfo.FileLength);
                         sw.CheckedWriteLine("$File.Date.First,{0:o}", fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime());
-                        sw.CheckedWriteLine("$File.Date.Last,{0:o}", fileSummary.LastFileDTPair.DateTime.ToLocalTime());
+                        sw.CheckedWriteLine("$File.Date.Last,{0:o}", fileSummary.LastFileDTPair.DateTimeLocal);
                         sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", fileSummary.LastFileDTPair.FileDeltaTime.FromSeconds().TotalHours);
 
                         foreach (var key in new string[]
@@ -359,22 +359,22 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                             case MDRF2QueryItemTypeSelect.FileStart:
                             case MDRF2QueryItemTypeSelect.FileEnd:
                                 if (includeExtrasSelected)
-                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime());
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal);
                                 break;
                             case MDRF2QueryItemTypeSelect.InlineIndexRecord:
                             case MDRF2QueryItemTypeSelect.InlineIndexRecord | MDRF2QueryItemTypeSelect.WillSkip:
                                 inlineIndexCount++;
                                 if (includeExtrasSelected)
-                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
+                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
                                 break;
                             case MDRF2QueryItemTypeSelect.BlockEnd:
                                 if (includeExtrasSelected)
-                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
+                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
                                 break;
                             case MDRF2QueryItemTypeSelect.PointSet:
                                 if (includePointSetData)
                                 {
-                                    sw.CheckedWrite("{0:MM/dd/yyyy HH:mm:ss.fff},{1:f6}", dtPair.DateTime.ToLocalTime(), dtPair.FileDeltaTime);
+                                    sw.CheckedWrite("{0:MM/dd/yyyy HH:mm:ss.fff},{1:f6}", dtPair.DateTimeLocal, dtPair.FileDeltaTime);
 
                                     foreach (var vc in (record.DataAsObject as ValueContainer[]).MapNullToEmpty())
                                     {
@@ -398,24 +398,24 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                                 if (includeOccurrences)
                                 {
                                     var oqrd = (MDRF2OccurrenceQueryRecordData)record.DataAsObject;
-                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3} {4}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), oqrd.OccurrenceInfo.Name, oqrd.VC);
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3} {4}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal, oqrd.OccurrenceInfo.Name, oqrd.VC);
                                 }
                                 break;
                             case MDRF2QueryItemTypeSelect.Object:
                                 if (includeOccurrences)
-                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal, ValueContainer.Create(record.DataAsObject));
                                 break;
                             case MDRF2QueryItemTypeSelect.Mesg:
                             case MDRF2QueryItemTypeSelect.Error:
                                 if (includeExtrasSelected)
-                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal, ValueContainer.Create(record.DataAsObject));
                                 break;
                             case MDRF2QueryItemTypeSelect.DecodingIssue:
                                 {
                                     if (!(record.DataAsObject is System.Exception ex))
-                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal, ValueContainer.Create(record.DataAsObject));
                                     else
-                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ex.ToString(ExceptionFormat.TypeAndMessage));
+                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTimeLocal, ex.ToString(ExceptionFormat.TypeAndMessage));
                                 }
                                 break;
                             default:
@@ -435,7 +435,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             if (select.IsSet(Select.ListInfo))
             {
                 Console.WriteLine(" Date First: {0:o}", fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime());
-                Console.WriteLine(" Date  Last: {0:o}", fileSummary.LastFileDTPair.DateTime.ToLocalTime());
+                Console.WriteLine(" Date  Last: {0:o}", fileSummary.LastFileDTPair.DateTimeLocal);
                 Console.WriteLine(" Elapsed Hours: {0:f6}", fileSummary.LastFileDTPair.FileDeltaTime.FromSeconds().TotalHours);
 
                 foreach (var key in new string[] { "Environment.MachineName", "Environment.OSVersion", "MachineName", "OSVersion" })
@@ -460,7 +460,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                 {
                     var row = inlineIndexArray[rowIdx];
                     {
-                        Console.WriteLine(" RowIdx:{0:d4} Size:{1} RFBits:${2:X4} URFBits:${3:X8} 1stDTS:{4:f3} lastDTS:{5:f3} 1stDT:{6:yyyyMMdd_HHmmssfff}", rowIdx, row.BlockByteCount, (ulong)row.BlockFileIndexRowFlagBits, row.BlockUserRowFlagBits, row.BlockLastFileDeltaTime, row.BlockFirstFileDeltaTime, row.FirstDTPair.DateTime.ToLocalTime());
+                        Console.WriteLine(" RowIdx:{0:d4} Size:{1} RFBits:${2:X4} URFBits:${3:X8} 1stDTS:{4:f3} lastDTS:{5:f3} 1stDT:{6:yyyyMMdd_HHmmssfff}", rowIdx, row.BlockByteCount, (ulong)row.BlockFileIndexRowFlagBits, row.BlockUserRowFlagBits, row.BlockLastFileDeltaTime, row.BlockFirstFileDeltaTime, row.FirstDTPair.DateTimeLocal);
                         if ((row.BlockFileIndexRowFlagBits & mask) != FileIndexRowFlagBits.None)
                             Console.WriteLine("              RFBits:{0}", row.BlockFileIndexRowFlagBits & mask);
                     }
@@ -528,26 +528,26 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     case MDRF2QueryItemTypeSelect.Occurrence:
                         {
                             var queryData = (MDRF2OccurrenceQueryRecordData)record.DataAsObject;
-                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, queryData.OccurrenceInfo.Name, queryData.VC));
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, record.ItemType, queryData.OccurrenceInfo.Name, queryData.VC));
                         }
                         break;
                     case MDRF2QueryItemTypeSelect.Object:
                         {
-                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, record.ItemType, ValueContainer.Create(record.DataAsObject)));
                         }
                         break;
                     case MDRF2QueryItemTypeSelect.Mesg:
                     case MDRF2QueryItemTypeSelect.Error:
                         {
-                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, record.ItemType, ValueContainer.Create(record.DataAsObject)));
                         }
                         break;
                     case MDRF2QueryItemTypeSelect.DecodingIssue:
                         {
                             if (!(record.DataAsObject is System.Exception ex))
-                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, record.ItemType, ValueContainer.Create(record.DataAsObject)));
                             else
-                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ex.ToString(ExceptionFormat.TypeAndMessage)));
+                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTimeLocal, record.ItemType, ex.ToString(ExceptionFormat.TypeAndMessage)));
                         }
                         break;
                     default:

@@ -1381,7 +1381,7 @@ namespace MosaicLib
                 /// <param name="name">Defines the LMH name.</param>
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="includeFileAndLines">Indicates if this handler should record and include source file and line numbers.</param>
-                public NullLogMessageHandler(string name, LogGate logGate, bool includeFileAndLines)
+                public NullLogMessageHandler(string name, LogGate logGate, bool includeFileAndLines = false)
                     : base(name, logGate, recordSourceStackFrame: includeFileAndLines)
                 { }
 
@@ -1631,7 +1631,7 @@ namespace MosaicLib
         public static string[] GenerateDynamicHeaderLines(DynamicHeaderLinesSelect dynamicHeaderLinesSelect)
         {
             string uptimeLine = null;
-            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.UptimeLine))
+            if ((dynamicHeaderLinesSelect & DynamicHeaderLinesSelect.UptimeLine) != 0)
             {
                 double appUptimeHours = Math.Max(0.0, appUptimeBaseTimeStamp.Age.TotalHours);
                 double roundedAppUptimeHours = appUptimeHours.Round(3, MidpointRounding.ToEven);
@@ -1639,7 +1639,7 @@ namespace MosaicLib
             }
 
             string processInfoLine = null;
-            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.ProcessInfoLine))
+            if ((dynamicHeaderLinesSelect & DynamicHeaderLinesSelect.ProcessInfoLine) != 0)
             {
                 System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
 
@@ -1654,10 +1654,22 @@ namespace MosaicLib
                 processInfoLine = "Process Info:{0}{1}{2}{3}{4}".CheckedFormat(timeStr, sizeStr, priorityStr, handlesStr, threadsStr);
             }
 
+            string timeZoneInfoLine = null;
+            if ((dynamicHeaderLinesSelect & DynamicHeaderLinesSelect.TimeZoneInfoLine) != 0)
+            {
+                var dtNow = DateTime.Now;
+                var tzInfo = System.TimeZone.CurrentTimeZone;
+                var isDSTActive = tzInfo.IsDaylightSavingTime(dtNow);
+                var utcOffset = tzInfo.GetUtcOffset(dtNow);
+
+                timeZoneInfoLine = "TimeZone Info: '{0}', offset: {1}".CheckedFormat(isDSTActive ? tzInfo.StandardName : tzInfo.DaylightName, utcOffset);
+            }
+
             string [] dynamicHeaderLinesArray = new string[]
             {
                 uptimeLine,
                 processInfoLine,
+                timeZoneInfoLine,
             }.WhereIsNotDefault().ToArray();
 
             return dynamicHeaderLinesArray;
@@ -1665,7 +1677,7 @@ namespace MosaicLib
 
         /// <summary>
         /// Enumeration used with GenerateDynamicHeaderLines to select which contents/lines shall be selected for inclusion.
-        /// <para/>None (0x00), UptimeLine (0x01), ProcessInfoLine (0x02), All (0x03)
+        /// <para/><see cref="None"/> (0x00), <see cref="UptimeLine"/> (0x01), <see cref="ProcessInfoLine"/> (0x02), <see cref="TimeZoneInfoLine"/> (0x04), All (0x07)
         /// </summary>
         [Flags]
         public enum DynamicHeaderLinesSelect : int
@@ -1679,8 +1691,11 @@ namespace MosaicLib
             /// <summary>Selects that the Process Info header line shall be included.  [0x02]</summary>
             ProcessInfoLine = 0x02,
 
-            /// <summary>Selects that all header lines shall be included. (UptimeLine | ProcessInfoLine) [0x03]</summary>
-            All = (UptimeLine | ProcessInfoLine),
+            /// <summary>Selects that the TimeZone Info header line shall be included.  [0x04]</summary>
+            TimeZoneInfoLine = 0x04,
+
+            /// <summary>Selects that all header lines shall be included. (<see cref="UptimeLine"/> | <see cref="ProcessInfoLine"/> | <see cref="TimeZoneInfoLine"/>) [0x07]</summary>
+            All = (UptimeLine | ProcessInfoLine | TimeZoneInfoLine),
         }
 
         #endregion

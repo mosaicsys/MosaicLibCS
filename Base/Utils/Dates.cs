@@ -25,13 +25,25 @@ using System.Collections.Generic;
 
 namespace MosaicLib.Utils
 {
-	#region Dates
+    #region Dates
 
     /// <summary>
     /// Dates class is essentially a namespace for series of static Date related helper methods
     /// </summary>
     public static class Dates
-	{
+    {
+        /// <summary>
+        /// Gives a DateTime that is one day after zero UTC.  
+        /// This is used in cases where we want to initialize a DateTime value to a default that is safe to serialize or deserialize in any timezone and which can safely be converted to local time in any time zone.
+        /// </summary>
+        public static readonly DateTime OneDayAfterZeroUTC = new DateTime(0L, DateTimeKind.Utc) + (1.0).FromDays();
+
+        /// <summary>
+        /// Gives a DateTime that is one day after zero FTime UTC.  
+        /// This is used in cases where we want to initialize a DateTime value to a default that is safe to serialize or deserialize in any timezone and which can safely be converted to local time in any time zone.
+        /// </summary>
+        public static readonly DateTime OneDayAfterZeroFTimeUTC = DateTime.FromFileTimeUtc(0) + (1.0).FromDays();
+
         /// <summary>
         /// This method converts the given <paramref name="dt"/> DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
         /// <para/>This is based on the existing DateTime.ToFileTimeUtc() method which automatically converts the given <paramref name="dt"/> to UTC before converting the date to a FTIME value.
@@ -70,20 +82,27 @@ namespace MosaicLib.Utils
 
 		// methods used to provide timestamps for LogMessages
 
-		/// <summary>Enum to define the supported formats for converting DataTime values to a string.</summary>
+		/// <summary>
+        /// Enum to define the supported formats for converting DataTime values to a string.
+        /// <para/>
+        /// <see cref="LogDefault"/>, <see cref="Short"/>, <see cref="ShortWithMSec"/>, <see cref="RoundTrip"/>, <see cref="Spreadsheet"/>
+        /// </summary>
 		public enum DateTimeFormat
 		{
-			/// <summary>Enum value when format should look like 1970-01-01 00:00:00.000</summary>
-			LogDefault = 0,
+            /// <summary>Enum value when format should look like 1970-01-01 00:00:00.000 ["yyyy-MM-dd HH:mm:ss.fff"]</summary>
+            LogDefault = 0,
 
-            /// <summary>Enum value when format should look like 19700101_000000</summary>
+            /// <summary>Enum value when format should look like 19700101_000000 ["yyyyMMdd_HHmmss"]</summary>
             Short,
 
-			/// <summary>Enum value when format should look like 19700101_000000.000</summary>
-			ShortWithMSec,
+            /// <summary>Enum value when format should look like 19700101_000000.000 ["yyyyMMdd_HHmmss"]</summary>
+            ShortWithMSec,
 
-            /// <summary>Enum value when format should look like </summary>
+            /// <summary>Enum value when format uses full "round trip" format ["o"]</summary>
             RoundTrip,
+
+            /// <summary>format that is generally compatible with automatic parsing from a CSV style file into standard spreadsheets 01/01/1970 00:00:00.000 ["MM/dd/yyyy HH:mm:ss.fff"]</summary>
+            Spreadsheet,
 		}
 
 		/// <summary>Converts the given DateTime value to a string using the given summary desired format</summary>
@@ -97,21 +116,14 @@ namespace MosaicLib.Utils
 			switch (dtFormat)
 			{
 				default:
-				case DateTimeFormat.LogDefault:
-                    result = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
-					break;
-                case DateTimeFormat.Short:
-                    result = dt.ToString("yyyyMMdd_HHmmss");
-                    break;
-				case DateTimeFormat.ShortWithMSec:
-                    result = dt.ToString("yyyyMMdd_HHmmss.fff");
-					break;
-                case DateTimeFormat.RoundTrip:
-                    result = dt.ToString("o");
-                    break;
+				case DateTimeFormat.LogDefault:     result = dt.ToString("yyyy-MM-dd HH:mm:ss.fff"); break;
+                case DateTimeFormat.Short:          result = dt.ToString("yyyyMMdd_HHmmss"); break;
+				case DateTimeFormat.ShortWithMSec:  result = dt.ToString("yyyyMMdd_HHmmss.fff"); break;
+                case DateTimeFormat.RoundTrip:      result = dt.ToString("o"); break;
+                case DateTimeFormat.Spreadsheet:    result = dt.ToString("MM/dd/yyyy HH:mm:ss.fff"); break;
 			}
 
-			return result;
+            return result;
 		}
 
         /// <summary>Converts the given DateTime value to a string using the given summary desired format</summary>

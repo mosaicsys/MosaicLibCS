@@ -21,133 +21,13 @@
 
 using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Runtime.Serialization;
 
 using MosaicLib.Modular.Persist;
 
-using Newtonsoft.Json;
-using MosaicLib.Utils;
+using Json = Newtonsoft.Json;
 
 namespace Mosaic.ToolsLib.JsonDotNet
 {
-    #region DataContractJsonDotNetAdapter
-
-    /// <summary>
-    /// This adapter class encapsulates a small set of standard use patterns for transcribing between DataContract objects 
-    /// and the corresponding JSON strings and files using a JsonSerializer from the Newtonsoft.Json assembly.  
-    /// </summary>
-    /// <typeparam name="TObjectType">
-    /// The templatized object type on which this adapter is defined.  
-    /// Must be a DataContract or compatible object type in order to be usable by this adapter.
-    /// </typeparam>
-    public class DataContractJsonDotNetAdapter<TObjectType>
-        : DataContractAdapterBase<TObjectType>
-    {
-        public DataContractJsonDotNetAdapter()
-        {
-            JsonSerializerSettings jss = new JsonSerializerSettings()
-            {
-                TypeNameHandling = TypeNameHandling.Auto,
-                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
-                ObjectCreationHandling = ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
-                Formatting = Formatting.Indented,
-            };
-
-            js = JsonSerializer.CreateDefault(jss);
-        }
-
-        JsonSerializer js;
-        Type TObjectTypeType = typeof(TObjectType);
-
-        #region usage control settings
-
-        /// <summary>
-        /// Gets or sets the contained JsonSerializer.Formatting property to determine if generated Json text will be wrapped and indented (Formatting.Indented).
-        /// </summary>
-        /// <returns>true to write individual elements on new lines and indent; otherwise false.  The default is true.</returns>
-        public bool Indent { get { return js.Formatting.IsSet(Formatting.Indented); } set { js.Formatting = js.Formatting.Set(Formatting.Indented, value); } }
-
-        #endregion
-
-        /// <summary>
-        /// Attempts to use the contained JsonSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
-        /// Returns the object if the read was successful.
-        /// </summary>
-        /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
-        public override TObjectType ReadObject(System.IO.Stream readStream)
-        {
-            using (StreamReader sr = new StreamReader(readStream, Encoding))
-                return ReadObject(sr);
-        }
-
-        /// <summary>
-        /// Attempts to use the contained JsonSerializer to read the deserialize the corresponding object from the given TextReader.
-        /// </summary>
-        /// <param name="tr">Acts as the source of the text from which the JsonSerializer is to deserialize the object.</param>
-        public override TObjectType ReadObject(System.IO.TextReader tr)
-        {
-            using (JsonReader jtr = new JsonTextReader(tr))
-            {
-                return js.Deserialize<TObjectType>(jtr);
-            }
-        }
-
-        /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained JsonSerializer and passing it the given writeStream.
-        /// </summary>
-        /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
-        public override void WriteObject(TObjectType obj, System.IO.Stream writeStream)
-        {
-            // To do: determine how to both set Encoding and how to avoid closing the writeStream
-            using (TextWriter tw = new StreamWriter(writeStream, Encoding, DefaultStreamWriterBufferSize, true))
-            using (JsonWriter jw = new JsonTextWriter(tw) { CloseOutput = false })
-            {
-                js.Serialize(jw, obj, TObjectTypeType);
-                jw.Flush();
-            }
-        }
-
-        private const int DefaultStreamWriterBufferSize = 4096;
-
-        /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained JsonSerializer to serialize and write the object into a String
-        /// </summary>
-        /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained JsonSerializer</returns>
-        public override string ConvertObjectToString(TObjectType obj)
-        {
-            if (writeMemoryStream == null)
-            {
-                writeMemoryStream = new MemoryStream();
-                AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref writeMemoryStream));
-            }
-
-            try
-            {
-                WriteObject(obj, writeMemoryStream);
-
-                byte[] buffer = writeMemoryStream.GetBuffer();
-                string result = System.Text.Encoding.ASCII.GetString(buffer, 0, unchecked((int)writeMemoryStream.Length));
-
-                writeMemoryStream.Position = 0;
-                writeMemoryStream.SetLength(0);
-
-                return result;
-            }
-            catch
-            {
-                Fcns.DisposeOfObject(ref writeMemoryStream);
-                throw;
-            }
-        }
-
-        private MemoryStream writeMemoryStream = null;
-    }
-
-    #endregion
-
     /// <summary>
     /// This class is the most commonly used type that implements the IPersistentStorage interface.
     /// This class uses a JsonDotNet to attempt to load objects
@@ -164,23 +44,30 @@ namespace Mosaic.ToolsLib.JsonDotNet
         where ObjType : class, IPersistSequenceable, new()
     {
         /// <summary>
-        /// Required constructor.  Takes given name and ringConfig.
+        /// Required constructor.  Takes given <paramref name="name"/> and <paramref name="ringConfig"/>.
         /// </summary>
         public DataContractPersistentJsonDotNetTextFileRingStorageAdapter(string name, PersistentObjectFileRingConfig ringConfig)
             : base(name, ringConfig)
-        {
-            JsonSerializerSettings jss = new JsonSerializerSettings()
+        {            
+            Json.JsonSerializerSettings jss = new Json.JsonSerializerSettings()
             {
-                TypeNameHandling = TypeNameHandling.Auto,
-                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
-                ObjectCreationHandling = ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
-                Formatting = Formatting.Indented,
+                TypeNameHandling = Json.TypeNameHandling.Auto,
+                TypeNameAssemblyFormatHandling = Json.TypeNameAssemblyFormatHandling.Simple,
+                ObjectCreationHandling = Json.ObjectCreationHandling.Replace,       // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
             };
 
-            js = JsonSerializer.CreateDefault(jss);
+            js = Json.JsonSerializer.CreateDefault(jss);
         }
 
-        JsonSerializer js;
+        private Json.JsonSerializer js;
+
+        /// <summary>
+        /// Allows client to obtain and/or update the <see cref="JsonDotNet.JsonFormattingSpec"/> that is being used to control how this instance serializes of objects to JSON.
+        /// </summary>
+        public JsonFormattingSpec JsonFormattingSpec { get => _JsonFormattingSpec.MakeCopyOfThis(); set { _JsonFormattingSpec = value?.MakeCopyOfThis() ?? new JsonFormattingSpec(); } }
+        private JsonFormattingSpec _JsonFormattingSpec = DefaultJsonFormattingSpec;
+
+        private static readonly JsonFormattingSpec DefaultJsonFormattingSpec = new JsonFormattingSpec() { JsonFormatting = Json.Formatting.Indented };
 
         /// <summary>
         /// Used to reset the last loaded object its default contents.
@@ -207,12 +94,17 @@ namespace Mosaic.ToolsLib.JsonDotNet
         /// </summary>
         protected override void InnerWriteObject(ObjType obj, System.IO.Stream writeStream)
         {
-            using (StreamWriter sw = new StreamWriter(writeStream))
+            js.Formatting = _JsonFormattingSpec.JsonFormatting;
+
+            using (TextWriter tw = new StreamWriter(writeStream))
+            using (Json.JsonWriter jw = new Json.JsonTextWriter(tw) { CloseOutput = false, IndentChar = _JsonFormattingSpec.IndentChar, Indentation = _JsonFormattingSpec.IndentCharPerLevelCount, QuoteChar = _JsonFormattingSpec.QuoteChar, QuoteName = _JsonFormattingSpec.QuoteName })
             {
-                js.Serialize(sw, obj);
-                sw.Flush();
+                js.Serialize(jw, obj, TObjectTypeType);
+                tw.Flush();
             }
         }
+
+        private Type TObjectTypeType = typeof(ObjType);
     }
 
 }

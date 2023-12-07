@@ -777,11 +777,13 @@ namespace MosaicLib.SerialIO
                                                || (baseState.ConnState == ConnState.ConnectionFailed) 
                                                || (baseState.ConnState == ConnState.DisconnectedByOtherEnd)
                                                );
-			TimeSpan timeInState = QpcTimeStamp.Now - baseState.TimeStamp;
 
-			if (stateSupportsAutoReconnect && timeInState > PortConfig.ReconnectHoldoff)
+			if (stateSupportsAutoReconnect)
 			{
-				InnerPerformGoOnlineAction("AutoReconnect", true);
+                TimeSpan timeInState = QpcTimeStamp.Now - baseState.TimeStamp;
+
+                if (timeInState > PortConfig.ReconnectHoldoff)
+                    InnerPerformGoOnlineAction("AutoReconnect", true);
 			}
 		}
 

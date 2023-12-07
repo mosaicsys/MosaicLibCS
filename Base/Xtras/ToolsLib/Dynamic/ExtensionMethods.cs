@@ -20,7 +20,7 @@
  */
 
 using MosaicLib.Modular.Common;
-
+using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -33,11 +33,13 @@ namespace Mosaic.ToolsLib.Dynamic
         /// </summary>
         public static partial class ExtensionMethods
         {
+            private static DynamicKVCFactory LocalDefaultDynamicKVCFactory { get; } = new DynamicKVCFactory();
+
             /// <summary>This EM creates, populates, and returns a new <see cref="DynamicKVC"/> from the given <paramref name="kvcSet"/></summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static DynamicKVC ToDynamicKVC(this IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet)
             {
-                return new DynamicKVC(kvcSet);
+                return LocalDefaultDynamicKVCFactory.Create(kvcSet);
             }
 
             /// <summary>This EM creates, populates, and returns a new <see cref="DynamicKVC"/> from the given <paramref name="kvpSet"/></summary>
@@ -45,16 +47,23 @@ namespace Mosaic.ToolsLib.Dynamic
             public static DynamicKVC ToDynamicKVC(this IEnumerable<KeyValuePair<string, object>> kvpSet, bool ? enablePropertyGetterVCSuffixHandling = null)
             {
                 if (enablePropertyGetterVCSuffixHandling == null)
-                    return new DynamicKVC(kvpSet);
+                    return LocalDefaultDynamicKVCFactory.Create(kvpSet);
                 else
-                    return new DynamicKVC().SetEnableVCSuffixHandlingInline(enablePropertyGetterVCSuffixHandling ?? default).UpdateFrom(kvpSet);
+                    return LocalDefaultDynamicKVCFactory.Create().SetEnableVCSuffixHandlingInline(enablePropertyGetterVCSuffixHandling ?? default).UpdateFrom(kvpSet);
             }
 
             /// <summary>This EM creates, populates, and returns a new <see cref="DynamicKVC"/> from the given <paramref name="nvSet"/></summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static DynamicKVC ToDynamicKVC(this INamedValueSet nvSet)
             {
-                return new DynamicKVC(nvSet);
+                return LocalDefaultDynamicKVCFactory.Create(nvSet);
+            }
+
+            /// <summary>This EM creates, populates, and returns a new <see cref="DynamicKVC"/> from the given <paramref name="jObject"/></summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static DynamicKVC ToDynamicKVC(this JObject jObject)
+            {
+                return LocalDefaultDynamicKVCFactory.Create(jObject);
             }
 
             /// <summary>This EM sets the <see cref="DynamicKVC.EnablePropertyGetterVCSuffixHandling"/> property on the given <paramref name="dynamicKVC"/> to <paramref name="enablePropertyGetterVCSuffixHandling"/>.  Supports call chaining.</summary>

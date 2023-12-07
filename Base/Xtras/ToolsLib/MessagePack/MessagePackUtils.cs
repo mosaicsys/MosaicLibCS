@@ -36,6 +36,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
@@ -44,12 +45,55 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 {
     public static partial class Instances
     {
-        public static readonly VCMesgPackFormatterResolver VCFormatterResolver = new VCMesgPackFormatterResolver();
+        /// <summary>
+        /// Gives the current set of MP formatter related instances that are/will be used for serialization and deserialization.
+        /// This set may be replaced or reset if desired.
+        /// </summary>
+        public static InstanceSet InstanceSet { get; set; }
+
+        /// <summary>
+        /// Resets the current <see cref="InstanceSet"/> to defaults.
+        /// </summary>
+        public static void ResetInstances() 
+        { 
+            InstanceSet = default; 
+        }
+
+        /// <summary>
+        /// Gives the default <see cref="VCMesgPackFormatterResolver"/> instance to use with the <see cref="ExtensionMethods"/> defined here and with the corresponding <see cref="VCDefaultMPOptions"/> instance that is constructed here.
+        /// <para/>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.VCFormatterResolver"/>.
+        /// </summary>
+        public static VCMesgPackFormatterResolver VCFormatterResolver => InstanceSet.VCFormatterResolver;
 
         /// <summary>
         /// Starts with the Standard options with the resolver set ot VCFormatterResolver and with OmitAssemblyVersion=true and AllowAssemblyVersionMismatch=true
+        /// <para/>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.VCDefaultMPOptions"/>.
         /// </summary>
-        public static readonly MessagePack.MessagePackSerializerOptions VCDefaultMPOptions = MessagePack.MessagePackSerializerOptions.Standard.WithResolver(VCFormatterResolver).WithOmitAssemblyVersion(true).WithAllowAssemblyVersionMismatch(true);
+        public static MessagePackSerializerOptions VCDefaultMPOptions => InstanceSet.VCDefaultMPOptions;
+    }
+
+    public struct InstanceSet
+    {
+        public VCFormatter VCFormatter { get { return _VCFormatter ?? (_VCFormatter = new VCFormatter()); } set { _VCFormatter = value; } }
+        public NVSFormatter NVSFormatter { get { return _NVSFormatter ?? (_NVSFormatter = new NVSFormatter()); } set { _NVSFormatter = value; } }
+        public NVFormatter NVFormatter { get { return _NVFormatter ?? (_NVFormatter = new NVFormatter()); } set { _NVFormatter = value; } }
+        public KVCSetFormatter KVCSetFormatter { get { return _KVCSetFormatter ?? (_KVCSetFormatter = new KVCSetFormatter()); } set { _KVCSetFormatter = value; } }
+        public E039ObjectFormatter E039ObjectFormatter { get { return _E039ObjectFormatter ?? (_E039ObjectFormatter = new E039ObjectFormatter()); } set { _E039ObjectFormatter = value; } }
+        public VCMesgPackFormatterResolver VCFormatterResolver { get { return _VCFormatterResolver ?? (_VCFormatterResolver = new VCMesgPackFormatterResolver()); }  set { _VCFormatterResolver = value; } }
+
+        public MessagePackSerializerOptions VCDefaultMPOptions 
+        { 
+            get { return _VCDefaultMPOptions ?? (_VCDefaultMPOptions = MessagePackSerializerOptions.Standard.WithResolver(VCFormatterResolver).WithOmitAssemblyVersion(true).WithAllowAssemblyVersionMismatch(true)); } 
+            set { _VCDefaultMPOptions = value; } 
+        }
+
+        private VCFormatter _VCFormatter;
+        private NVSFormatter _NVSFormatter;
+        private NVFormatter _NVFormatter;
+        private KVCSetFormatter _KVCSetFormatter;
+        private E039ObjectFormatter _E039ObjectFormatter;
+        private VCMesgPackFormatterResolver _VCFormatterResolver;
+        private MessagePackSerializerOptions _VCDefaultMPOptions;
     }
 
     /// <summary>
@@ -101,12 +145,14 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         }
     }
 
+
     /// <summary>
     /// This class is responsible for converting between <see cref="ValueContainer"/> notation and MesgPack notation.
     /// </summary>
     public class VCFormatter : IMessagePackFormatter<ValueContainer>, IMessagePackFormatter
     {
-        public static readonly VCFormatter Instance = new VCFormatter();
+        /// <summary>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.VCFormatter"/></summary>
+        public static VCFormatter Instance => Instances.InstanceSet.VCFormatter;
 
         public void Serialize(ref MessagePackWriter mpWriter, ValueContainer value, MessagePackSerializerOptions options)
         {
@@ -180,7 +226,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     else
                     {
                         mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.CSTBase + (sbyte)cst), 0));
-                        mpWriter.Write($"MPSerializeWithExtHeader: Inavlid usage of CST.Custom for {value}");
+                        mpWriter.Write($"MPSerializeWithExtHeader: Invalid usage of CST.Custom for {value}");
                     }
                     break;
 
@@ -224,8 +270,8 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                         }
                         else
                         {
-                            var customVCSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType, "MessagePack");
-                            var tavc = customVCSerializer.Serialize(o);
+                            var customTAVCSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType, "MessagePack");
+                            var tavc = customTAVCSerializer.Serialize(o);
 
                             mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)MPExtensionType.VCE, 0));
 
@@ -234,9 +280,19 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     }
                     break;
 
+                case ContainerStorageType.A:
+                    mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.CSTBase + (sbyte)cst), 0));
+                    mpWriter.Write(value.o as string);      // normally this is null
+                    break;
+
+                case ContainerStorageType.L:
+                    mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.CSTBase + (sbyte)cst), 0));
+                    vcLFormatter.Serialize(ref mpWriter, value.o as ReadOnlyIList<ValueContainer>, options);
+                    break;
+
                 case ContainerStorageType.LS:
                     mpWriter.WriteExtensionFormatHeader(new ExtensionHeader((sbyte)(MPExtensionType.CSTBase + (sbyte)cst), 0));
-                    lsFormatter.Serialize(ref mpWriter, value.GetValueLS(rethrow: false), options);
+                    lsFormatter.Serialize(ref mpWriter, value.o as ReadOnlyIList<string>, options);
                     break;
 
                 case ContainerStorageType.Bi:
@@ -370,6 +426,37 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
         }
 
+        /// <summary>
+        /// struct contains the values that are used to determine mapNullToEmpty parameter values when deserializing 
+        /// <see cref="ContainerStorageType.A"/>, <see cref="ContainerStorageType.L"/>, <see cref="ContainerStorageType.LS"/>,<see cref="ContainerStorageType.NV"/>, and <see cref="ContainerStorageType.NVS"/> instances.
+        /// </summary>
+        public struct MapNullToEmptySettings
+        {
+            /// <summary>When this value is true, deserializing a null <see cref="ContainerStorageType.A"/> will be mapped to be empty</summary>
+            public bool A { get; set; }
+
+            /// <summary>When this value is true, deserializing a null <see cref="ContainerStorageType.L"/> will be mapped to be empty</summary>
+            public bool L { get; set; }
+
+            /// <summary>When this value is true, deserializing a null <see cref="ContainerStorageType.LS"/> will be mapped to be empty</summary>
+            public bool LS { get; set; }
+
+            /// <summary>When this value is true, deserializing a null <see cref="ContainerStorageType.NV"/> will be mapped to be empty</summary>
+            public bool NV { get; set; }
+
+            /// <summary>When this value is true, deserializing a null <see cref="ContainerStorageType.NVS"/> will be mapped to be empty</summary>
+            public bool NVS { get; set; }
+
+            /// <summary>Returns an <see cref="MapNullToEmptySettings"/> instance with all of the properties set to true (generally used as the default value)</summary>
+            public static MapNullToEmptySettings Defaults => new MapNullToEmptySettings() { A = false, L = true, LS = true, NV = true, NVS = true };
+        }
+
+        /// <summary>This gives the deault value of the <see cref="UseMapNullToEmptySettings"/> for newly constructed <see cref="VCFormatter"/> instances.  Defaults to <see cref="MapNullToEmptySettings.Defaults"/></summary>
+        public static MapNullToEmptySettings DefaultMapNullToEmptySettings { get; set; } = MapNullToEmptySettings.Defaults;
+
+        /// <summary>Gives the <see cref="MapNullToEmptySettings"/> that are to be used by this instance.</summary>
+        public MapNullToEmptySettings UseMapNullToEmptySettings { get; set; } = DefaultMapNullToEmptySettings;
+
         private ValueContainer HandleDeserializeVCWithExtPrefix(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             var mpHeaderFormat = unchecked((MPHeaderByteCode)mpReader.NextCode);
@@ -378,11 +465,18 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             var extHdr = mpReader.ReadExtensionFormatHeader();
             var mpExtType = unchecked((MPExtensionType)extHdr.TypeCode);
 
+            switch (mpExtType)
+            {
+                case MPExtensionType.DateTime: return mpReader.ReadDateTime(extHdr).CreateVC();
+                default: break;
+            }
+
             if (extHdr.Length == 0)
             {
                 switch (mpExtType)
                 {
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.None: return ValueContainer.Empty;
+                    case MPExtensionType.CSTBase + (int)ContainerStorageType.A: return ValueContainer.CreateA(mpReader.ReadString() ?? (UseMapNullToEmptySettings.A ? string.Empty : null));
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.Bi: return ValueContainer.CreateBi(mpReader.ReadByte());
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.I1: return ValueContainer.CreateI1(mpReader.ReadSByte());
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.I2: return ValueContainer.CreateI2(mpReader.ReadInt16());
@@ -393,9 +487,10 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.DT: return ValueContainer.CreateDT(DateTime.FromBinary(mpReader.ReadInt64()));
                     case MPExtensionType.CSTBase + (int)ContainerStorageType.TS: return ValueContainer.CreateTS(TimeSpan.FromTicks(mpReader.ReadInt64()));
                     case MPExtensionType.LogGate: return ValueContainer.Create((Logging.LogGate)mpReader.ReadString());
-                    case MPExtensionType.CSTBase + (int)ContainerStorageType.LS: return ValueContainer.Create(lsFormatter.Deserialize(ref mpReader, options));
-                    case MPExtensionType.CSTBase + (int)ContainerStorageType.INamedValue: return ValueContainer.CreateNV(NVFormatter.Instance.Deserialize(ref mpReader, options));
-                    case MPExtensionType.CSTBase + (int)ContainerStorageType.INamedValueSet: return ValueContainer.CreateNVS(NVSFormatter.Instance.Deserialize(ref mpReader, options));
+                    case MPExtensionType.CSTBase + (int)ContainerStorageType.LS: return ValueContainer.CreateLS(lsFormatter.Deserialize(ref mpReader, options), mapNullToEmpty: UseMapNullToEmptySettings.LS);
+                    case MPExtensionType.CSTBase + (int)ContainerStorageType.L: return ValueContainer.CreateL(vcLFormatter.Deserialize(ref mpReader, options), mapNullToEmpty: UseMapNullToEmptySettings.L);
+                    case MPExtensionType.CSTBase + (int)ContainerStorageType.INamedValue: return ValueContainer.CreateNV(NVFormatter.Instance.Deserialize(ref mpReader, options), mapNullToEmpty: UseMapNullToEmptySettings.NV);
+                    case MPExtensionType.CSTBase + (int)ContainerStorageType.INamedValueSet: return ValueContainer.CreateNVS(NVSFormatter.Instance.Deserialize(ref mpReader, options), mapNullToEmpty: UseMapNullToEmptySettings.NVS);
 
                     case MPExtensionType.ArrayOfCSTBase + (int)ContainerStorageType.Bo: return ValueContainer.Create(boArrayFormatter.Deserialize(ref mpReader, options));
                     case MPExtensionType.ArrayOfCSTBase + (int)ContainerStorageType.Bi: return ValueContainer.Create(new BiArray(u1ArrayFormatter.Deserialize(ref mpReader, options)));
@@ -443,7 +538,13 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             if (extHdr.Length > 0)
                 mpReader.ReadRaw(extHdr.Length);
 
-            return ValueContainer.CreateA($"MPDeserializeWithExtPrefix: Skipped unknown Extension MesgPack block [mpt:{mesgPackType}, mphf:{mpHeaderFormat}, et:{mpExtType}, len:{extHdr.Length}]");
+            string cstTypeGuess = string.Empty;
+            if (mpExtType >= MPExtensionType.CSTBase && mpExtType <= MPExtensionType.CSTLast)
+                cstTypeGuess = $"{unchecked((ContainerStorageType)(mpExtType - MPExtensionType.CSTBase))}";
+            else if (mpExtType >= MPExtensionType.ArrayOfCSTBase && mpExtType <= MPExtensionType.ArrayOfCSTLast)
+                cstTypeGuess = $"Array_{unchecked((ContainerStorageType)(mpExtType - MPExtensionType.ArrayOfCSTBase))}";
+
+            return ValueContainer.CreateA($"MPDeserializeWithExtPrefix: Skipped unknown Extension MesgPack block [mpt:{mesgPackType}, mphf:{mpHeaderFormat}, et:{mpExtType}[{cstTypeGuess}], len:{extHdr.Length}]");
         }
 
         private ValueContainer HandleDeserializeUnexpectedMapBodyToNVS(ref MessagePackReader mpReader, int mapItemCount, MessagePackSerializerOptions options)
@@ -533,7 +634,8 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// </summary>
     public class NVSFormatter : IMessagePackFormatter<INamedValueSet>, IMessagePackFormatter<NamedValueSet>, IMessagePackFormatter
     {
-        public static readonly NVSFormatter Instance = new NVSFormatter();
+        /// <summary>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.NVSFormatter"/></summary>
+        public static NVSFormatter Instance => Instances.InstanceSet.NVSFormatter;
 
         void IMessagePackFormatter<NamedValueSet>.Serialize(ref MessagePackWriter mpWriter, NamedValueSet nvs, MessagePackSerializerOptions options)
         {
@@ -570,18 +672,27 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             if (mpReader.TryReadNil())
                 return null;
 
-            int mapItemCount = mpReader.ReadMapHeader();
-
-            var nvs = new NamedValueSet();
-
-            for (int idx = 0; idx < mapItemCount; idx++)
+            if (mpReader.NextMessagePackType == MessagePackType.Map)
             {
-                var name = mpReader.ReadString();
-                var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
-                nvs.SetValue(name.Sanitize(), vc);
-            }
+                int mapItemCount = mpReader.ReadMapHeader();
 
-            return nvs.MakeReadOnly();
+                var nvs = new NamedValueSet();
+
+                for (int idx = 0; idx < mapItemCount; idx++)
+                {
+                    var name = mpReader.ReadString();
+                    var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
+                    nvs.SetValue(name.Sanitize(), vc);
+                }
+
+                return nvs.MakeReadOnly();
+            }
+            else
+            {
+                var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
+
+                return (NamedValueSet) vc.GetValueNVS();
+            }
         }
     }
 
@@ -595,8 +706,10 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// </remarks>
     public class KVCSetFormatter : IMessagePackFormatter<ICollection<KeyValuePair<string, ValueContainer>>>, IMessagePackFormatter
     {
-        public static readonly KVCSetFormatter Instance = new KVCSetFormatter();
+        /// <summary>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.KVCSetFormatter"/></summary>
+        public static KVCSetFormatter Instance => Instances.InstanceSet.KVCSetFormatter;
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, ICollection<KeyValuePair<string, ValueContainer>> kvcSet, MessagePackSerializerOptions options)
         {
             if (kvcSet != null)
@@ -617,23 +730,33 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
         }
 
+        /// <inheritdoc/>
         public ICollection<KeyValuePair<string, ValueContainer>> Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
                 return null;
 
-            int mapItemCount = mpReader.ReadMapHeader();
-
-            var setArray = new KeyValuePair<string, ValueContainer>[mapItemCount];
-
-            for (int idx = 0; idx < mapItemCount; idx++)
+            if (mpReader.NextMessagePackType == MessagePackType.Map)
             {
-                var name = mpReader.ReadString();
-                var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
-                setArray[idx] = KVP.Create(name, vc);
-            }
+                int mapItemCount = mpReader.ReadMapHeader();
 
-            return setArray;
+                var setArray = new KeyValuePair<string, ValueContainer>[mapItemCount];
+
+                for (int idx = 0; idx < mapItemCount; idx++)
+                {
+                    var name = mpReader.ReadString();
+                    var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
+                    setArray[idx] = KVP.Create(name, vc);
+                }
+
+                return setArray;
+            }
+            else
+            {
+                var vc = VCFormatter.Instance.Deserialize(ref mpReader, options);
+
+                return vc.ConvertToKVCSet(mapNullToEmpty: false);
+            }
         }
     }
 
@@ -643,13 +766,15 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// </summary>
     public class NVFormatter : IMessagePackFormatter<INamedValue>, IMessagePackFormatter<NamedValue>, IMessagePackFormatter
     {
-        public static readonly NVFormatter Instance = new NVFormatter();
+        /// <summary>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.NVFormatter"/></summary>
+        public static NVFormatter Instance => Instances.InstanceSet.NVFormatter;
 
         void IMessagePackFormatter<NamedValue>.Serialize(ref MessagePackWriter mpWriter, NamedValue nv, MessagePackSerializerOptions options)
         {
             Serialize(ref mpWriter, nv, options);
         }
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, INamedValue nv, MessagePackSerializerOptions options)
         {
             if (nv != null)
@@ -670,6 +795,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             return Deserialize(ref mpReader, options);
         }
 
+        /// <inheritdoc/>
         public NamedValue Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
@@ -721,6 +847,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     {
         public static readonly TypeAndValueCarrierFormatter Instance = new TypeAndValueCarrierFormatter();
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, TypeAndValueCarrier tavc, MessagePackSerializerOptions options)
         {
             if (tavc != null)
@@ -744,6 +871,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
         }
 
+        /// <inheritdoc/>
         public TypeAndValueCarrier Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
@@ -790,6 +918,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             Serialize(ref mpWriter, lm, options);
         }
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, Logging.ILogMessage lm, MessagePackSerializerOptions options)
         {
             if (lm != null)
@@ -820,6 +949,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             return Deserialize(ref mpReader, options);
         }
 
+        /// <inheritdoc/>
         public Logging.LogMessage Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
@@ -868,7 +998,8 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         /// </summary>
         public HashSet<string> EnableSerializationOfLinksFromOtherObjectsTypeNameHashSet { get; set; } = new HashSet<string>();
 
-        public static readonly E039ObjectFormatter Instance = new E039ObjectFormatter();
+        /// <summary>Proxy for <see cref="Instances"/>.<see cref="InstanceSet.E039ObjectFormatter"/></summary>
+        public static E039ObjectFormatter Instance => Instances.InstanceSet.E039ObjectFormatter;
 
         private static readonly IMessagePackFormatter<E039ObjectFlags> e039ObjectFlagsFormatter = new MessagePack.Formatters.EnumAsStringFormatter<E039ObjectFlags>();
 
@@ -877,6 +1008,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             Serialize(ref mpWriter, e039Object, options);
         }
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, IE039Object e039Object, MessagePackSerializerOptions options)
         {
             if (e039Object != null)
@@ -921,6 +1053,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             return Deserialize(ref mpReader, options);
         }
 
+        /// <inheritdoc/>
         public E039Object Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
@@ -983,6 +1116,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     {
         public static readonly E039LinkFormatter Instance = new E039LinkFormatter();
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, E039Link e039Link, MessagePackSerializerOptions options)
         {
             mpWriter.WriteArrayHeader(3);
@@ -992,6 +1126,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             E039ObjectIDFormatter.Instance.Serialize(ref mpWriter, e039Link.ToID, options);
         }
 
+        /// <inheritdoc/>
         public E039Link Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             var arrayLen = mpReader.ReadArrayHeader();
@@ -1022,6 +1157,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     {
         public static readonly E039ObjectIDFormatter Instance = new E039ObjectIDFormatter();
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, E039ObjectID e039ObjectID, MessagePackSerializerOptions options)
         {
             if (e039ObjectID != null)
@@ -1041,6 +1177,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             }
         }
 
+        /// <inheritdoc/>
         public E039ObjectID Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             if (mpReader.TryReadNil())
@@ -1080,6 +1217,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
         private ITypeSerializerItem TypeSerializerItem { get; set; }
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, TItemType item, MessagePackSerializerOptions options)
         {
             var tavc = TypeSerializerItem.Serialize(item);
@@ -1087,6 +1225,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
             TypeAndValueCarrierFormatter.Instance.Serialize(ref mpWriter, tavc, options);
         }
 
+        /// <inheritdoc/>
         public TItemType Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             var tavc = TypeAndValueCarrierFormatter.Instance.Deserialize(ref mpReader, options);
@@ -1116,6 +1255,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         private XmlObjectSerializer _Serializer;
 
 
+        /// <inheritdoc/>
         public void Serialize(ref MessagePackWriter mpWriter, TItemType item, MessagePackSerializerOptions options)
         {
             using (var ms = new System.IO.MemoryStream())
@@ -1134,6 +1274,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
         private static readonly System.Xml.OnXmlDictionaryReaderClose ignoreOnClosed = _ => { };
 
+        /// <inheritdoc/>
         public TItemType Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions options)
         {
             var str = mpReader.ReadString();
@@ -1477,6 +1618,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
     /// <summary>
     /// Helper class used to open a file that contains a sequence of message pack records, either raw or lz4 compressed, 
     /// and to give the client access to read and traverse/decode each records contents using a relatively efficient reading engine.
+    /// This class can also be used with an externally provided file stream.
     /// </summary>
     public class MessagePackFileRecordReader : IDisposable
     {
@@ -1490,11 +1632,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         /// </summary>
         public MessagePackFileRecordReader Open(string filePath, MessagePackFileRecordReaderSettings settingsIn = default)
         {
-            ClearCounters();
-
-            ReleaseFileStreams();
-
-            Settings = settingsIn?.MakeCopyOfThis() ?? DefaultSettings;
+            SetupForUse(settingsIn);
 
             var compressorSelect = filePath.GetCompressorSelectFromFilePath();
             Stream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, Settings.FileOptions);
@@ -1511,10 +1649,41 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             EndReached = (_Counters.FileLength <= 0);
 
+            int initialReadSize = Settings.InitialReadSize ?? Settings.InitialBufferSize;
+
+            CommonSetupFromStream(initialReadSize);
+
+            return this;
+        }
+
+        public MessagePackFileRecordReader UseStream(Stream stream, MessagePackFileRecordReaderSettings settingsIn = default)
+        {
+            SetupForUse(settingsIn);
+
+            useStream = stream;
+            UsingExternalStream = true;
+
+            EndReached = false;
+
+            CommonSetupFromStream(Settings.ReadInitialRecord ? 1 : 0);
+
+            return this;
+        }
+
+        protected void SetupForUse(MessagePackFileRecordReaderSettings settingsIn = default)
+        {
+            ClearCounters();
+
+            ReleaseFileStreams();
+
+            Settings = settingsIn?.MakeCopyOfThis() ?? DefaultSettings;
+        }
+
+        protected void CommonSetupFromStream(int initialReadSize)
+        {
             ResetBufferGetAndPutIndexes();
             ResizeBuffer(Math.Max(Settings.InitialBufferSize, 512));
 
-            int initialReadSize = Settings.InitialReadSize ?? Settings.InitialBufferSize;
             if (!EndReached && initialReadSize > 0)
             {
                 ReadMore(initialReadSize);
@@ -1523,8 +1692,6 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             if (Settings.ReadInitialRecord)
                 AttemptToPopulateNextRecord();
-
-            return this;
         }
 
         private MessagePackFileRecordReaderSettings Settings { get; set; } = DefaultSettings;
@@ -1575,11 +1742,16 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
         private Stream useStream;
 
+        /// <summary>This property is true if this object is reading from an externally provided stream.</summary>
+        public bool UsingExternalStream { get; private set; }
+
         private void ReleaseFileStreams()
         {
             useStream?.Close();
 
             Fcns.DisposeOfObject(ref useStream);
+
+            UsingExternalStream = false;
         }
 
         /// <summary>
@@ -1839,8 +2011,13 @@ namespace Mosaic.ToolsLib.MessagePackUtils
 
             if (!EndReached && readRequestCount > 0)
             {
-                NoteBytesRead(useStream.Read(buffer, putIndex, readRequestCount));
+                int readCount;
+                NoteBytesRead(readCount = useStream.Read(buffer, putIndex, readRequestCount));
+
                 _Counters.NumberOfReads += 1;
+
+                if (readCount == 0 && UsingExternalStream)
+                    EndReached = true;
             }
 
             updateReadOnlySequenceNeeded = true;
@@ -2137,11 +2314,11 @@ namespace Mosaic.ToolsLib.MessagePackUtils
                     case MPHeaderByteCode.Bin32: mpt = MessagePackType.Binary; itemCountLength = 4; break;
                     case MPHeaderByteCode.True: mpt = MessagePackType.Boolean; fixedItemBodyLength = 0; break;
                     case MPHeaderByteCode.False: mpt = MessagePackType.Boolean; fixedItemBodyLength = 0; break;
-                    case MPHeaderByteCode.FixExt1: mpt = MessagePackType.Extension; fixedItemBodyLength = 1; break;
-                    case MPHeaderByteCode.FixExt2: mpt = MessagePackType.Extension; fixedItemBodyLength = 2; break;
-                    case MPHeaderByteCode.FixExt4: mpt = MessagePackType.Extension; fixedItemBodyLength = 4; break;
-                    case MPHeaderByteCode.FixExt8: mpt = MessagePackType.Extension; fixedItemBodyLength = 8; break;
-                    case MPHeaderByteCode.FixExt16: mpt = MessagePackType.Extension; fixedItemBodyLength = 16; break;
+                    case MPHeaderByteCode.FixExt1: mpt = MessagePackType.Extension; fixedItemBodyLength = 1+1; break; // type byte and content bytes
+                    case MPHeaderByteCode.FixExt2: mpt = MessagePackType.Extension; fixedItemBodyLength = 1+2; break; // type byte and content bytes
+                    case MPHeaderByteCode.FixExt4: mpt = MessagePackType.Extension; fixedItemBodyLength = 1+4; break; // type byte and content bytes
+                    case MPHeaderByteCode.FixExt8: mpt = MessagePackType.Extension; fixedItemBodyLength = 1+8; break; // type byte and content bytes
+                    case MPHeaderByteCode.FixExt16: mpt = MessagePackType.Extension; fixedItemBodyLength = 1+16; break; // type byte and content bytes
                     case MPHeaderByteCode.Ext8: mpt = MessagePackType.Extension; itemCountLength = 1; break;
                     case MPHeaderByteCode.Ext16: mpt = MessagePackType.Extension; itemCountLength = 2; break;
                     case MPHeaderByteCode.Ext32: mpt = MessagePackType.Extension; itemCountLength = 4; break;

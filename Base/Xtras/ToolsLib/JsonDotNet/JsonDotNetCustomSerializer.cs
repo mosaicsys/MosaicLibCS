@@ -20,28 +20,26 @@
  */
 
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
-using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Common.CustomSerialization;
 using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
 
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using Json = Newtonsoft.Json;
 
 namespace Mosaic.ToolsLib.JsonDotNet
 {
     public class JsonDotNetCustomSerializerFactory : ITypeSerializerItemFactory
     {
-        public JsonDotNetCustomSerializerFactory(string factoryName = null)
+        public JsonDotNetCustomSerializerFactory(string factoryName = null, JsonFormattingSpec formattingSpec = null)
         {
             FactoryName = factoryName ?? Fcns.CurrentClassName;
+            _FormattingSpec = formattingSpec?.MakeCopyOfThis() ?? new JsonFormattingSpec();
         }
 
         public string FactoryName {get; private set;}
+
+        private JsonFormattingSpec _FormattingSpec { get; }
 
         ITypeSerializerItem ITypeSerializerItemFactory.AttemptToGenerateSerializationSpecItemFor(Type targetType, string targetTypeStr, string assemblyFileName)
         {
@@ -55,20 +53,28 @@ namespace Mosaic.ToolsLib.JsonDotNet
 
         private class JsonDotNetTypeSerializerItem : TypeSerializerItemBase
         {
-            public JsonDotNetTypeSerializerItem(Type targetType = null, string targetTypeStr = null, string assemblyFileName = null, string factoryName = null)
+            public JsonDotNetTypeSerializerItem(Type targetType = null, string targetTypeStr = null, string assemblyFileName = null, string factoryName = null, JsonFormattingSpec jsonFormattingSpec = null)
                 : base(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: factoryName)
-            { }
+            {
+                JsonFormattingSpec = jsonFormattingSpec ?? new JsonFormattingSpec();
+            }
+
+            public JsonFormattingSpec JsonFormattingSpec { get => _JsonFormattingSpec.MakeCopyOfThis(); set => _JsonFormattingSpec = value?.MakeCopyOfThis() ?? DefaultJsonFormattingspec; }
+            private JsonFormattingSpec _JsonFormattingSpec = DefaultJsonFormattingspec;
+
+            private static readonly JsonFormattingSpec DefaultJsonFormattingspec = new JsonFormattingSpec();
 
             public override TypeAndValueCarrier Serialize(object valueObject)
             {
-                JsonSerializer serializer = new JsonSerializer()
+                Json.JsonSerializer serializer = new Json.JsonSerializer()
                 {
-                    TypeNameHandling = TypeNameHandling.Auto,
-                    TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
+                    TypeNameHandling = Json.TypeNameHandling.Auto,
+                    TypeNameAssemblyFormatHandling = Json.TypeNameAssemblyFormatHandling.Simple,
+                    Formatting = _JsonFormattingSpec.JsonFormatting,
                 };
 
                 using (StringWriter sw = new StringWriter())
-                using (JsonTextWriter jtw = new JsonTextWriter(sw))
+                using (Json.JsonTextWriter jtw = new Json.JsonTextWriter(sw) { IndentChar = _JsonFormattingSpec.IndentChar, Indentation = _JsonFormattingSpec.IndentCharPerLevelCount, QuoteChar = _JsonFormattingSpec.QuoteChar, QuoteName = _JsonFormattingSpec.QuoteName })
                 {
                     serializer.Serialize(jtw, valueObject);
                     return new TypeAndValueCarrier(typeStr: TargetTypeStr, assemblyFileName: AssemblyFileName, factoryName: FactoryName, valueStr: sw.ToString());
@@ -77,176 +83,17 @@ namespace Mosaic.ToolsLib.JsonDotNet
 
             public override object Deserialize(TypeAndValueCarrier valueCarrier)
             {
-                JsonSerializer serializer = new JsonSerializer()
+                Json.JsonSerializer serializer = new Json.JsonSerializer()
                 {
-                    ObjectCreationHandling = ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
+                    ObjectCreationHandling = Json.ObjectCreationHandling.Replace,        // Otherwise ValueContainerEnvelope properties do not get re-assigned correctly during deserialization.
                 };
 
                 using (StringReader sr = new StringReader(valueCarrier.ValueStr))
-                using (JsonTextReader jtr = new JsonTextReader(sr))
+                using (Json.JsonTextReader jtr = new Json.JsonTextReader(sr))
                 {
                     return serializer.Deserialize(jtr, TargetType);
                 }
             }
-        }
-    }
-
-    /// <summary>
-    /// ExtensionMethods
-    /// </summary>
-    public static partial class ExtensionMethods
-    {
-        /// <summary>
-        /// This extension method is used to convert the given <paramref name="jToken"/> to its ValueContainer equivalant
-        /// </summary>
-        public static ValueContainer ConvertToVC(this JToken jToken, bool rethrow = false)
-        {
-            switch (jToken.Type)
-            {
-                case JTokenType.Object: return ValueContainer.CreateNVS(((JObject)jToken).ConvertToNVS(rethrow: rethrow));
-                case JTokenType.Property: return ValueContainer.CreateNV(((JProperty)jToken).ConvertToNV(rethrow: rethrow));
-                case JTokenType.Array: return ValueContainer.CreateL(((JArray)jToken).ConvertToVCSet(rethrow: rethrow));
-
-                case JTokenType.None: return ValueContainer.Empty;
-                case JTokenType.Null: return ValueContainer.Null;
-
-                case JTokenType.Boolean: return ValueContainer.CreateBo(jToken.ToObject<bool>());
-                case JTokenType.Integer: return ValueContainer.CreateI8(jToken.ToObject<long>());
-                case JTokenType.Float: return ValueContainer.CreateF8(jToken.ToObject<double>());
-                case JTokenType.String: return ValueContainer.CreateA(jToken.ToObject<string>());
-                case JTokenType.Date: return ValueContainer.CreateDT(jToken.ToObject<DateTime>());
-                case JTokenType.TimeSpan: return ValueContainer.CreateTS(jToken.ToObject<TimeSpan>());
-
-                default:
-                    if (rethrow)
-                        throw new System.InvalidCastException($"JToken type {jToken.Type} is not supported here [{jToken}]");
-                    else
-                        return ValueContainer.CreateA($"Usupported JToken: {jToken}");
-            }
-        }
-
-        /// <summary>
-        /// This extension method is used to convert the given <paramref name="jObject"/> to its INamedValueSet equivalant.
-        /// </summary>
-        public static INamedValueSet ConvertToNVS(this JObject jObject, bool rethrow = false)
-        {
-            return new NamedValueSet(jObject.Properties().Select(JProperty => JProperty.ConvertToNV(rethrow: rethrow))).MakeReadOnly();
-        }
-
-        /// <summary>
-        /// This extension method is used to convert the given <paramref name="jProperty"/> to its INamedValue equivalant.
-        /// </summary>
-        public static INamedValue ConvertToNV(this JProperty jProperty, bool rethrow = false)
-        {
-            return new NamedValue(jProperty.Name, jProperty.Value.ConvertToVC(rethrow: rethrow)).MakeReadOnly();
-        }
-
-        /// <summary>
-        /// This extension method is used to convert the given <paramref name="jArray"/> to its ReadOnlyIList{ValueContainer} equivalant.
-        /// </summary>
-        public static ReadOnlyIList<ValueContainer> ConvertToVCSet(this JArray jArray, bool rethrow = false)
-        {
-            return new ReadOnlyIList<ValueContainer>(jArray.AsJEnumerable().Select(jToken => jToken.ConvertToVC(rethrow: rethrow)));
-        }
-
-        public static JToken ConvertToJToken(this ValueContainer vc, bool rethrow = false)
-        {
-            switch (vc.cvt)
-            {
-                case ContainerStorageType.None: return JValue.CreateNull();
-                case ContainerStorageType.A: return (JValue)vc.GetValueA(rethrow: rethrow);
-                case ContainerStorageType.Bo: return (JValue)vc.u.b;
-                case ContainerStorageType.I1: return (JValue)vc.u.i8;
-                case ContainerStorageType.I2: return (JValue)vc.u.i16;
-                case ContainerStorageType.I4: return (JValue)vc.u.i32;
-                case ContainerStorageType.I8: return (JValue)vc.u.i64;
-                case ContainerStorageType.U1: return (JValue)vc.u.u8;
-                case ContainerStorageType.U2: return (JValue)vc.u.u16;
-                case ContainerStorageType.U4: return (JValue)vc.u.u32;
-                case ContainerStorageType.U8: return (JValue)vc.u.u64;
-                case ContainerStorageType.Bi: return (JValue)vc.u.bi;
-                case ContainerStorageType.F4: return (JValue)vc.u.f32;
-                case ContainerStorageType.F8: return (JValue)vc.u.f64;
-                case ContainerStorageType.DT: return (JValue)vc.u.DateTime;
-                case ContainerStorageType.TS: return (JValue)vc.u.TimeSpan;
-                case ContainerStorageType.LS: return vc.GetValueLS(rethrow: rethrow).ConvertToJArray(rethrow: rethrow);
-                case ContainerStorageType.L: return vc.GetValueL(rethrow: rethrow).ConvertToJArray(rethrow: rethrow);
-                case ContainerStorageType.NV: return vc.GetValueNV(rethrow: rethrow).ConvertToJProperty(rethrow: rethrow);
-                case ContainerStorageType.NVS: return vc.GetValueNVS(rethrow: rethrow).ConvertToJObject(rethrow: rethrow);
-                case ContainerStorageType.Object:
-                    {
-                        if (vc.o == null)
-                            return JValue.CreateNull();
-
-                        System.Collections.IEnumerable ie = vc.o as System.Collections.IEnumerable;
-                        if (ie != null)
-                            return ie.ConvertToJArray(rethrow: rethrow);
-
-                        try
-                        {
-                            return JToken.FromObject(vc.o);
-                        }
-                        catch (System.Exception ex)
-                        {
-                            if (rethrow)
-                                throw new System.InvalidCastException($"{vc} cannot be converted to a JObject", innerException: ex);
-                            else
-                                return (JToken)$"{vc} cannot be converted to a JObject: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}";
-                        }
-                    }
-                default:
-                    if (rethrow)
-                        throw new System.InvalidCastException($"ValueContainer type {vc.cvt} is not supported here {vc}");
-                    else
-                        return (JToken) $"Usupported ValueContainer: {vc}";
-            }
-        }
-
-        /// <summary>
-        /// EM converts the given ValueContainer <paramref name="set"/> to a JArray of JTokens created from each of the ValueContainer instances in the given <paramref name="set"/>
-        /// </summary>
-        public static JArray ConvertToJArray(this IEnumerable<ValueContainer> set, bool rethrow = false)
-        {
-            return new JArray().SafeAddRange(set.Select(vc => vc.ConvertToJToken(rethrow: rethrow)));
-        }
-
-        /// <summary>
-        /// EM converts the given string <paramref name="set"/> to a JArray of JTokens created from each of the object instances in the given <paramref name="set"/>
-        /// </summary>
-        public static JArray ConvertToJArray(this IEnumerable<object> set, bool rethrow = false)
-        {
-            return new JArray().SafeAddRange(set.Select(item => ValueContainer.CreateFromObject(item).ConvertToJToken(rethrow: rethrow)));
-        }
-
-        /// <summary>
-        /// EM converts the given string <paramref name="set"/> to a JArray of JTokens created from each of the object instances in the given <paramref name="set"/>
-        /// </summary>
-        public static JArray ConvertToJArray(this System.Collections.IEnumerable set, bool rethrow = false)
-        {
-            return new JArray().SafeAddRange(set.SafeToSet().Select(item => ValueContainer.CreateFromObject(item).ConvertToJToken(rethrow: rethrow)));
-        }
-
-        /// <summary>
-        /// EM creates and returns a JProperty from the contents of the given <paramref name="nv"/>
-        /// </summary>
-        public static JProperty ConvertToJProperty(this INamedValue nv, bool rethrow = false)
-        {
-            return new JProperty(nv.Name) { Value = nv.VC.ConvertToJToken(rethrow: rethrow) };
-        }
-
-        /// <summary>
-        /// EM creates and returns a JObject from the contents of the given <paramref name="nvs"/>
-        /// </summary>
-        public static JObject ConvertToJObject(this INamedValueSet nvs, bool rethrow = false)
-        {
-            var jObject = new JObject();
-
-            foreach (var nv in nvs)
-            {
-                jObject.Add(nv.Name, nv.VC.ConvertToJToken(rethrow: rethrow));
-            }
-
-            return jObject;
         }
     }
 }

@@ -4,6 +4,7 @@
 	{"Key":"Config.HostCycle.DeviceID", "VC":{"u16": 32767}},
 	{"Key":"Config.HostCycle.RecipeNameExtension", "VC":{"s": ".txt"}},
 	{"Key":"Config.HostCycle.CreateJobWithTemporaryRecipe", "VC":{"b": false}},
+	{"Key":"Config.HostCycle.CyclePreCarrierReCreateDelay", "VC":{"f64": 5.0}},
 
 	{"Key":"E030Config.GoRemoteCmd", "VC":{"s": "REMOTE"}},
 	{"Key":"E030Config.GoLocalCmd", "VC":{"s": "LOCAL"}},

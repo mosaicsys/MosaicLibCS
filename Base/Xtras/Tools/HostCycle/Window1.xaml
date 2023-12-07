@@ -26,7 +26,7 @@
     xmlns:ext="clr-namespace:MosaicLib.WPF.Extensions;assembly=MosaicLibCS_WPF"
     xmlns:cmd="clr-namespace:MosaicLib.WPF.Commands;assembly=MosaicLibCS_WPF"
     xmlns:local="clr-namespace:HostCycle"
-    Title="Window1" Height="950" Width="1000">
+    Title="Window1" Height="990" Width="900">
     <Window.Resources>
         <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
         <conv:ObjectToStringConverter x:Key="ObjectToStringConverter"/>
@@ -50,18 +50,17 @@
                         <ctrl:PartBaseStateLED DockPanel.Dock="Right" HorizontalAlignment="Right" Height="20" Width="20" BorderThickness="2" PartBaseState="{Binding [HostCycle.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.ActionInfo].ValueAsObject, Mode=OneWay}"/>
                     </StackPanel>
                 </TabItem.Header>
-                <Canvas>
+                <StackPanel Orientation="Vertical">
                     <GroupBox Header="HostCycle" MinWidth="450" Padding="2" Canvas.Left="10" Canvas.Top="10">
                         <StackPanel Orientation="Vertical" MinWidth="450" Margin="2">
-                            <DockPanel Margin="2">
-                                <Label Content="State:"/>
-                                <Label Width="150" DockPanel.Dock="Right" Content="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}" ToolTip="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}"/>
-                                <ctrl:PartBaseStateLED Name="hostCyclePartLED" DockPanel.Dock="Right" HorizontalAlignment="Right" Height="25" Width="25" BorderThickness="2" PartBaseState="{Binding [HostCycle.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.ActionInfo].ValueAsObject, Mode=OneWay}"/>
+                            <DockPanel Margin="2" LastChildFill="True">
+                                <Label DockPanel.Dock="Left" Content="State:"/>
+                                <ctrl:PartBaseStateLED DockPanel.Dock="Left" Name="hostCyclePartLED" Height="25" Width="25" BorderThickness="2" PartBaseState="{Binding [HostCycle.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.ActionInfo].ValueAsObject, Mode=OneWay}"/>
+                                <Label MinWidth="150" Content="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}" ToolTip="{Binding ElementName=hostCyclePartLED, Path=ToolTip, Mode=OneWay}"/>
                             </DockPanel>
                             <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
                             <DockPanel LastChildFill="True">
-                                <Label Content="State:" DockPanel.Dock="Left" MinWidth="60" VerticalAlignment="Center"/>
-                                <TextBox BorderThickness="2" BorderBrush="Gray" IsReadOnly="True" TextWrapping="Wrap" Text="{Binding [HostCycle.EqpInfoNVS].ValueAsObject, Mode=OneWay, Converter={StaticResource VCToStringSMLConverter}}" Width="380" MinHeight="80"/>
+                                <TextBox BorderThickness="2" BorderBrush="Gray" IsReadOnly="True" TextWrapping="Wrap" Text="{Binding [HostCycle.EqpInfoNVS].ValueAsObject, Mode=OneWay, Converter={StaticResource VCToStringSMLConverter}}" MinWidth="380" MinHeight="80"/>
                             </DockPanel>
                             <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
                             <StackPanel Orientation="Horizontal">
@@ -77,188 +76,35 @@
                                 <Button Content="Refresh" CommandParameter="HostCycle Refresh" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
                                 <Button Content="RefreshE039" CommandParameter="HostCycle RefreshE039" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
                             </StackPanel>
-                            <DockPanel>
-                                <Label DockPanel.Dock="Left" Content="PPIDs:" MinWidth="60" VerticalAlignment="Center"/>
-                                <ComboBox ItemsSource="{Binding [HostCycle.PPIDArray].ValueAsObject, Mode=OneWay}" SelectedValue="{Binding [SelectedPPID].ValueAsString, Mode=TwoWay}" MinHeight="30" Width="380"/>
-                            </DockPanel>
                         </StackPanel>
                     </GroupBox>
-                    <GroupBox Header="LP1" Canvas.Top="256" MinWidth="350" Padding="2" Canvas.Left="10" Width="450">
-                        <StackPanel Orientation="Vertical">
-                            <DockPanel Margin="2">
-                                <Label Content="State:"/>
-                                <Label Width="270" DockPanel.Dock="Right" Content="{Binding ElementName=lpCyclePartLED, Path=ToolTip, Mode=OneWay}" ToolTip="{Binding ElementName=lpCyclePartLED, Path=ToolTip, Mode=OneWay}"/>
-                                <ctrl:PartBaseStateLED Name="lpCyclePartLED" DockPanel.Dock="Right" HorizontalAlignment="Right" Height="25" Width="25" BorderThickness="2" PartBaseState="{Binding [HostCycle.LP1.BaseState].ValueAsObject, Mode=OneWay}" ActionInfo="{Binding [HostCycle.LP1.ActionInfo].ValueAsObject, Mode=OneWay}"/>
-                            </DockPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <DockPanel>
-                                <Label Content="AMS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.AMS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="LRS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.LRS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="LTS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.LTS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="LCAS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Width="220" ToolTip="{Binding Path=Content, RelativeSource={RelativeSource Self}}" MinWidth="300">
-                                    <Label.Content>
-                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
-                                            <Binding Path="[HostCycle.LP1.LCAS].ValueAsString" FallbackValue="----" Mode="OneWay"/>
-                                            <Binding Source=" ["/>
-                                            <Binding Path="[HostCycle.LP1.LCAS_CarrierID].ValueAsString" FallbackValue="" Mode="OneWay"/>
-                                            <Binding Source="]"/>
-                                        </MultiBinding>
-                                    </Label.Content>
-                                </Label>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="CIDS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CIDS].ValueAsString, Mode=OneWay}" MinWidth="300" ToolTip="{Binding [HostCycle.LP1.CIDS_Reason].VC, Mode=OneWay}"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="CSMS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CSMS].ValueAsString, Mode=OneWay}" MinWidth="300" ToolTip="{Binding [HostCycle.LP1.CSMS_Reason].VC, Mode=OneWay}"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="CAS:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CAS].ValueAsString, Mode=OneWay}" MinWidth="300"/>
-                            </DockPanel>
-
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <DockPanel>
-                                <Label Content="CIDS CarrierID:" DockPanel.Dock="Left"/>
-                                <TextBox BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Text="{Binding [HostCycle.LP1.CIDS_CarrierID].ValueAsString, Mode=TwoWay}" MinWidth="300"/>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="CSMS SlotMap:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding [HostCycle.LP1.CSMS_SlotMap].ValueAsString, Mode=TwoWay}" MinWidth="300"/>
-                            </DockPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <DockPanel>
-                                <Label Content="Last Carrier Event:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.LastCarrierEventInfo].ValueAsString, Mode=TwoWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
-                            </DockPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Initialize" CommandParameter="HostCycle LP1 GoOnlineAndInitialize" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
-                                <Button Content="Reserve" CommandParameter="HostCycle LP1 ReserveAtPort" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
-                                <Button Content="Cancel Reservation" CommandParameter="HostCycle LP1 CancelReservationAtPort" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
-                                <Button Content="Automatic" CommandParameter="HostCycle LP1 Automatic" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
-                                <Button Content="Manual" CommandParameter="HostCycle LP1 Manual" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="PWC1" CommandParameter="HostCycle LP1 ProceedWithCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <Button Content="PWC2" CommandParameter="HostCycle LP1 ProceedWithCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <Button Content="Recreate1" CommandParameter="HostCycle LP1 CarrierReCreate" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <Button Content="Recreate2" CommandParameter="HostCycle LP1 CarrierReCreate" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="Capacity" Source="25" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <Button Content="Cancel" CommandParameter="HostCycle LP1 CancelCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <CheckBox Content="Auto PWC and Cancel" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.AutoPWCAndCancel].ValueAsBoolean, Mode=TwoWay}"/>
-                            </StackPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <DockPanel>
-                                <Label Content="CJID [State]:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300">
-                                    <Label.Tag>
-                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
-                                            <Binding Path="[HostCycle.LP1.CJID].ValueAsString" FallbackValue="----" Mode="OneWay"/>
-                                            <Binding Source=" ["/>
-                                            <Binding Path="[HostCycle.LP1.CJState].ValueAsString" FallbackValue="" Mode="OneWay"/>
-                                            <Binding Source="]"/>
-                                        </MultiBinding>
-                                    </Label.Tag>
-                                </Label>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="PJIDs [States]:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300">
-                                    <Label.Tag>
-                                        <MultiBinding Converter="{StaticResource ConcatenateMultiValueConverter}">
-                                            <Binding Path="[HostCycle.LP1.PJIDs].ValueAsString" FallbackValue="----" Mode="OneWay"/>
-                                            <Binding Source=" ["/>
-                                            <Binding Path="[HostCycle.LP1.PJStates].ValueAsString" FallbackValue="" Mode="OneWay"/>
-                                            <Binding Source="]"/>
-                                        </MultiBinding>
-                                    </Label.Tag>
-                                </Label>
-                            </DockPanel>
-                            <DockPanel>
-                                <Label Content="PPID:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.PPID].ValueAsString, Mode=OneWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
-                            </DockPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <DockPanel>
-                                <Label Content="E090 state tally:" DockPanel.Dock="Left"/>
-                                <Label BorderThickness="2" BorderBrush="Gray" HorizontalAlignment="Right" Tag="{Binding [HostCycle.LP1.E090StateTally].ValueAsString, Mode=OneWay}" Content="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" MinWidth="300"/>
-                            </DockPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Create Jobs" CommandParameter="HostCycle LP1 CreateJobs" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="CarrierID" Path="[HostCycle.LP1.CIDS_CarrierID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="PPID" Path="[SelectedPPID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                            <Binding ConverterParameter="SlotMap" Path="[HostCycle.LP1.CSMS_SlotMap].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <Button Content="Run Carrier" CommandParameter="HostCycle LP1 Start RunCarrier" Command="{x:Static cmd:Commands.RoutedServiceCommand}" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3">
-                                    <ext:Attachable.NPV>
-                                        <MultiBinding Converter="{StaticResource NamedValueSetConverter}">
-                                            <Binding ConverterParameter="PPID" Path="[SelectedPPID].ValueAsString" Mode="OneWay" Converter="{StaticResource NamedValueConverter}"/>
-                                        </MultiBinding>
-                                    </ext:Attachable.NPV>
-                                </Button>
-                                <CheckBox Content="Cycle" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.CycleSelected].ValueAsBoolean, Mode=TwoWay}"/>
-                                <CheckBox Content="Pause" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestPause].ValueAsBoolean, Mode=TwoWay}"/>
-                                <CheckBox Content="Stop" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestStop].ValueAsBoolean, Mode=TwoWay}"/>
-                                <CheckBox Content="Abort" VerticalAlignment="Center" Margin="10,0,0,0" IsChecked="{Binding [HostCycle.LP1.RequestAbort].ValueAsBoolean, Mode=TwoWay}"/>
-                                <Label Content="{Binding [HostCycle.LP1.RunNumber].ValueAsString, Mode=OneWay}" MinHeight="23" MinWidth="40" BorderBrush="Black" BorderThickness="1" Margin="10,0,0,0"/>
-                            </StackPanel>
-                            <Frame BorderThickness="1" BorderBrush="LightGray" Margin="0,3,0,3"/>
-                        </StackPanel>
-                    </GroupBox>
-                </Canvas>
+                    <TabControl x:Name="lpTabControl" Tag="{Binding [HostCycle.PPIDArray].ValueAsObject, Mode=OneWay}">
+                        <TabItem Header="LP1" x:Name="lp1Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="1" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP1.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP2" x:Name="lp2Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="2" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP2.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP3" x:Name="lp3Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="3" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP3.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP4" x:Name="lp4Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="4" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP4.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP5" x:Name="lp5Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="4" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP5.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP6" x:Name="lp6Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="4" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP6.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP7" x:Name="lp7Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="4" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP7.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                        <TabItem Header="LP8" x:Name="lp8Control">
+                            <local:LoadPortControl HorizontalAlignment="Left" PortID="4" DataContext="{Binding Path=SubTreeFactory[HostCycle.LP8.]}" PPIDArray="{Binding ElementName=lpTabControl, Path=Tag, Mode=OneWay}"/>
+                        </TabItem>
+                    </TabControl>
+                </StackPanel>
             </TabItem>
             <TabItem Header="Term Svcs">
                 <StackPanel Orientation="Vertical" MinWidth="450" Margin="2">

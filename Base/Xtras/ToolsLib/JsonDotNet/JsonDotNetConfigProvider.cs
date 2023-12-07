@@ -23,6 +23,8 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Persist;
 
+using Json = Newtonsoft.Json;
+
 namespace Mosaic.ToolsLib.JsonDotNet
 {
     /// <summary>
@@ -38,6 +40,15 @@ namespace Mosaic.ToolsLib.JsonDotNet
         /// </summary>
         public PersistentJsonDotNetTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet providerMetaData = null, bool sortKeysOnSave = false)
             : base(name, ringConfig, new DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, providerMetaData: providerMetaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
-        { }
+        {
+            DCJStoreAdapter = (DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ConfigKeyStore>) ringAdapter;
+        }
+
+        private DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ConfigKeyStore> DCJStoreAdapter { get; }
+
+        /// <summary>
+        /// Allows client to obtain and/or update the <see cref="JsonDotNet.JsonFormattingSpec"/> that is being used to control how this instance serializes of objects to JSON.
+        /// </summary>
+        public JsonFormattingSpec JsonFormattingSpec { get => DCJStoreAdapter.JsonFormattingSpec; set => DCJStoreAdapter.JsonFormattingSpec = value; }
     }
 }

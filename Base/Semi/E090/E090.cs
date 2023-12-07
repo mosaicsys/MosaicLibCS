@@ -1402,13 +1402,69 @@ namespace MosaicLib.Semi.E090
 
     #endregion
 
-    #region E090SubstLocInfo, E090SubstInfo helper structs.
+    #region IE090SubstLocInfo interfaces and E090SubstLocInfo, E090SubstInfo helper structs.
+
+    /// <summary>
+    /// This is the interface for the <see cref="E090SubstLocInfo"/> helper object that is generally used to extract Substrate Location related information from an SubstLoc IE039Object.
+    /// <para/>At present all normal SubstLoc related information is derived from the "Contains", "SrcLoc" and "DestLoc" links from/to the given location.
+    /// </summary>
+    public interface IE090SubstLocInfo : IEquatable<IE090SubstLocInfo>
+    {
+        /// <summary>Gives the original object that this info object was constructed from, or null for the default constructor.</summary>
+        IE039Object Obj { get; }
+
+        /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
+        E039ObjectID ObjID { get; }
+
+        /// <summary>When non-zero, this property gives the instance number for this location.  This is typically used when the location is part of a set of locations that can be indexed.  In this case this property may be used to determine the location's index in the set.</summary>
+        int InstanceNum { get; }
+
+        /// <summary>When non-null this gives the E087 SlotState that was last produced when mapping this location.</summary>
+        E087.SlotState? MapSlotState { get; }
+
+        /// <summary>When non-empty this gives the reason why this substrate location should not be accessed now.</summary>
+        string NotAccessibleReason { get; }
+
+        /// <summary>Gives the "Contains" link</summary>
+        E039Link LinkToSubst { get; }
+
+        /// <summary>Gives the set of "SrcLoc" links from other objects to here.  Generally there should only be one.</summary>
+        E039Link[] SrcLinksToHere { get; }
+
+        /// <summary>Gives the set of "DestLoc" links from other objects to here.  Generally there should only be one.</summary>
+        E039Link[] DestLinksToHere { get; }
+
+        /// <summary>
+        /// This property is used to indicate if the corresponding Substrate Location Object is Occupied, Unoccupied or is Undefined.
+        /// If the object contains a valid LinkToSubst link (using the "Contains" key) then it returns Occupied/Unoccupied based on the link's ToID being non-empty/empty.
+        /// Otherwise the property returns Undefined.  This typically happens if this object has been constructed from and E039Object that does not have a Contains link and is thus not a valid substrate location.
+        /// </summary>
+        SubstLocState SLS { get; }
+
+        /// <summary>Returns true if the location is Occupied (it has a valid Contains link with a non-empty ToID)</summary>
+        bool IsOccupied { get; }
+
+        /// <summary>Returns true if the location is Unocccupied (it has a valid Contains link with an empty ToID)</summary>
+        bool IsUnoccupied { get; }
+
+        /// <summary>Returns true if the location is Occupied or Unocccupied (it has a valid Contains link, ToID can be empty or not)</summary>
+        bool IsValid { get; }
+
+        /// <summary>
+        /// Attempts to follow the LinkToSubst ("Contains") link and obtain the IE039Object for the current state of the linked object from its table.  
+        /// Returns the resulting IE039Object, or the given <paramref name="fallbackObj"/> if the link could not be successfully followed.
+        /// </summary>
+        IE039Object GetContainedE039Object(IE039Object fallbackObj = null);
+
+        /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.  This is NOT the same as indicating that the current location is Unoccupied</summary>
+        bool IsEmpty { get; }
+    }
 
     /// <summary>
     /// This is a helper object that is generally used to extract Substrate Location related information from an SubstLoc IE039Object.
     /// <para/>At present all normal SubstLoc related information is derived from the "Contains", "SrcLoc" and "DestLoc" links from/to the given location.
     /// </summary>
-    public struct E090SubstLocInfo : IEquatable<E090SubstLocInfo>
+    public struct E090SubstLocInfo : IEquatable<E090SubstLocInfo>, IE090SubstLocInfo
     {
         /// <summary>Implicit cast operator to support use implicit conversion of a E090SubstLocInfo object to the SubstLoc ObjID that is contained therein.</summary>
         public static implicit operator E039ObjectID(E090SubstLocInfo substLocInfo) { return substLocInfo.ObjID; }
@@ -1455,36 +1511,32 @@ namespace MosaicLib.Semi.E090
             return nvs;
         }
 
-        /// <summary>Gives the original object that this info object was constructed from, or null for the default constructor.</summary>
+        /// <inheritdoc/>
         public IE039Object Obj { get; private set; }
 
-        /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
+        /// <inheritdoc/>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
         private E039ObjectID _objID;
 
-        /// <summary>When non-zero, this property gives the instance number for this location.  This is typically used when the location is part of a set of locations that can be indexed.  In this case this property may be used to determine the location's index in the set.</summary>
+        /// <inheritdoc/>
         public int InstanceNum { get; set; }
 
-        /// <summary>When non-null this gives the E087 SlotState that was last produced when mapping this location.</summary>
+        /// <inheritdoc/>
         public Semi.E087.SlotState? MapSlotState { get; set; }
 
-        /// <summary>When non-empty this gives the reason why this substrate location should not be accessed now.</summary>
+        /// <inheritdoc/>
         public string NotAccessibleReason { get; set; }
 
-        /// <summary>Gives the "Contains" link</summary>
+        /// <inheritdoc/>
         public E039Link LinkToSubst { get; set; }
 
-        /// <summary>Gives the set of "SrcLoc" links from other objects to here.  Generally there should only be one.</summary>
+        /// <inheritdoc/>
         public E039Link[] SrcLinksToHere { get; set; }
 
-        /// <summary>Gives the set of "DestLoc" links from other objects to here.  Generally there should only be one.</summary>
+        /// <inheritdoc/>
         public E039Link[] DestLinksToHere { get; set; }
 
-        /// <summary>
-        /// This property is used to indicate if the corresponding Substrate Location Object is Occupied, Unoccupied or is Undefined.
-        /// If the object contains a valid LinkToSubst link (using the "Contains" key) then it returns Occupied/Unoccupied based on the link's ToID being non-empty/empty.
-        /// Otherwise the property returns Undefined.  This typically happens if this object has been constructed from and E039Object that does not have a Contains link and is thus not a valid substrate location.
-        /// </summary>
+        /// <inheritdoc/>
         public SubstLocState SLS 
         { 
             get 
@@ -1496,19 +1548,16 @@ namespace MosaicLib.Semi.E090
             } 
         }
 
-        /// <summary>Returns true if the location is Occupied (it has a valid Contains link with a non-empty ToID)</summary>
+        /// <inheritdoc/>
         public bool IsOccupied { get { return SLS.IsOccupied(); } }
 
-        /// <summary>Returns true if the location is Unocccupied (it has a valid Contains link with an empty ToID)</summary>
+        /// <inheritdoc/>
         public bool IsUnoccupied { get { return SLS.IsUnoccupied(); } }
 
-        /// <summary>Returns true if the location is Occupied or Unocccupied (it has a valid Contains link, ToID can be empty or not)</summary>
+        /// <inheritdoc/>
         public bool IsValid { get { return SLS.IsValid(); } }
 
-        /// <summary>
-        /// Attempts to follow the LinkToSubst ("Contains") link and obtain the IE039Object for the current state of the linked object from its table.  
-        /// Returns the resulting IE039Object, or the given <paramref name="fallbackObj"/> if the link could not be successfully followed.
-        /// </summary>
+        /// <inheritdoc/>
         public IE039Object GetContainedE039Object(IE039Object fallbackObj = null)
         {
             var toID = LinkToSubst.ToID;
@@ -1517,10 +1566,10 @@ namespace MosaicLib.Semi.E090
 
         private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;
 
-        /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
+        /// <inheritdoc/>
         public static E090SubstLocInfo Empty { get { return new E090SubstLocInfo() { ObjID = E039ObjectID.Empty, NotAccessibleReason = "", SrcLinksToHere = emptyLinkArray, DestLinksToHere = emptyLinkArray }; } }
 
-        /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.  This is NOT the same as indicating that the current location is Unoccupied</summary>
+        /// <inheritdoc/>
         public bool IsEmpty { get { return this.Equals(Empty); } }
 
         /// <summary>
@@ -1528,6 +1577,22 @@ namespace MosaicLib.Semi.E090
         /// <para/>NOTE: this test does not look at the contents of the Obj property.
         /// </summary>
         public bool Equals(E090SubstLocInfo other)
+        {
+            return (ObjID.Equals(other.ObjID)
+                    && InstanceNum == other.InstanceNum
+                    && MapSlotState == other.MapSlotState
+                    && NotAccessibleReason == other.NotAccessibleReason
+                    && LinkToSubst.Equals(other.LinkToSubst)
+                    && SrcLinksToHere.IsEqualTo(other.SrcLinksToHere)
+                    && DestLinksToHere.IsEqualTo(other.DestLinksToHere)
+                    );
+        }
+
+        /// <summary>
+        /// Returns true if the contents of this object match the contentents of the given <paramref name="other"/> object.
+        /// <para/>NOTE: this test does not look at the contents of the Obj property.
+        /// </summary>
+        public bool Equals(IE090SubstLocInfo other)
         {
             return (ObjID.Equals(other.ObjID)
                     && InstanceNum == other.InstanceNum
@@ -1701,7 +1766,13 @@ namespace MosaicLib.Semi.E090
             set { SubstUsageStr = value.ToString(); }
         }
 
-        /// <summary>Proxy for SubstLocID attribute - Gives the Name of the FromID for the first Contains link from that links to this object [Contains]</summary>
+        /// <summary>
+        /// Proxy for SubstLocID attribute - Gives the Name of the FromID for the first Contains link from that links to this object [Contains]
+        /// </summary>
+        /// <remarks>
+        /// Note that this property is not always available on reconsituted objects from data recording as the related link from list may not be serialized to persistent store.
+        /// A possible alternate source for this information would be the last entry in the <see cref="SPSLocList"/>
+        /// </remarks>
         public string LocID { get { return _locID.MapNullToEmpty(); } set { _locID = value; } }
         private string _locID;
 

@@ -304,7 +304,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             { }
         }
 
-        public class ExitException : System.Exception { }
+        public class ExitException 
+            : System.Exception 
+        {
+            public ExitException(string message, Exception innerException = null)
+                : base(message, innerException: innerException)
+            { }
+        }
 
         private static Logging.ILogger appLogger;
 
@@ -321,8 +327,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (args.SafeLength() <= 0)
                 {
-                    WriteUsage();
-                    new ExitException().Throw();
+                    string errorMesg = null;
+                    WriteUsage(errorMesg);
+                    new ExitException(errorMesg).Throw();
                 }
 
                 Config.AddStandardProviders(ref args, StandardProviderSelect.All);
@@ -378,8 +385,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (settings.DataFileName.IsNullOrEmpty() && settings.DataFileType != DataFileType.None)
                 {
-                    WriteUsage($"Given {settings.DataFileType} DataFileName must be a non-empty string");
-                    new ExitException().Throw();
+                    var errorMesg = $"Given {settings.DataFileType} DataFileName must be a non-empty string";
+                    WriteUsage(errorMesg);
+                    new ExitException(errorMesg).Throw();
                 }
 
                 switch (settings.DataFileType)
@@ -399,8 +407,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (dataWriter == null)
                 {
-                    WriteUsage($"Given DataFileSpec type:{settings.DataFileType} '{settings.DataFileName}' is not valid [type not recognized]");
-                    new ExitException().Throw();
+                    string errorMesg = $"Given DataFileSpec type:{settings.DataFileType} '{settings.DataFileName}' is not valid [type not recognized]";
+                    WriteUsage(errorMesg);
+                    new ExitException(errorMesg).Throw();
                 }
 
                 dataWriter.WriteMessage($"{currentExecAssy.GetSummaryNameAndVersion()} being run with arguments: {string.Join(" ", entryArgs)}", writeToConsole: false);
@@ -410,8 +419,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (mdrfFileNames.IsNullOrEmpty())
                 {
-                    WriteUsage("No MDRF files were specified on the command line or in any configuration ini file or other configuration source.\r    At least one MDRF file name or search pattern must be specified for normal operation.");
-                    new ExitException().Throw();
+                    string errorMesg = "No MDRF files were specified on the command line or in any configuration ini file or other configuration source.\r    At least one MDRF file name or search pattern must be specified for normal operation.";
+                    WriteUsage(errorMesg);
+                    new ExitException(errorMesg).Throw();
                 }
 
                 QpcTimeStamp startTime = QpcTimeStamp.Now;
@@ -525,8 +535,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 Console.WriteLine($"Completed processing of {mdrfFileNames.Length} files: {totalKBytes:f3}k took {totalElapsedTime:f3} seconds.  AvgRate:{totalKBytes * (totalElapsedTime.SafeOneOver()):f3} k/s");
             }
-            catch (ExitException)
-            { }
+            catch (ExitException ee)
+            {
+                _ = ee;
+            }
             catch (ErrorMessageException ex)
             {
                 if (ex.InnerException == null)
@@ -919,7 +931,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
         {
             public VCSetDataRow(in MDRF2DateTimeStampPair dtPair, ExtractMDRFtoDB.GroupDataAccumulator.MappedGroupPointInfo [] mappedGroupPointInfoArray, IList<ValueContainer> vcList)
             {
-                UTCDateTime = dtPair.DateTime.ToUniversalTime();
+                UTCDateTime = dtPair.DateTimeUTC;
                 FileDeltaTimeStamp = dtPair.FileDeltaTime;
 
                 if (mappedGroupPointInfoArray != null)
@@ -944,7 +956,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
         {
             public VCDataRow(in MDRF2DateTimeStampPair dtPair, in ValueContainer vc, ExtractMDRFtoDB.VCEHelper vceHelper)
             {
-                UTCDateTime = dtPair.DateTime.ToUniversalTime();
+                UTCDateTime = dtPair.DateTimeUTC;
                 FileDeltaTime = dtPair.FileDeltaTime;
 
                 VC = vc;
@@ -1134,7 +1146,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     {
                         foreach (var mesg in messageList)
                         {
-                            dateTimeParam.Value = mesg.DTPair.DateTime.ToLocalTime();
+                            dateTimeParam.Value = mesg.DTPair.DateTimeLocal;
                             textParam.Value = mesg.Data;
 
                             insertMesgCmd.ExecuteNonQuery();
@@ -1158,7 +1170,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     {
                         foreach (var mesg in errorList)
                         {
-                            dateTimeParam.Value = mesg.DTPair.DateTime.ToLocalTime();
+                            dateTimeParam.Value = mesg.DTPair.DateTimeLocal;
                             textParam.Value = mesg.Data;
 
                             insertMesgCmd.ExecuteNonQuery();
@@ -1172,7 +1184,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
             {
                 ExtractMDRFtoDB.VCEHelper vceHelper = new ExtractMDRFtoDB.VCEHelper();
-                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTime.ToLocalTime(), record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTimeLocal, record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
 
                 Dictionary<string, string> keyColumnNameSet = new Dictionary<string, string>();
 
@@ -1414,7 +1426,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
             {
-                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTime.ToLocalTime(), record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTimeLocal, record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
 
                 lock (mutex)
                 {

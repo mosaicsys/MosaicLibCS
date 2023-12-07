@@ -128,9 +128,13 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
 
         /// <summary>
         /// Populates the given <paramref name="e090SubstEventInfoList"/> from the set of objects that are contained in this event record.
+        /// If <paramref name="clearListFirst"/> is true then the given <paramref name="e090SubstEventInfoList"/> will be Cleared before any new <see cref="MosaicLib.Semi.E090.E090SubstEventInfo"/> instances are added to it.
         /// </summary>
-        public void Populate(List<MosaicLib.Semi.E090.E090SubstEventInfo> e090SubstEventInfoList)
+        public void Populate(List<MosaicLib.Semi.E090.E090SubstEventInfo> e090SubstEventInfoList, bool clearListFirst = false)
         {
+            if (clearListFirst)
+                e090SubstEventInfoList.Clear();
+
             foreach (var e090SubstObj in _E090SubstObjList.MapNullToEmpty())
                 e090SubstEventInfoList.Add(new MosaicLib.Semi.E090.E090SubstEventInfo(e090SubstObj));
         }

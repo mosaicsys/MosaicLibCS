@@ -279,7 +279,7 @@ namespace MosaicLib.Modular.Action
 		/// </summary>
 		public bool QueueEnable
 		{
-			get { lock (queueMutex) { return queueEnabled; } }
+			get { return queueEnabled; }
 			set 
 			{
 				bool entryValue = false;
@@ -316,5 +316,4 @@ namespace MosaicLib.Modular.Action
 	}
 
 	//-------------------------------------------------
-//-------------------------------------------------
 }

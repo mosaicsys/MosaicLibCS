@@ -58,7 +58,7 @@ namespace MosaicLib.Semi.E005.Port
 
     /// <summary>
     /// This enum defines the known types of E005 Port connections
-    /// <para/>None (0), E004_Master, E005_Slave, E037_SS_Active, E037_SS_Passive
+    /// <para/><see cref="None"/> (0), <see cref="E004_Equipment"/>, <see cref="E004_Host"/>, <see cref="E037_Active_SingleSession"/>, <see cref="E037_Passive_SingleSession"/>
     /// </summary>
     public enum PortType
     {
@@ -67,11 +67,11 @@ namespace MosaicLib.Semi.E005.Port
 
         /// <summary>E004 SECS-I as Equipment</summary>
         [Obsolete("This PortType has not been fully implemented or tested yet")]
-        E004_Master,
+        E004_Equipment,
 
         /// <summary>E004 SECS-I as Host</summary>
         [Obsolete("This PortType has not been fully implemented or tested yet")]
-        E004_Slave,
+        E004_Host,
 
         /// <summary>Active E037 HSMS-SS initiator</summary>
         E037_Active_SingleSession,

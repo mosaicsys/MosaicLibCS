@@ -89,16 +89,21 @@ namespace HostCycle
             IConfig configInstance = Config.Instance;
 
             // add host cycle part to partslist
-            int numLPs = 1;
-
             var hostCycleKeyPrefix = "Config.HostCycle.";
             var hostCycleKeys = configInstance.SearchForKeys(new MosaicLib.Utils.StringMatching.MatchRuleSet(MosaicLib.Utils.StringMatching.MatchType.Prefix, hostCycleKeyPrefix));
             var portSettingsNVS = new NamedValueSet(hostCycleKeys.Select(key => configInstance.GetConfigKeyAccessOnce(key)).Select(icka => new NamedValue(icka.Key.RemovePrefixIfNeeded(hostCycleKeyPrefix), icka.VC))).MakeReadOnly();
             // we expect these keys to generally include the following: HostName, PortNum, DeviceID, HeaderTraceMesgType, MesgTraceMesgType, HighRateMesgTraceMesgType
 
+            int numLPs = configInstance.GetConfigKeyAccessOnce($"{hostCycleKeyPrefix}NumberOfLoadPorts").GetValue(4).Clip(1, 8);
+
             hostCycle = new HostCyclePart(portSettingsNVS: portSettingsNVS, numLPs: numLPs);
 
             partsList.Add(hostCycle);
+
+            foreach (var (lpControl, index) in new[] { lp1Control, lp2Control, lp3Control, lp4Control, lp5Control, lp6Control, lp7Control, lp8Control }.Select((lpControl, index) => (lpControl, index)))
+            {
+                lpControl.Visibility = (index < numLPs || index == 0) ? Visibility.Visible : Visibility.Collapsed;
+            }
 
             SetupE039TreeView();
         }
@@ -378,7 +383,10 @@ namespace HostCycle
         private void RoutedServiceCommand_Executed(object sender, ExecutedRoutedEventArgs e)
         {
             RoutedCommand rcmd = (RoutedCommand)e.Command;
+
             Control c = e.Source as Control;
+            if (c is LoadPortControl)
+                c = e.OriginalSource as Control;
 
             string cmdParam = e.Parameter.SafeToString();
             string[] splitArray = cmdParam.Split(new [] {' '}, 2, StringSplitOptions.RemoveEmptyEntries);

@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using MosaicLib.Time;
 
@@ -916,165 +917,180 @@ namespace MosaicLib.Utils
 	/// </remarks>
 	public class BasicNotificationList : IBasicNotificationList, INotifyable
 	{
-		#region IBasicNotificationList Members
+        #region Mutex
+
+        /// <summary>
+        /// The mutex object used here is now simply the <see cref="listItemList"/>.  
+        /// Each <see cref="BasicNotificationList"/> instance always has a single <see cref="listItemList"/> and thus it can safely be used as the mutex selector object.
+        /// </summary>
+        /// <remarks>
+        /// This change has been made to all instances of this <see cref="BasicNotificationList"/> type.  
+        /// The premise here is that dotnet does a good job of managing allocation, and reclamation, of sync block objects.  
+        /// As such the possible benefits of the use of local logic to share mutex objeccts accross dynamic lifetime instances is expected to be entirely offset by the
+        /// ability for dotnet to recognize when notification list changes and use are fully uncontended and to better handle this case than any other heuristic coded here can accomplish.
+        /// <para/>
+        /// See comments under https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/threading.md#synchronization-managed for more details.  
+        /// </remarks>
+        protected object mutex { get { return listItemList; } }
+
+        #endregion
+
+        #region IBasicNotificationList Members
 
         /// <summary>
         /// <see cref="BasicNotificationDelegate"/> event interface.  Allows such delegates to be added/removed from the list.
         /// </summary>
         public event BasicNotificationDelegate OnNotify
 		{
-            add { AddItem(ref basicNotificationDelegateList, value); }
-            remove { RemoveItem(ref basicNotificationDelegateList, value); }
+            add { AddListItem(new ListItem() { ListItemType = ListItemType.BasicNotificationDelegate, Item = value }); }
+            remove { RemoveListItem(new ListItem() { ListItemType = ListItemType.BasicNotificationDelegate, Item = value }); }
 		}
 
         /// <summary>Adds the given <see cref="INotifyable"/> target object to the list</summary>
         public void AddItem(INotifyable notifyableTarget)
 		{
-            AddItem(ref notifyableList, notifyableTarget);
+            AddListItem(new ListItem() { ListItemType = ListItemType.INotifyable, Item = notifyableTarget });
 		}
 
         /// <summary>Removes the first instance of the given <see cref="INotifyable"/> target object from the list</summary>
         public void RemoveItem(INotifyable notifyableTarget)
 		{
-            RemoveItem(ref notifyableList, notifyableTarget);
+            RemoveListItem(new ListItem() { ListItemType = ListItemType.INotifyable, Item = notifyableTarget });
 		}
 
         /// <summary>Adds the given <see cref="System.Threading.EventWaitHandle"/> object to the list</summary>
         public void AddItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
-            AddItem(ref eventWaitHandleList, eventWaitHandle);
+            AddListItem(new ListItem() { ListItemType = ListItemType.EventWaitHandle, Item = eventWaitHandle });
         }
 
         /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
         public void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
-            RemoveItem(ref eventWaitHandleList, eventWaitHandle);
+            RemoveListItem(new ListItem() { ListItemType = ListItemType.EventWaitHandle, Item = eventWaitHandle });
         }
 
         /// <summary>Adds the given <paramref name="action"/> to the list</summary>
         public void AddItem(Action action)
         {
-            AddItem(ref basicNotificationActionList, action);
+            AddListItem(new ListItem() { ListItemType = ListItemType.Action, Item = action });
         }
 
         /// <summary>Remvoes the first instance of the given <paramref name="action"/> from the list.  Has no effect if no such instance is found in the list.</summary>
         public void RemoveItem(Action action)
         {
-            RemoveItem(ref basicNotificationActionList, action);
+            RemoveListItem(new ListItem() { ListItemType = ListItemType.Action, Item = action });
         }
 
 		#endregion
 
 		#region INotifyable Members
 
-        /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
+        /// <summary>Caller invokes this to Notify each of the items in this list that something notable has happened.</summary>
         public virtual void Notify() 
 		{
-			int exceptionCount = 0;
-            System.Exception firstEx = null;
+            var itemArray = GetListItemArrayAndRebuildIfNeeded();
 
-            Action[] actionArray = GetCombinedActionArrayAndRebuildIfNeeded();
-
-            foreach (Action a in actionArray)
+            foreach (var item in itemArray)
             {
                 try
                 {
-                    a();
+                    switch (item.ListItemType)
+                    { 
+                        case ListItemType.INotifyable: 
+                            ((INotifyable)item.Item).Notify(); 
+                            break;
+                        case ListItemType.BasicNotificationDelegate: 
+                            ((BasicNotificationDelegate)item.Item).Invoke(); 
+                            break;
+                        case ListItemType.EventWaitHandle: 
+                            ((EventWaitHandle)item.Item).Set(); 
+                            break;
+                        case ListItemType.Action: 
+                            ((Action)item.Item).Invoke(); 
+                            break;
+                        default:
+                            break;
+                    }
                 }
                 catch (System.Exception ex)
                 {
-                    firstEx = firstEx ?? ex;
-                    exceptionCount++;
+                    LastException = ex;
                 }
-            }
-
-            if (firstEx != null)
-            {
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered {0} exception(s) [first: {1}]", exceptionCount, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
             }
 		}
 
-		#endregion
+        public System.Exception LastException { get; set; }
+
+        #endregion
 
         #region Internals
 
-        /// <summary>
-        /// protected static, class wide, mutex object.  
-        /// Used to synchronize all changes to the contents of any basic notification list and used to synchronize the generation of the cached Action array.
-        /// </summary>
-        /// <remarks>
-        /// The choice to use a single static mutex is based on the premise that list updates are both rare and are quick.  In addition the use of the
-        /// internal cached Action array allows individual Notify methods to be used without use of this mutex, provided that the list contents has not changed
-        /// since the last Notification for this instance.
-        /// </remarks>
-        protected static readonly object mutex = new object();
+        private enum ListItemType
+        {
+            None,
+            BasicNotificationDelegate,
+            INotifyable,
+            EventWaitHandle,
+            Action,
+        }
 
-        private List<Action> basicNotificationActionList = null;
-        private List<BasicNotificationDelegate> basicNotificationDelegateList = null;
-        private List<INotifyable> notifyableList = null;
-        private List<System.Threading.EventWaitHandle> eventWaitHandleList = null;
+        private struct ListItem : IEquatable<ListItem>
+        {
+            public ListItemType ListItemType { get; set; }
+
+            public object Item { get; set; }
+
+            public bool Equals(ListItem other)
+            {
+                return ListItemType == other.ListItemType && object.ReferenceEquals(Item, other.Item);
+            }
+        }
+
+        private readonly List<ListItem> listItemList = new List<ListItem>();
+        private ListItem[] listItemArray = null;
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item)
+        private void AddListItem(ListItem listItem)
         {
             lock (mutex)
             {
-                if (listRef == null)
-                    listRef = new List<TItemType>();
+                if (listItem.Item != null && listItem.ListItemType != ListItemType.None)
+                    listItemList.Add(listItem);
 
-                if (item != null)
-                    listRef.Add(item);
-
-                InnerNoteListContentsChanged();
+                InnerNoteListItemListContentsChanged();
             }
         }
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item)
+        private void RemoveListItem(ListItem listItem)
         {
             lock (mutex)
             {
-                if (listRef == null)
-                    listRef = new List<TItemType>();
-
-                if (item != null)
-                    listRef.Remove(item);
-
-                InnerNoteListContentsChanged();
+                if (listItemList.Remove(listItem))
+                    InnerNoteListItemListContentsChanged();
             }
         }
 
-        /// <summary>
-        /// Called while owning the mutex to indicate that one or more list contents have been changed.
-        /// </summary>
-        protected virtual void InnerNoteListContentsChanged()
+        private void InnerNoteListItemListContentsChanged()
         {
-            savedCombinedActionArray = null;
+            listItemArray = null;
         }
 
-        private volatile Action[] savedCombinedActionArray = emptyActionArray;
-
-        private Action[] GetCombinedActionArrayAndRebuildIfNeeded()
+        private ListItem[] GetListItemArrayAndRebuildIfNeeded()
         {
-            Action[] actionArray = savedCombinedActionArray;
+            ListItem[] itemArray = listItemArray;
 
-            if (actionArray != null)
-                return actionArray;
-
-            lock (mutex)
+            if (itemArray == null)
             {
-                savedCombinedActionArray = actionArray = emptyActionArray
-                                    .Concat(basicNotificationActionList as IList<Action> ?? Collections.ReadOnlyIList<Action>.Empty)
-                                    .Concat((basicNotificationDelegateList as IList<BasicNotificationDelegate> ?? Collections.ReadOnlyIList<BasicNotificationDelegate>.Empty).Select(bnd => (Action)(() => bnd())))
-                                    .Concat((notifyableList as IList<INotifyable> ?? Collections.ReadOnlyIList<INotifyable>.Empty).Select(notifyable => (Action)(() => notifyable.Notify())))
-                                    .Concat((eventWaitHandleList as IList<System.Threading.EventWaitHandle> ?? Collections.ReadOnlyIList<System.Threading.EventWaitHandle>.Empty).Select(ewl => (Action)(() => ewl.Set())))
-                                    .ToArray();
-
-                return actionArray;
+                lock (mutex)
+                {
+                    itemArray = listItemArray = listItemList.ToArray();
+                }
             }
-        }
 
-        private static readonly Action[] emptyActionArray = Utils.Collections.EmptyArrayFactory<Action>.Instance;
+            return itemArray;
+        }
 
         #endregion
     }
@@ -1092,10 +1108,16 @@ namespace MosaicLib.Utils
 		#region Construction
 
 		/// <summary>Constructor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
-		public EventHandlerNotificationList() { Source = this; }
+		public EventHandlerNotificationList()
+        { 
+            Source = this; 
+        }
 
         /// <summary>Constructor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
-		public EventHandlerNotificationList(object eventSourceObject) { Source = eventSourceObject; }
+		public EventHandlerNotificationList(object eventSourceObject)
+        {
+            Source = eventSourceObject; 
+        }
 
 		#endregion
 
@@ -1125,8 +1147,11 @@ namespace MosaicLib.Utils
         /// </summary>
         internal void AddHandlerWithObjectKey(EventHandlerDelegate<EventArgsType> eventHandlerDelegate, System.Object objectKey)
         {
-            OnNotify += eventHandlerDelegate;
-            AddItem(ref eventHandlerTupleList, Tuple.Create(objectKey, eventHandlerDelegate));
+            lock (mutex)
+            {
+                OnNotify += eventHandlerDelegate;
+                AddItem(ref eventHandlerTupleList, Tuple.Create(objectKey, eventHandlerDelegate));
+            }
         }
 
         /// <summary>
@@ -1136,13 +1161,16 @@ namespace MosaicLib.Utils
         {
             Tuple<object, EventHandlerDelegate<EventArgsType>> t = null;
 
-            if (eventHandlerTupleList != null)
-                t = eventHandlerTupleList.Find(item => Object.ReferenceEquals(objectKey, item.Item1));
-
-            if (t != null)
+            lock (mutex)
             {
-                eventHandlerTupleList.Remove(t);
-                OnNotify -= t.Item2;
+                if (eventHandlerTupleList != null)
+                    t = eventHandlerTupleList.Find(item => Object.ReferenceEquals(objectKey, item.Item1));
+
+                if (t != null)
+                {
+                    eventHandlerTupleList.Remove(t);
+                    OnNotify -= t.Item2;
+                }
             }
 
             return (t != null);
@@ -1162,7 +1190,6 @@ namespace MosaicLib.Utils
             object source = Source;
 
             int exceptionCount = 0;
-            System.Exception firstEx = null;
 
             EventHandlerDelegate<EventArgsType>[] eventHandlerArray = GetEventHandlerArrayAndRebuildIfNeeded();
 
@@ -1174,14 +1201,9 @@ namespace MosaicLib.Utils
                 }
                 catch (System.Exception ex)
                 {
-                    firstEx = firstEx ?? ex;
+                    LastException = ex;
                     exceptionCount++; 
                 }
-            }
-
-            if (firstEx != null)
-            {
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered {0} exception(s) [first: {1}]", exceptionCount, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
             }
 
             base.Notify();
@@ -1196,9 +1218,38 @@ namespace MosaicLib.Utils
 
         private volatile EventHandlerDelegate<EventArgsType>[] savedEventHandlerArray = emptyEventHandlerArray;
 
-        protected override void InnerNoteListContentsChanged()
+        /// <summary>Internal helper method used to add items to the lists used here</summary>
+        private void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item)
         {
-            base.InnerNoteListContentsChanged();
+            lock (mutex)
+            {
+                if (listRef == null)
+                    listRef = new List<TItemType>();
+
+                if (item != null)
+                    listRef.Add(item);
+
+                InnerNoteEventHandlerListContentsChanged();
+            }
+        }
+
+        /// <summary>Internal helper method used to add items to the lists used here</summary>
+        private void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item)
+        {
+            lock (mutex)
+            {
+                if (listRef == null)
+                    listRef = new List<TItemType>();
+
+                if (item != null)
+                    listRef.Remove(item);
+
+                InnerNoteEventHandlerListContentsChanged();
+            }
+        }
+
+        private void InnerNoteEventHandlerListContentsChanged()
+        {
             savedEventHandlerArray = null;
         }
 

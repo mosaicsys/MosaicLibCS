@@ -87,6 +87,23 @@ namespace MosaicLib.Utils
             return Utils.Fcns.Equals(lhs, rhs);
         }
 
+        /// <summary>
+        /// Returns true if the given <paramref name="lhs"/> dictionary has the same key and value contents, in the same order, as the given <paramref name="rhs"/> dictionary using the default <typeparamref name="TKey"/> and <typeparamref name="TValue"/> equality comparers.
+        /// Returns false otherwise.
+        /// </summary>
+        public static bool IsEqualTo<TKey, TValue>(this IDictionary<TKey, TValue> lhs, IDictionary<TKey, TValue> rhs) 
+            where TKey : IEquatable<TKey>
+            where TValue: IEquatable<TValue>
+        {
+            if (System.Object.ReferenceEquals(lhs, rhs))
+                return true;
+
+            if (lhs == null || rhs == null || lhs.Count != rhs.Count)
+                return false;
+
+            return lhs.Zip(rhs, (lkvp, rkvp) => EqualityComparer<TKey>.Default.Equals(lkvp.Key, rkvp.Key) && EqualityComparer<TValue>.Default.Equals(lkvp.Value, rkvp.Value)).All(b => b);
+        }
+
         #endregion
 
         #region Array, IList, List and String access extension methods (IsSafeIndex, SafeAccess, SafeSubArray, SafePut, SafeLast, SafeCopyFrom)
@@ -790,7 +807,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IDictionary related (SafeTryGetValue)
+        #region IDictionary related (SafeTryGetValue variants)
 
         /// <summary>
         /// This EM accepts an IDictionary <paramref name="dict"/> and attempts to obtain and return the value from it at the given <paramref name="key"/>.  
@@ -803,6 +820,35 @@ namespace MosaicLib.Utils
                 return value;
 
             return fallbackValue;
+        }
+
+        /// <summary>
+        /// This EM accepts an <see cref="IDictionary{TKey, TValue}"/> <paramref name="dictionary"/> and attempts to get and assign the selected value to the <paramref name="foundValue"/> output parameter.
+        /// This method returns <see langword="true"/> if the given <paramref name="key"/> was found and <see langword="false"/> if it was not, or if the given <paramref name="dictionary"/> was <see langword="null"/>, 
+        /// in either which case the <paramref name="foundValue"/> output parameter will have been set to the given value of the <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static bool SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue foundValue, TValue fallbackValue = default(TValue))
+        {
+            if ((dictionary != null) && dictionary.TryGetValue(key, out foundValue))
+                return true;
+
+            foundValue = fallbackValue;
+
+            return false;
+        }
+
+        /// <summary>
+        /// If the given <paramref name="dictionary"/> is non-null and and is not read only and then given <paramref name="condition"/> is true
+        /// then this method updates the given <paramref name="dictionary"/> by setting the <paramref name="key"/> to the given <paramref name="value"/>.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static TDictionary ConditionalSetKeyValue<TDictionary, TKey, TVAlue>(this TDictionary dictionary, TKey key, bool condition, TVAlue value) 
+            where TDictionary : IDictionary<TKey, TVAlue>
+        {
+            if (condition && dictionary != null && !dictionary.IsReadOnly)
+                dictionary[key] = value;
+
+            return dictionary;
         }
 
         #endregion
@@ -918,13 +964,19 @@ namespace MosaicLib.Utils
                 return invalidCompareValue;
         }
 
-        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
         public static double Clip(this double value, double lowLimit, double highLimit)
         {
-            return value.Clip(lowLimit, highLimit, Double.NaN);
+            return value.Clip(lowLimit, highLimit, double.NaN);
         }
 
-        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        public static float Clip(this float value, float lowLimit, float highLimit)
+        {
+            return value.Clip(lowLimit, highLimit, float.NaN);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
         public static double Clip(this double value, double lowLimit, double highLimit, double invalidCompareValue)
         {
             if (double.IsNaN(value))
@@ -934,6 +986,48 @@ namespace MosaicLib.Utils
                 return invalidCompareValue;
 
             return value.Clip<double>(lowLimit, highLimit, invalidCompareValue);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        public static float Clip(this float value, float lowLimit, float highLimit, float invalidCompareValue)
+        {
+            if (float.IsNaN(value))
+                return value;
+
+            if (float.IsNaN(lowLimit) || float.IsNaN(highLimit))
+                return invalidCompareValue;
+
+            return value.Clip<float>(lowLimit, highLimit, invalidCompareValue);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between (<paramref name="reference"/> - <paramref name="delta"/>) and (<paramref name="reference"/> + <paramref name="delta"/>).</summary>
+        public static double ClipDelta(this double value, double reference, double delta, double invalidCompareValue = double.NaN)
+        {
+            if (delta < 0.0 || delta.IsNaN())
+                return invalidCompareValue;
+
+            return value.Clip(lowLimit: reference - delta, highLimit: reference + delta, invalidCompareValue: invalidCompareValue);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="reference"/> + <paramref name="lowDeltaOffset"/> and <paramref name="reference"/> + <paramref name="highDeltaOffset"/>.</summary>
+        public static double ClipOffsetRange(this double value, double reference, double lowDeltaOffset, double highDeltaOffset, double invalidCompareValue = double.NaN)
+        {
+            return value.Clip(lowLimit: reference + lowDeltaOffset, highLimit: reference + highDeltaOffset, invalidCompareValue: invalidCompareValue);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between (<paramref name="reference"/> - <paramref name="delta"/>) and (<paramref name="reference"/> + <paramref name="delta"/>).</summary>
+        public static float ClipDelta(this float value, float reference, float delta, float invalidCompareValue = float.NaN)
+        {
+            if (delta < 0.0 || delta.IsNaN())
+                return invalidCompareValue;
+
+            return value.Clip(lowLimit: reference - delta, highLimit: reference + delta, invalidCompareValue: invalidCompareValue);
+        }
+
+        /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="reference"/> + <paramref name="lowDeltaOffset"/> and <paramref name="reference"/> + <paramref name="highDeltaOffset"/>.</summary>
+        public static float ClipOffsetRange(this float value, float reference, float lowDeltaOffset, float highDeltaOffset, float invalidCompareValue = float.NaN)
+        {
+            return value.Clip(lowLimit: reference + lowDeltaOffset, highLimit: reference + highDeltaOffset, invalidCompareValue: invalidCompareValue);
         }
 
         /// <summary>Returns true if, and only if, the given value is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
@@ -956,6 +1050,15 @@ namespace MosaicLib.Utils
                 return false;
 
             return value.IsInRange<double>(lowLimit, highLimit);
+        }
+
+        /// <summary>Returns true if, and only if, the given value is not a NaN, it is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        public static bool IsInRange(this float value, float lowLimit, float highLimit)
+        {
+            if (float.IsNaN(value) || float.IsNaN(lowLimit) || float.IsNaN(highLimit))
+                return false;
+
+            return value.IsInRange<float>(lowLimit, highLimit);
         }
 
         /// <summary>Returns true if the given value is divisible by 2.</summary>
@@ -1766,30 +1869,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set)
         {
-            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(WhereIsNotDefaultHelperClass<TItemType>.IsNotEqualToDefaultValueDelegate);
-        }
-
-        /// <summary>
-        /// Private helper class allows the static class constructor to pre-initialize a number of helper values and types for use in the WhereIsNotDefault EMs.
-        /// </summary>
-        /// <typeparam name="TItemType"></typeparam>
-        private static class WhereIsNotDefaultHelperClass<TItemType>
-        {
-            /// <summary>Gives the default value for {TItemType}</summary>
-            public static readonly TItemType DefaultValue = default(TItemType);
-
-            /// <summary>Gives the default equality comparer for {TItemType}</summary>
-            public static readonly IEqualityComparer<TItemType> DefaultEqualiyComparer = EqualityComparer<TItemType>.Default;
-
-            /// <summary>
-            /// Returns true if the given <paramref name="item"/> is equal to its default valueu using the default equality comparer
-            /// </summary>
-            public static bool DoesNotEqualDefaultValue(TItemType item)
-            {
-                return !DefaultEqualiyComparer.Equals(item, DefaultValue);
-            }
-
-            public static readonly Func<TItemType, bool> IsNotEqualToDefaultValueDelegate = DoesNotEqualDefaultValue;
+            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(DefaultValueHelpers<TItemType>.IsNotEqualToDefaultValueDelegate);
         }
 
         /// <summary>
@@ -1801,7 +1881,7 @@ namespace MosaicLib.Utils
             if (eqCmp == null)
                 return set.WhereIsNotDefault();
             else
-                return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, WhereIsNotDefaultHelperClass<TItemType>.DefaultValue));
+                return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, DefaultValueHelpers<TItemType>.DefaultValue));
         }
 
         /// <summary>
@@ -2376,6 +2456,50 @@ namespace MosaicLib.Utils
 
     #endregion
 
+    #region DefaultValueHelpers
+
+    /// <summary>
+    /// Efficiency helper class for <typeparamref name="TItemType"/>.
+    /// Contains a <see cref="DefaultValue"/>, <see cref="DefaultEqualiyComparer"/> and a group of methods and delegates that can be used to test if a given <typeparamref name="TItemType"/> value is equal to its default value, or not.
+    /// <para/>used with <see cref="ExtensionMethods.WhereIsNotDefault{TItemType}(IEnumerable{TItemType})"/> and <see cref="Fcns.MapDefaultTo{TValueType}(TValueType, TValueType)"/> EMs.
+    /// </summary>
+    public static class DefaultValueHelpers<TItemType>
+    {
+        /// <summary>Gives the default value for {TItemType}</summary>
+        public static readonly TItemType DefaultValue = default(TItemType);
+
+        /// <summary>Gives the default equality comparer for {TItemType}</summary>
+        public static readonly IEqualityComparer<TItemType> DefaultEqualiyComparer = EqualityComparer<TItemType>.Default;
+
+        /// <summary>
+        /// Returns true if the given <paramref name="item"/> is not equal to its <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
+        /// </summary>
+        public static bool IsNotEqualToDefaultValue(TItemType item)
+        {
+            return !DefaultEqualiyComparer.Equals(item, DefaultValue);
+        }
+
+        /// <summary>
+        /// Contains a delegate that uses the <see cref="IsNotEqualToDefaultValue"/> static method to evaluate if a given value is not equal to <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
+        /// </summary>
+        public static readonly Func<TItemType, bool> IsNotEqualToDefaultValueDelegate = IsNotEqualToDefaultValue;
+
+        /// <summary>
+        /// Returns true if the given <paramref name="item"/> is equal to its <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
+        /// </summary>
+        public static bool IsEqualToDefaultValue(TItemType item)
+        {
+            return DefaultEqualiyComparer.Equals(item, DefaultValue);
+        }
+
+        /// <summary>
+        /// Contains a delegate that uses the <see cref="IsNotEqualToDefaultValue"/> static method to evaluate if a given value is equal to <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
+        /// </summary>
+        public static readonly Func<TItemType, bool> IsEqualToDefaultValueDelegate = IsEqualToDefaultValue;
+    }
+
+    #endregion
+
     #region Related Unassociated Functions
 
     /// <summary>
@@ -2487,18 +2611,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static TValueType MapDefaultTo<TValueType>(this TValueType value, TValueType replaceDefaultWith)
         {
-            if (value == null)
-                return replaceDefaultWith;
-
-            Type t = typeof(TValueType);
-
-            if (!t.IsValueType || t.IsNullable())       // we already know that it is not null
-                return value;
-
-            if (value is IEquatable<TValueType>)
-                return (!((IEquatable<TValueType>) value).Equals(default(TValueType)) ? value : replaceDefaultWith);
-
-            return (!System.Object.Equals(value, default(TValueType)) ? value : replaceDefaultWith);
+            return DefaultValueHelpers<TValueType>.IsNotEqualToDefaultValue(value) ? value : replaceDefaultWith;
         }
 
         #endregion

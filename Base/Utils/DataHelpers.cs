@@ -24,6 +24,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -1685,7 +1686,7 @@ namespace MosaicLib.Utils
 	#endregion
 
 	//-------------------------------------------------
-	#region Sequenced Ref and Value object Observer implementation classes (so that they can be used as a base class)
+	#region Sequenced Ref and Value object Observer implementation classes (so that they can be used as a base class) along with related extension methods
 
 	/// <summary>Provides an implementation of the ISequencedRefObjectSourceObserver</summary>
 	/// <typeparam name="RefObjectType">Gives the type of the observed object.  Must be a ref type.</typeparam>
@@ -1831,7 +1832,54 @@ namespace MosaicLib.Utils
         }
     }
 
-	#endregion
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This extension method creates and returns a <see cref="SequencedRefObjectSourceObserver{RefObjectType, SeqNumberType}"/> for the given <paramref name="objSource"/>.
+        /// If <paramref name="setIsUpdateNeeded"/> is true then the observer will act as if it has not been updated yet.
+        /// </summary>
+        public static SequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> CreateRefObserver<RefObjectType, SeqNumberType>(this ISequencedObjectSource<RefObjectType, SeqNumberType> objSource, bool setIsUpdateNeeded = false) 
+            where RefObjectType : class
+            where SeqNumberType: new ()
+        {
+            return new SequencedRefObjectSourceObserver<RefObjectType, SeqNumberType>(objSource) { IsUpdateNeeded = setIsUpdateNeeded };
+        }
+
+        /// <summary>
+        /// This extension method creates and returns a <see cref="SequencedRefObjectSourceObserver{RefObjectType, SeqNumberType}"/> for the given <paramref name="objSource"/>.
+        /// If <paramref name="setIsUpdateNeeded"/> is true then the observer will act as if it has not been updated yet.
+        /// </summary>
+        public static SequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> CreateRefObserver<RefObjectType, SeqNumberType>(this SequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> objSource, bool setIsUpdateNeeded = false)
+            where RefObjectType : class
+            where SeqNumberType : new()
+        {
+            return new SequencedRefObjectSourceObserver<RefObjectType, SeqNumberType>(objSource) { IsUpdateNeeded = setIsUpdateNeeded };
+        }
+
+        /// <summary>
+        /// This extension method creates and returns a <see cref="SequencedValueObjectSourceObserver{ValueObjectType, SeqNumberType}"/> for the given <paramref name="objSource"/>.
+        /// If <paramref name="setIsUpdateNeeded"/> is true then the observer will act as if it has not been updated yet.
+        /// </summary>
+        public static SequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> CreateValueObserver<ValueObjectType, SeqNumberType>(this ISequencedObjectSource<ValueObjectType, SeqNumberType> objSource, bool setIsUpdateNeeded = false)
+            where ValueObjectType : struct
+            where SeqNumberType : new()
+        {
+            return new SequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType>(objSource) { IsUpdateNeeded = setIsUpdateNeeded };
+        }
+
+        /// <summary>
+        /// This extension method creates and returns a <see cref="SequencedValueObjectSourceObserver{ValueObjectType, SeqNumberType}"/> for the given <paramref name="objSource"/>.
+        /// If <paramref name="setIsUpdateNeeded"/> is true then the observer will act as if it has not been updated yet.
+        /// </summary>
+        public static SequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> CreateValueObserver<ValueObjectType, SeqNumberType>(this SequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> objSource, bool setIsUpdateNeeded = false)
+            where ValueObjectType : struct
+            where SeqNumberType : new()
+        {
+            return new SequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType>(objSource) { IsUpdateNeeded = setIsUpdateNeeded };
+        }
+    }
+
+    #endregion
 
     //-------------------------------------------------
     #region DataContract serialization related interfaces

@@ -112,8 +112,15 @@ namespace MosaicLib.Modular.Config
             /// <summary>When non-null set the Default named meta data value to the given value.</summary>
             public object Default { get; set; }
 
-            /// <summary>When the attribute's Default property is null and this property is true then the value set's initial value is used to set the Default named meta data value.</summary>
-            public bool AutoDefault { get; set; }
+            /// <summary>
+            /// When the attribute's Default property is null and this property is true then the value set's initial value is used to set the Default named meta data value.
+            /// When thie property's setter has not been explicitly used, the getter will return the value of the corresponding <see cref="DefaultValueForUnsetAutoDefault"/> static property.
+            /// </summary>
+            public bool AutoDefault { get { return _AutoDefault ?? DefaultValueForUnsetAutoDefault; } set { _AutoDefault = value; } }
+            private bool ? _AutoDefault;
+
+            /// <summary>Allows the client code to change the value returned by the <see cref="AutoDefault"/> property when it has not been given an explict value.</summary>
+            public static bool DefaultValueForUnsetAutoDefault { get; set; }
 
             /// <summary>When non-null set the Min named meta data value to the given value.</summary>
             public object Min { get; set; }

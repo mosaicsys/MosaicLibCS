@@ -31,6 +31,7 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace MosaicLib.Modular.Config
 {
@@ -1424,8 +1425,7 @@ namespace MosaicLib.Modular.Config
             using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName))
             {
                 ConfigKeyAccessImpl ckaiRoot = null;
-
-                bool tryUpdate = false;
+                ConfigKeyAccessImpl ckaiNotFoundRoot = null;
 
                 lock (mutex)
                 {
@@ -1447,8 +1447,15 @@ namespace MosaicLib.Modular.Config
 
                         if (!callerKeyAccessFlags.SilenceLogging)
                             Trace.Trace.Emit("{0}: Starting with clone of prior instance:{1}", methodName, ckaiRoot.ToString(ToStringDetailLevel.Full));
+                    }
 
-                        tryUpdate = !ckaiRoot.ValueIsFixed;     // if we find an old key that does not have a fixed value then attempt to update the new key in case the persisted value has changed since the key was first seen.
+                    if (ckaiRoot == null && ckaiNotFoundRoot == null && allNotFoundKeysDictionary.TryGetValue(mappedKey ?? string.Empty, out ckaiNotFoundRoot) && ckaiNotFoundRoot != null)
+                    {
+                        // if the client provided any meta data then merge it into the root normal key
+                        MergeMetaDataIfNeeded(ckaiNotFoundRoot, keyAccessSpec, notifyClients: true);
+
+                        if (!callerKeyAccessFlags.SilenceLogging)
+                            Trace.Trace.Emit("{0}: Starting prior not found root instance:{1}", methodName, ckaiNotFoundRoot.ToString(ToStringDetailLevel.Full));
                     }
 
                     string providerName = "[NoProviderFound]";
@@ -1483,10 +1490,10 @@ namespace MosaicLib.Modular.Config
                         if (ickaFromProvider == null && ensureExists)
                         {
                             IConfigKeyProvider provider = ((defaultProvider != null && defaultProvider.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption) ? defaultProvider : null) ?? providerList.Array.FirstOrDefault(p => p.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption);
-                            ValueContainer defaultValue = defaultValueIn ?? ValueContainer.Empty;
 
                             // NOTE: historically (unit test code) you can use EE for items with a Null default value, but not for items with a None default value.
-                            if (provider != null && !defaultValue.IsEmpty)
+                            // New version: EE will be used if the defaultValueIn was non-null, regardless of the actual default value that was given.
+                            if (provider != null && defaultValueIn != null)
                             {
                                 providerName = provider.Name;
 
@@ -1525,34 +1532,44 @@ namespace MosaicLib.Modular.Config
                                     IssueEmitter.Emit("Internal: {0}: key:'{1}' gave icka type '{2}' from provider '{3}' which is not usable here (cannot be casted to ConfigKeyAccessImpl)", methodName, keyAccessSpec.Key, ickaFromProvider.GetType(), providerName);
                             }
                         }
+
+                        if (ckaiNotFoundRoot != null && ckaiRoot != null)
+                        {
+                            Trace.Trace.Emit("{0}: previously not found key '{1}' has been created using provider '{2}'", methodName, mappedKeyAccessSpec.Key, ckaiRoot.ProviderName);
+
+                            var pseudoKeyAccessSpec = new ConfigKeyAccessSpec("pseudoKeyAccessSpec", ckaiNotFoundRoot.Flags, ckaiNotFoundRoot.MetaData, NamedValueMergeBehavior.AddNewItems);
+                            MergeMetaDataIfNeeded(ckaiRoot, pseudoKeyAccessSpec, notifyClients: true);
+
+                            if (!allNotFoundKeysDictionary.Remove(mappedKey))
+                                allNotFoundKeysDictionary.Remove(ckaiNotFoundRoot.Key);
+
+                            ckaiRoot.IncrementMetaDataSeqNum();     // increment the MD seq num to record merging of the new root under the old root
+                            ckaiNotFoundRoot.ReplaceRoot(ckaiRoot);
+                        }
+                        else if (ckaiNotFoundRoot == null && ckaiRoot == null)
+                        {
+                            // this key was not found, nor was created, by any provider.
+                            // create not found root and add it to dictionary
+
+                            ckaiNotFoundRoot = new ConfigKeyAccessImpl(mappedKey, callerKeyAccessFlags, keyAccessSpec.MetaData, null, initialMetaDataSeqNum: 0) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
+                            if (defaultValueIn != null)
+                                ckaiNotFoundRoot.VC = defaultValueIn ?? ValueContainer.Empty;
+
+                            allNotFoundKeysDictionary[mappedKey] = ckaiNotFoundRoot;
+
+                            if (!callerKeyAccessFlags.SilenceIssues && !callerKeyAccessFlags.IsOptional)
+                                Trace.Trace.Emit("{0}: {1}", methodName, ckaiNotFoundRoot.ResultCode);
+                        }
                     }
                 }
 
-                IConfigKeyAccess ickaReturn = null;
+                var ickaReturn = new ConfigKeyAccessImpl(ckaiRoot ?? ckaiNotFoundRoot) 
+                { 
+                    Flags = callerKeyAccessFlags,
 
-                if (ckaiRoot != null)
-                {
-                    ickaReturn = new ConfigKeyAccessImpl(ckaiRoot) { Flags = callerKeyAccessFlags };
-                }
-                else
-                {
-                    // we did not find or create an ckaiRoot (from which to clone an accessor to give back to the caller).  As such the key was not found, nor created, by any provider.
+                };
 
-                    var adjustedMD = keyAccessSpec.MetaData;
-                    if (callerKeyAccessFlags.ReadOnlyOnce && !adjustedMD.Contains(Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword))
-                        adjustedMD = adjustedMD.ConvertToWritable().SetKeyword(Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword);
-
-                    var ckai = new ConfigKeyAccessImpl(mappedKey, callerKeyAccessFlags, adjustedMD, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
-                    if (defaultValueIn != null)
-                        ckai.VC = defaultValueIn ?? ValueContainer.Empty; 
-
-                    ickaReturn = ckai;
-
-                    if (!callerKeyAccessFlags.SilenceIssues && !callerKeyAccessFlags.IsOptional)
-                        Trace.Trace.Emit("{0}: {1}", methodName, ickaReturn.ResultCode);
-                }
-
-                if (tryUpdate)
+                if (ickaReturn.IsUpdateNeeded)
                     TryUpdateConfigKeyAccess(methodName, ickaReturn);
 
                 string ickaAsStr = ickaReturn.ToString();
@@ -1593,7 +1610,7 @@ namespace MosaicLib.Modular.Config
                 ckaiRoot.IncrementMetaDataSeqNum();
                 ckaiRoot.MetaDataSeqNum = ckaiRoot.CurrentMetaDataSeqNum;       // merging is only done on the ckaiRoot so its MetaDataSeqNum (for cloaning) is always current.
 
-                if (notifyClients)
+                if (notifyClients && !ckaiRoot.ProviderFlags.KeyWasNotFound)
                     NoteClientVisibleChange(keyMetaDataChange: true);
 
                 if (entryKeyMetaData.IsNullOrEmpty())
@@ -1649,8 +1666,8 @@ namespace MosaicLib.Modular.Config
                 {
                     lock (mutex)
                     {
-                        updatedValueSeqNum = rootICKA.ValueSeqNum;
-                        updatedMetaDataSeqNum = rootICKA.MetaDataSeqNum;
+                        updatedValueSeqNum = rootICKA.CurrentSeqNum;
+                        updatedMetaDataSeqNum = rootICKA.CurrentMetaDataSeqNum;
                         updatedValue = rootICKA.VC;
                         updatedKeyMetaData = rootICKA.KeyMetaData;
                         updatedResultCode = rootICKA.ResultCode;
@@ -1701,7 +1718,7 @@ namespace MosaicLib.Modular.Config
 
         #endregion
 
-        #region Common stroage and handling for providers, Fixed and ReadOnlyOnce keys
+        #region Common storage and handling for providers, Fixed and ReadOnlyOnce keys
 
         /// <summary>
         /// Gives the mutex instance that is used to gaurd access to the internals of this IConfig instance.  
@@ -1720,11 +1737,16 @@ namespace MosaicLib.Modular.Config
         protected Dictionary<string, ConfigKeyAccessImpl> readOnlyOnceKeyDictionary = new Dictionary<string, ConfigKeyAccessImpl>();
 
         /// <summary>
-        /// Contains the set of all key access objects that know to this IConfig instance so far, excluding those that were requested but which were not found and could not be created.
+        /// Contains the set of all key access objects that are known to this IConfig instance so far, excluding those that were requested but which were not found and could not be created.
         /// Once a key has been seen, the IConfig instance will not search the providers list but will simply derive the new key access from the first seen one since it already knows
         /// which provider to use.
         /// </summary>
         protected Dictionary<string, ConfigKeyAccessImpl> allKnownKeysDictionary = new Dictionary<string, ConfigKeyAccessImpl>();
+
+        /// <summary>
+        /// Contains the set of all (root) key access objects that were found so far.
+        /// </summary>
+        protected Dictionary<string, ConfigKeyAccessImpl> allNotFoundKeysDictionary = new Dictionary<string, ConfigKeyAccessImpl>();
 
         /// <summary>
         /// This is the set of all key access objects for keys that have been used with SetValue(s) or which have otherwise been observed to have had values assigned to them after construction. 
@@ -1827,10 +1849,9 @@ namespace MosaicLib.Modular.Config
                         if (provider != null)
                         {
                             var kvpArray = localDictionaryOfListsOfItemsByProvider[providerInfo].ToArray();
-                            string ec = provider.SetValues(kvpArray, commentStr);
+                            string ec = provider.SetValues(kvpArray, commentStr).MapEmptyToNull();
 
-                            if (firstError == null && !string.IsNullOrEmpty(ec))
-                                firstError = ec;
+                            firstError = firstError ?? ec;
 
                             foreach (var kvp in kvpArray)
                             {
@@ -2038,73 +2059,100 @@ namespace MosaicLib.Modular.Config
     public class ConfigKeyAccessImpl : IConfigKeyAccess
     {
         /// <summary>Normal constructor - caller is expected to use Property initializers.  If provider is not null then ProviderFlags will be set to provider.BaseFlags</summary>
-        public ConfigKeyAccessImpl(string key, ConfigKeyAccessFlags flags, INamedValueSet metaData, IConfigKeyProvider provider)
+        public ConfigKeyAccessImpl(string key, ConfigKeyAccessFlags flags, INamedValueSet metaData, IConfigKeyProvider provider, int initialMetaDataSeqNum = 1)
         {
             Key = key;
             Flags = flags;
             KeyMetaData = metaData;
             Provider = provider;
+            CurrentMetaDataSeqNum = initialMetaDataSeqNum;
         }
 
         /// <summary>Normal constructor - caller is expected to use Property initializers.  If provider is not null then ProviderFlags will be set to provider.BaseFlags</summary>
-        public ConfigKeyAccessImpl(IConfigKeyAccessSpec spec, IConfigKeyProvider provider)
+        public ConfigKeyAccessImpl(IConfigKeyAccessSpec spec, IConfigKeyProvider provider, int initialMetaDataSeqNum = 1)
         {
             Key = spec.Key;
             Flags = spec.Flags;
             KeyMetaData = spec.MetaData;
             Provider = provider;
+            CurrentMetaDataSeqNum = initialMetaDataSeqNum;
         }
 
         /// <summary>"copyish" constructor for making key access objects derived from other ones - in most cases this is for ReadOnlyOnce keys or Fixed keys</summary>
         public ConfigKeyAccessImpl(IConfigKeyAccess other)
         {
-            Key = other.Key;
-            Flags = other.Flags;
-            KeyMetaData = other.KeyMetaData;
+            ConfigKeyAccessImpl newCKARoot = other as ConfigKeyAccessImpl;
 
-            ConfigKeyAccessImpl ckai = other as ConfigKeyAccessImpl;
-            ConfigKeyAccessImpl ckaiRoot = null;
-            if (ckai != null)
+            if (newCKARoot != null)
             {
-                ConfigInternal = ckai.ConfigInternal;
-                RootICKA = (ckai.RootICKA != null) ? ckai.RootICKA : other;
-                ckaiRoot = RootICKA as ConfigKeyAccessImpl;
-            }
-
-            ResultCode = other.ResultCode;
-            VC = other.VC;
-            HasValue = other.HasValue;
-
-            ValueSeqNum = other.ValueSeqNum;
-            MetaDataSeqNum = other.MetaDataSeqNum;
-
-            if (ckaiRoot != null)
-            {
-                Provider = ckaiRoot.Provider;
+                ReplaceRoot(newCKARoot);
             }
             else
             {
-                CurrentSeqNum = other.CurrentSeqNum;
-                CurrentMetaDataSeqNum = other.CurrentMetaDataSeqNum;
+                // manually copy the current value seq num and md seq num since we do not save this item as our actual RootICKA
+                CurrentSeqNum = newCKARoot.CurrentSeqNum;
+                CurrentMetaDataSeqNum = newCKARoot.CurrentMetaDataSeqNum;
 
-                Provider = other.ProviderInfo as IConfigKeyProvider;      // this will produce null if the rhs's ProviderInfo object does not also implement IConfigKeyProvider.  This does not attempt to change the rhs.MetaData information.
+                Provider = newCKARoot.ProviderInfo as IConfigKeyProvider;      // this will produce null if the rhs's ProviderInfo object does not also implement IConfigKeyProvider.  This does not attempt to change the rhs.MetaData information.
             }
+        }
+
+        /// <summary>
+        /// Note: normally this method is only called once when replacing a not found root's root with a newly created/found root. 
+        /// </summary>
+        internal void ReplaceRoot(ConfigKeyAccessImpl newCKARoot)
+        {
+            Key = newCKARoot.Key;
+            Flags = newCKARoot.Flags;
+            ConfigInternal = newCKARoot.ConfigInternal;
+            ResultCode = newCKARoot.ResultCode;
+
+            KeyMetaData = newCKARoot.KeyMetaData;
+            MetaDataSeqNum = newCKARoot.CurrentMetaDataSeqNum;
+
+            VC = newCKARoot.VC;
+            HasValue = newCKARoot.HasValue;
+            ValueSeqNum = newCKARoot.CurrentSeqNum;
+
+            ConfigKeyAccessImpl ckaiRoot = (newCKARoot.RootICKA as ConfigKeyAccessImpl) ?? newCKARoot;
+            RootICKA = ckaiRoot;
+
+            Provider = ckaiRoot.Provider;
+            if (Provider == null)
+                ProviderFlags = ckaiRoot.ProviderFlags;
         }
 
         /// <summary>Gives the IConfigInternal instance under which this config key access was created</summary>
         internal IConfigInternal ConfigInternal { get; set; }
 
-        /// <summary>Gives the original CKA from which this CKA was last cloned.  Usually the RootICKA is created, and maintained, by the corresponding provider.</summary>
-        internal IConfigKeyAccess RootICKA { get; set; }
-        
+        /// <summary>
+        /// Recursively evaluate the and return the last RootICKA that does not reference another root.
+        /// Gives the original CKA from which this CKA was last cloned or its newly assigned root.
+        /// Usually the RootICKA is created, and maintained, by the corresponding provider.
+        /// </summary>
+        internal IConfigKeyAccess RootICKA 
+        {
+            get 
+            {
+                var trialRootICKA = _RootICKA as ConfigKeyAccessImpl;
+
+                while (trialRootICKA != null && trialRootICKA._RootICKA is ConfigKeyAccessImpl)
+                    trialRootICKA = trialRootICKA._RootICKA as ConfigKeyAccessImpl;
+
+                return trialRootICKA ?? _RootICKA;
+            }
+            set { _RootICKA = value; } 
+        }
+        private IConfigKeyAccess _RootICKA;
+
         /// <summary>
         /// Gives the provider instance that is serving this key.
         /// <para/>Note: setter also sets the ProviderFlags and ProviderMetaData from the given provider instance, or to default values if the given value is null.
         /// </summary>
         public IConfigKeyProvider Provider 
-        { 
-            get { return _provider; } 
-            set 
+        {
+            get { return _provider; }
+            set
             { 
                 _provider = value;
                 if (_provider != null)
@@ -2175,7 +2223,7 @@ namespace MosaicLib.Modular.Config
             set
             {
                 vc = value;
-                HasValue = !value.IsNullOrEmpty;
+                HasValue = !value.IsEmpty;
             }
         }
 
@@ -2203,23 +2251,65 @@ namespace MosaicLib.Modular.Config
         /// <summary>True if this KeyAccess object's ValueContainer contents are not null or None.  Generally this is false when the given key was not found.</summary>
         public bool HasValue { get; private set; }
 
-        /// <summary>This property returns true if ValueIsFixed is false and ValueSeqNum is not the same as the CurrentSeqNum or MetaDataSeqNum is not equal to CurrentMetaDataSeqNum.</summary>
-        public bool IsUpdateNeeded { get { return (!ValueIsFixed && ((ValueSeqNum != CurrentSeqNum) || (MetaDataSeqNum != CurrentMetaDataSeqNum))); } }
+        /// <summary>This property returns true if <see cref="ValueIsFixed"/> is false and <see cref="ValueSeqNum"/> is not the same as the <see cref="CurrentSeqNum"/> or <see cref="MetaDataSeqNum"/> is not equal to <see cref="CurrentMetaDataSeqNum"/> or <see cref="IsRootUpdateNeeded"/>.</summary>
+        public bool IsUpdateNeeded 
+        { 
+            get 
+            { 
+                return (((!ValueIsFixed && (ValueSeqNum != CurrentSeqNum)) 
+                        || (MetaDataSeqNum != CurrentMetaDataSeqNum)) 
+                        || IsRootUpdateNeeded
+                        ); 
+            } 
+        }
 
         /// <summary>
-        /// This method will refresh the ValueAsString property to represent the most recently accepted value for the corresponding key and provider.
+        /// Returns true if <see cref="ProviderFlags"/>.KeyWasNotFound is true and its RootICKA now refers to another RootICKA instance.
+        /// </summary>
+        public bool IsRootUpdateNeeded
+        {
+            get 
+            {
+                if (!ProviderFlags.KeyWasNotFound)
+                    return false;
+
+                var effectiveRootICKA = RootICKA;
+                if (!Object.ReferenceEquals(_RootICKA, effectiveRootICKA))
+                    return true;
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// This method will refresh this derived key access object's value to contain the most recently accepted value for the corresponding key and provider.
         /// This method will have no effect if the flag indicates that the key is a ReadOnlyOnce key or if the provider indicates that the key is Fixed.
-        /// Returns true if the ValueAsString value changed or false otherwise.
+        /// This method also checks if the <see cref="RootICKA"/> should be updated and updates it as needed.
+        /// Returns true if the value changed, or if the root was updated, or false otherwise.
         /// </summary>
         public bool UpdateValue(bool forceUpdate = false)
         {
-            // UpdateValue does not do anything when the IConfigKeyAccess flags include ValueIsFixed or ReadOnlyOnce.
-            if (!IsUpdateNeeded && !forceUpdate || ValueIsFixed || (ConfigInternal == null))
+            bool rootUpdated = false;
+            if (IsRootUpdateNeeded)
+            {
+                var newRootICKA = RootICKA as ConfigKeyAccessImpl;
+                if (newRootICKA != null)
+                {
+                    ReplaceRoot(newRootICKA);      // this happens if a previously not found key has been created using EnsureExist
+                    rootUpdated = true;
+                }
+            }
+
+            if (ConfigInternal == null)
+                return false;
+
+            // NOTE: UpdateValue may still do something when ValueIsFixed since the MD may have changed.
+            if (!rootUpdated && !IsUpdateNeeded && !forceUpdate)
                 return false;
 
             string methodName = Fcns.CheckedFormat("IConfigKeyAccess.UpdateValue[key:'{0}']", Key);
 
-            return ConfigInternal.TryUpdateConfigKeyAccess(methodName, this);
+            return ConfigInternal.TryUpdateConfigKeyAccess(methodName, this) || rootUpdated;
         }
 
         IConfigKeyAccess IConfigKeyAccess.UpdateValueInline(bool forceUpdate)
@@ -2237,7 +2327,7 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Gives the sequence number of the root ConfigKey value for this key (as created and maintained by the provider)
         /// </summary>
-        public int CurrentSeqNum { get { return (RootICKA != null ? RootICKA.CurrentSeqNum : _currentSeqNum); } internal set { _currentSeqNum = value; } }
+        public int CurrentSeqNum { get { return (_RootICKA != null ? _RootICKA.CurrentSeqNum : _currentSeqNum); } internal set { _currentSeqNum = value; } }
         private int _currentSeqNum = 0;
 
 
@@ -2249,7 +2339,7 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Gives the sequence number of the root ConfigKey MetaData for this key (as created and maintained by the provider)
         /// </summary>
-        public int CurrentMetaDataSeqNum { get { return (RootICKA != null ? RootICKA.CurrentMetaDataSeqNum : _currentMetaDataSeqNum); } internal set { _currentMetaDataSeqNum = value; } }
+        public int CurrentMetaDataSeqNum { get { return (_RootICKA != null ? _RootICKA.CurrentMetaDataSeqNum : _currentMetaDataSeqNum); } internal set { _currentMetaDataSeqNum = value; } }
         private int _currentMetaDataSeqNum = 0;
 
         /// <summary>
@@ -2395,11 +2485,17 @@ namespace MosaicLib.Modular.Config
 
         /// <summary>
         /// Used to generate the merged meta data for a given key.
+        /// Updates the _metaData field as a new combined NVS based on the KeyMetaData, an optional readOnlyOnceMetaData, and the ProviderMetaData.
         /// </summary>
         internal static INamedValueSet InternalUpdateMetaData(this IConfigKeyAccess icka, ref INamedValueSet _metaData)
         {
-            return (_metaData = new NamedValueSet(NamedValueSet.Empty, subSets: new [] {icka.KeyMetaData.MapEmptyToNull(), icka.ProviderMetaData}.Where(nvs => nvs != null), asReadOnly: true));
+            if (!icka.Flags.ReadOnlyOnce)
+                return (_metaData = new NamedValueSet(NamedValueSet.Empty, subSets: new [] {icka.KeyMetaData.MapEmptyToNull(), icka.ProviderMetaData}.WhereIsNotDefault(), asReadOnly: true));
+            else
+                return (_metaData = new NamedValueSet(NamedValueSet.Empty, subSets: new[] { icka.KeyMetaData.MapEmptyToNull(), readOnlyOnceMetaData, icka.ProviderMetaData }.WhereIsNotDefault(), asReadOnly: true));
         }
+
+        private static INamedValueSet readOnlyOnceMetaData = new NamedValueSet() { Attributes.ConfigItemAttribute.ReadOnlyOnceKeyword }.MakeReadOnly();
 
         internal static string InternalGenerateResultCode(this IConfigKeyAccess icka, string _resultCode)
         {

@@ -640,13 +640,13 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>
-        /// This method captures a copy of the current ActionState from the given <paramref name="icf"/> and verifies ActionState.Succeeded.
+        /// This Extension Method captures a copy of the current ActionState from the given <paramref name="icf"/> and verifies ActionState.Succeeded.
         /// If this verification fails then this method throws an <see cref="ActionFailedException"/> with a description of the details of where verification step failed along with the given <paramref name="icf"/> value and
         /// the captured ActionState which was directly verified.
         /// </summary>
         /// <remarks>
         /// This EM is primarilly intended to support simplified use patterns in unit test code.  
-        /// It may also be usefull in production code when throw on failure code paths are being intentionally used.
+        /// It may also be usefull in production code when throw on failure code paths are being intentionally used, such as use with <see cref="System.Threading.Tasks.Task"/>'s.
         /// </remarks>
         public static TClientFacetType VerifySucceeded<TClientFacetType>(this TClientFacetType icf) 
             where TClientFacetType : IClientFacet
