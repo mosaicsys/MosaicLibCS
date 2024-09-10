@@ -44,7 +44,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Linq;
 
-using MosaicLib;
 using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Persist

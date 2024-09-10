@@ -30,8 +30,6 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 
-using MosaicLib.Utils.Collections;
-
 namespace MosaicLib.Utils
 {
     #region utility interfaces: ICopyable<TObjectType>
@@ -63,18 +61,24 @@ namespace MosaicLib.Utils
         #region Packing
 
         /// <summary>Packs the given pair of bytes as a UInt16 and returns it</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt16 Pack(Byte msb, Byte lsb) { unchecked { return (UInt16) ((((UInt32) msb) << 8) | ((UInt32) lsb)); } }
         /// <summary>Packs the given set of 4 bytes as a UInt32 and returns it</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt32 Pack(Byte umsb, Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)umsb) << 24) | (((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
         /// <summary>Packs the given set of 4 bytes as a UInt32 and returns it</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt64 Pack(Byte msb8, Byte msb7, Byte msb6, Byte msb5, Byte msb4, Byte msb3, Byte msb2, Byte lsb) { unchecked { return ((((UInt64)msb8) << 56) | (((UInt64)msb7) << 48) | (((UInt64)msb6) << 40) | ((UInt64)msb5) << 32) | ((((UInt64)msb4) << 24) | (((UInt64)msb3) << 16) | (((UInt64)msb2) << 8) | ((UInt64)lsb)); } }
         /// <summary>Packs the given set of 3 bytes as the lower 24 bits of a UInt32 and returns it</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt32 Pack(Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
         /// <summary>Packs the given pair of UInt16 values as a UInt32 and returns it</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt32 Pack(UInt16 msw, UInt16 lsw) { unchecked { return ((((UInt32)msw) << 16) | ((UInt32)lsw)); } }
 
         /// <summary>Packs a pair of bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt16 value output.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt16 value) 
 		{ 
 			value = 0;
@@ -88,6 +92,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of 4 bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt32 value) 
 		{ 
 			value = 0;
@@ -101,6 +106,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt64 value output.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt64 value)
         {
             value = 0;
@@ -114,6 +120,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt32 value)
         {
             value = 0;
@@ -133,6 +140,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt64 value)
         {
             value = 0;
@@ -155,6 +163,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 2 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt16 Pack2(Byte[] byteArray, int baseIdx = 0)
         {
             UInt16 value;
@@ -163,6 +172,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 3 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt32 Pack3(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
@@ -171,6 +181,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 4 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt32 Pack4(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
@@ -179,6 +190,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 8 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UInt64 Pack8(Byte[] byteArray, int baseIdx = 0)
         {
             UInt64 value;
@@ -190,6 +202,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a pair of bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt16 value output.</summary>
         /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt16 value)
         {
             value = 0;
@@ -203,6 +216,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of 4 bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt32 value)
         {
             value = 0;
@@ -216,6 +230,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt64 value output.</summary>
         /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt64 value)
         {
             value = 0;
@@ -229,6 +244,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(this IList<byte> fromBytes, int baseIdx, int numBytes, out UInt32 value)
         {
             value = 0;
@@ -248,6 +264,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Pack(this IList<byte> fromBytes, int baseIdx, int numBytes, out UInt64 value)
         {
             value = 0;
@@ -273,6 +290,7 @@ namespace MosaicLib.Utils
         #region Unpacking
 
         /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt16 w, out Byte msb, out Byte lsb)
 		{
 			unchecked
@@ -283,6 +301,7 @@ namespace MosaicLib.Utils
 		}
 
         /// <summary>Unpacks 2 words from the given UInt32 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt32 l, out UInt16 msw, out UInt16 lsw)
 		{
 			unchecked
@@ -293,6 +312,7 @@ namespace MosaicLib.Utils
 		}
 
         /// <summary>Unpacks 3 bytes from the given UInt32 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt32 l, out Byte ulsb, out Byte lmsb, out Byte llsb)
         {
             unchecked
@@ -305,6 +325,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt32 l, out Byte umsb, out Byte ulsb, out Byte lmsb, out Byte llsb)
 		{
 			unchecked
@@ -317,6 +338,7 @@ namespace MosaicLib.Utils
 		}
 
         /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt64 l, out Byte uumsb, out Byte uulsb, out Byte ulmsb, out Byte ullsb, out Byte lumsb, out Byte lulsb, out Byte llmsb, out Byte lllsb)
         {
             unchecked
@@ -333,6 +355,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Unpacks 4 words from the given UInt64 value and saves them in the corresponding output variables</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Unpack(UInt64 l, out UInt16 umsw, out UInt16 ulsw, out UInt16 lmsw, out UInt16 llsw)
         {
             unchecked
@@ -347,6 +370,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 2) > byteArray.Length))
@@ -357,6 +381,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 4) > byteArray.Length))
@@ -367,6 +392,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(UInt64 l, byte[] byteArray, int baseIdx = 0)
         {
             if (byteArray == null || baseIdx < 0 || ((baseIdx + 8) > byteArray.Length))
@@ -377,6 +403,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx, int numBytes)
         {
             if (byteArray == null || baseIdx < 0 || ((baseIdx + numBytes) > byteArray.Length))
@@ -394,6 +421,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(this UInt16 v, IList<byte> into, int baseIdx = 0)
         {
             return ((UInt64)v).Unpack(into, baseIdx, 2);
@@ -401,6 +429,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(this UInt32 v, IList<byte> into, int baseIdx = 0)
         {
             return ((UInt64)v).Unpack(into, baseIdx, 4);
@@ -408,6 +437,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(this UInt64 v, IList<byte> into, int baseIdx = 0)
         {
             return v.Unpack(into, baseIdx, 8);
@@ -415,6 +445,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Unpack(this UInt64 v, IList<byte> into, int baseIdx, int numBytes)
         {
             if (!into.IsSafeIndex(baseIdx, length: numBytes) || into.IsReadOnly)
@@ -447,11 +478,23 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the ByteOrder of the current execution environment.</summary>
-        public static ByteOrder MachineOrder { get { return ((BitConverter.IsLittleEndian) ? ByteOrder.LittleEndian : ByteOrder.BigEndian); } }
+        public static ByteOrder MachineOrder
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return ((BitConverter.IsLittleEndian) ? ByteOrder.LittleEndian : ByteOrder.BigEndian); } 
+        }
         /// <summary>Returns true if the MachineOrder is ByteOrder.LittleEndian</summary>
-        public static bool IsMachineLittleEndian { get { return (MachineOrder == ByteOrder.LittleEndian); } }
+        public static bool IsMachineLittleEndian
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (MachineOrder == ByteOrder.LittleEndian); } 
+        }
         /// <summary>Returns true if the MachineOrder is ByteOrder.BigEndian</summary>
-        public static bool IsMachineBigEndian { get { return (MachineOrder == ByteOrder.BigEndian); } }
+        public static bool IsMachineBigEndian
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (MachineOrder == ByteOrder.BigEndian); } 
+        }
 
         /// <summary>Attempts to change the byte order for itemSize number of bytes in the given array from the given byte order to the current Machine byte order.</summary>
         /// <param name="byteArray">Gives the byteArray that contains the bytes to be re-ordered.</param>
@@ -462,6 +505,7 @@ namespace MosaicLib.Utils
         /// True if the conversion was successful, 
         /// false if the item in the byteArray could not be successfully converted either because the baseIndex was out of bounds or because the itemSize is not a supported value.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int itemSize, ByteOrder fromByteOrder) 
         { 
             return ChangeByteOrder(byteArray, baseIdx, itemSize, fromByteOrder, MachineOrder); 
@@ -529,6 +573,7 @@ namespace MosaicLib.Utils
         /// True if the conversion was successful, 
         /// false if the item in the byteArray could not be successfully converted either because the baseIndex was out of bounds or because the itemSize is not a supported value.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int numItems, int itemSize, ByteOrder fromByteOrder) 
         { 
             return ChangeByteOrder(byteArray, baseIdx, itemSize, numItems, fromByteOrder, MachineOrder); 
@@ -605,6 +650,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Templatized method that may be used to swap a pair of referenced values or object handles.</summary>
         /// <typeparam name="TypeT">Gives the type of the reference variables who's contents are to be swapped.</typeparam>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Swap<TypeT>(ref TypeT left, ref TypeT right)
         {
             TypeT temp = left;
@@ -642,6 +688,7 @@ namespace MosaicLib.Utils
         /// and adds in the <paramref name="nextValue"/> to give the next value of <see cref="Result"/>.
         /// Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public HashCodeBuilder Add(int nextValue)
         {
             uint uResult = (uint)Result;
@@ -656,16 +703,20 @@ namespace MosaicLib.Utils
         /// Calls Add(item.SafeGetHashCode(hashCodeForNull: hashCodeForNull));
         /// Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public HashCodeBuilder AddHashCodeForItem<TItemType>(TItemType item, int hashCodeForNull = -1)
         {
             return Add(item.SafeGetHashCode(hashCodeForNull: hashCodeForNull));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Combine(int hashCode1, int hashCode2)
         {
             HashCodeBuilder hcb = default(HashCodeBuilder);
             return hcb.Add(hashCode1).Add(hashCode2).Result;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Combine(int hashCode1, int hashCode2, int hashCode3)
         {
             HashCodeBuilder hcb = default(HashCodeBuilder);
@@ -918,26 +969,40 @@ namespace MosaicLib.Utils
 		private volatile System.Int32 value;
 
 		/// <summary>Provide accessor to underlying value as a volatile value</summary>
-		public System.Int32 VolatileValue { get { return this.value; } set { this.value = value; }}
+		public System.Int32 VolatileValue
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return this.value; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { this.value = value; }
+        }
 
 		/// <summary>Provide R/W accessor property for the underlying value using atomic access/swap operations</summary>
 		public System.Int32 Value
 		{
-			get { return CompareExchange(0, 0); }
-			set { Exchange(value); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return CompareExchange(0, 0); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { Exchange(value); }
 		}
 
         /// <summary>Performs Interlocked.Increment on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 Increment() { return System.Threading.Interlocked.Increment(ref this.value); }
         /// <summary>Performs Interlocked.Increment on the contained value, once or twice, so as to produce a non-zero value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 IncrementSkipZero() { Int32 value = Increment(); while (value == 0) value = Increment(); return value; }
         /// <summary>Performs Interlocked.Decrement on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 Decrement() { return System.Threading.Interlocked.Decrement(ref this.value); }
         /// <summary>Performs Interlocked.Add on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 Add(System.Int32 value) { return System.Threading.Interlocked.Add(ref this.value, value); }
         /// <summary>Performs Interlocked.Exchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 Exchange(System.Int32 value) { return System.Threading.Interlocked.Exchange(ref this.value, value); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int32 CompareExchange(System.Int32 value, System.Int32 comparand) { return System.Threading.Interlocked.CompareExchange(ref this.value, value, comparand); }
 
         /// <summary>Debugging helper</summary>
@@ -959,22 +1024,40 @@ namespace MosaicLib.Utils
 		private AtomicInt32 ai32;
 
 		/// <summary>Provide accessor to underlying value as a volatile value</summary>
-		public System.UInt32 VolatileValue { get { return unchecked((UInt32) ai32.VolatileValue); } set { ai32.VolatileValue = unchecked((Int32) value); } }
+		public System.UInt32 VolatileValue
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return unchecked((UInt32) ai32.VolatileValue); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { ai32.VolatileValue = unchecked((Int32) value); } 
+        }
 
 		/// <summary>Provide R/W accessor property for the underlying value using atomic access/swap operations</summary>
-		public System.UInt32 Value { get { return unchecked((UInt32) ai32.Value); } set { ai32.Value = unchecked((Int32) value); } }
+		public System.UInt32 Value
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return unchecked((UInt32) ai32.Value); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { ai32.Value = unchecked((Int32) value); } 
+        }
 
         /// <summary>Performs Interlocked.Increment on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 Increment() { return unchecked((UInt32)ai32.Increment()); }
         /// <summary>Performs Interlocked.Increment on the contained value, once or twice, so as to produce a non-zero value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 IncrementSkipZero() { return unchecked((UInt32)ai32.IncrementSkipZero()); }
         /// <summary>Performs Interlocked.Decrement on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 Decrement() { return unchecked((UInt32)ai32.Decrement()); }
         /// <summary>Performs Interlocked.Add on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 Add(System.UInt32 value) { return unchecked((UInt32)ai32.Add(unchecked((Int32)value))); }
         /// <summary>Performs Interlocked.Exchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 Exchange(System.UInt32 value) { return unchecked((UInt32)ai32.Exchange(unchecked((Int32)value))); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt32 CompareExchange(System.UInt32 value, System.UInt32 comparand) { return unchecked((UInt32)ai32.CompareExchange(unchecked((Int32)value), unchecked((Int32)comparand))); }
 
         /// <summary>Debugging helper</summary>
@@ -996,26 +1079,40 @@ namespace MosaicLib.Utils
         private System.Int64 value;     // cannot be volatile since bus access to this object is not allways atomic
 
         /// <summary>Provide accessor to underlying value as a volatile value</summary>
-        public System.Int64 VolatileValue { get { return this.value; } set { this.value = value; } }
+        public System.Int64 VolatileValue
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return this.value; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { this.value = value; } 
+        }
 
         /// <summary>Provide R/W accessor property for the underlying value using atomic access/swap operations</summary>
         public System.Int64 Value
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return CompareExchange(0, 0); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set { Exchange(value); }
         }
 
         /// <summary>Performs Interlocked.Increment on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 Increment() { return System.Threading.Interlocked.Increment(ref this.value); }
         /// <summary>Performs Interlocked.Increment on the contained value, once or twice, so as to produce a non-zero value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 IncrementSkipZero() { Int64 value = Increment(); while (value == 0) value = Increment(); return value; }
         /// <summary>Performs Interlocked.Decrement on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 Decrement() { return System.Threading.Interlocked.Decrement(ref this.value); }
         /// <summary>Performs Interlocked.Add on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 Add(System.Int64 value) { return System.Threading.Interlocked.Add(ref this.value, value); }
         /// <summary>Performs Interlocked.Exchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 Exchange(System.Int64 value) { return System.Threading.Interlocked.Exchange(ref this.value, value); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.Int64 CompareExchange(System.Int64 value, System.Int64 comparand) { return System.Threading.Interlocked.CompareExchange(ref this.value, value, comparand); }
 
         /// <summary>Debugging helper</summary>
@@ -1037,22 +1134,40 @@ namespace MosaicLib.Utils
         private AtomicInt64 ai64;
 
         /// <summary>Provide accessor to underlying value as a volatile value</summary>
-        public System.UInt64 VolatileValue { get { return unchecked((UInt64)ai64.VolatileValue); } set { ai64.VolatileValue = unchecked((Int64)value); } }
+        public System.UInt64 VolatileValue
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return unchecked((UInt64)ai64.VolatileValue); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { ai64.VolatileValue = unchecked((Int64)value); } 
+        }
 
         /// <summary>Provide R/W accessor property for the underlying value using atomic access/swap operations</summary>
-        public System.UInt64 Value { get { return unchecked((UInt64)ai64.Value); } set { ai64.Value = unchecked((Int64)value); } }
+        public System.UInt64 Value
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return unchecked((UInt64)ai64.Value); }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { ai64.Value = unchecked((Int64)value); } 
+        }
 
         /// <summary>Performs Interlocked.Increment on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 Increment() { return unchecked((UInt64)ai64.Increment()); }
         /// <summary>Performs Interlocked.Increment on the contained value, once or twice, so as to produce a non-zero value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 IncrementSkipZero() { return unchecked((UInt64)ai64.IncrementSkipZero()); }
         /// <summary>Performs Interlocked.Decrement on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 Decrement() { return unchecked((UInt64)ai64.Decrement()); }
         /// <summary>Performs Interlocked.Add on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 Add(System.UInt64 value) { return unchecked((UInt64)ai64.Add(unchecked((Int64)value))); }
         /// <summary>Performs Interlocked.Exchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 Exchange(System.UInt64 value) { return unchecked((UInt64)ai64.Exchange(unchecked((Int64)value))); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public System.UInt64 CompareExchange(System.UInt64 value, System.UInt64 comparand) { return unchecked((UInt64)ai64.CompareExchange(unchecked((Int64)value), unchecked((Int64)comparand))); }
 
         /// <summary>Debugging helper</summary>
@@ -1349,13 +1464,29 @@ namespace MosaicLib.Utils
         /// This property is not generally intended to be changed while incrementing the sequence number and the implementation assumes that this property is not used concurrently with the Increment
         /// method.  This object will continue to function acceptably in this case but the actually sequence of sequence numbers would be indeterminate if this constraint is violated.
         /// </remarks>
-		public virtual bool SkipZero { get { return skipZero; } set { skipZero = value; } }
+		public virtual bool SkipZero
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return skipZero; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { skipZero = value; } 
+        }
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public virtual bool HasBeenSet { get { return hasSequenceNumberBeenSet; } }
+        public virtual bool HasBeenSet
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return hasSequenceNumberBeenSet; } 
+        }
 
         /// <summary>get/set property that gives the caller interlocked access to the current value of the contained sequence number value.  Setter also flags that the sequence number has been set.</summary>
-        public virtual ValueType SequenceNumber { get { return sequenceNumberGen.Value; } set { sequenceNumberGen.Value = value; InnerSequenceNumberHasBeenSet(); } }
+        public virtual ValueType SequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return sequenceNumberGen.Value; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { sequenceNumberGen.Value = value; InnerSequenceNumberHasBeenSet(); } 
+        }
 
         /// <summary>
         /// Gives the caller direct access to the sequence number storage without the use of interlocked instructions. 
@@ -1366,13 +1497,19 @@ namespace MosaicLib.Utils
         /// This property is still useful in cases where 2 observed transitions are acceptable for a single interlocked change (such as an increment) and as such it is being retained despite this
         /// caveat.
         /// </remarks>
-        public virtual ValueType VolatileSequenceNumber { get { return sequenceNumberGen.VolatileValue; } }
+        public virtual ValueType VolatileSequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return sequenceNumberGen.VolatileValue; } 
+        }
 
         /// <summary>Allows the caller to advance the contained sequence number to the next value.</summary>
         /// <returns>the value of the contained sequence number after being incremented.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public virtual ValueType Increment() { return InnerIncrementNumber(); }
 
         /// <summary>Innermost method used to increment a sequence number.  Implements skip zero behavior.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected virtual ValueType InnerIncrementNumber()
 		{
             ValueType temp;
@@ -1527,8 +1664,9 @@ namespace MosaicLib.Utils
         /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public bool IsUpdateNeeded
 		{
-			get
-			{
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
 				if (!sequenceNumberSource.HasBeenSet)
 					return false;
 
@@ -1541,10 +1679,16 @@ namespace MosaicLib.Utils
 
 				return true;
 			}
-			set { if (value == true) hasBeenUpdated = false; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set 
+            { 
+                if (value == true) 
+                    hasBeenUpdated = false; 
+            }
 		}
 
         /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Update()
 		{
 			bool doUpdate = IsUpdateNeeded;
@@ -1559,22 +1703,43 @@ namespace MosaicLib.Utils
 		}
 
         /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
-        public ISequenceNumberObserver<SeqNumberType> UpdateInline() { Update(); return this; }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ISequenceNumberObserver<SeqNumberType> UpdateInline() 
+        { 
+            Update(); 
+            return this; 
+        }
 
-        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() 
+        { 
+            return UpdateInline(); 
+        }
 
 		#endregion
 
 		#region ISequenceNumberValue<SeqNumberType> Members
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return hasBeenUpdated; } }
+        public bool HasBeenSet
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return hasBeenUpdated; } 
+        }
 
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public SeqNumberType SequenceNumber { get { return copyOfLastValue; } }
+        public SeqNumberType SequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return copyOfLastValue; } 
+        }
 
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public SeqNumberType VolatileSequenceNumber { get { return copyOfLastValue; } }
+        public SeqNumberType VolatileSequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return copyOfLastValue; } 
+        }
 
 		#endregion
 	}
@@ -1721,24 +1886,51 @@ namespace MosaicLib.Utils
 		#region ISequencedRefObjectSourceObserver<ObjectType, SeqNumberType> Members
 
         /// <summary>Getter property to return the locally cached Object handle value.</summary>
-		public RefObjectType Object { get { return localObjCopy; } }
+		public RefObjectType Object
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return localObjCopy; } 
+        }
 
         /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
-        public bool IsUpdateNeeded { get { return seqNumObserver.IsUpdateNeeded; } set { seqNumObserver.IsUpdateNeeded = value; } }
+        public bool IsUpdateNeeded 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.IsUpdateNeeded; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { seqNumObserver.IsUpdateNeeded = value; } 
+        }
         /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Update() { if (seqNumObserver.Update()) { localObjCopy = objSource.Object; return true; } else return false; }
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return seqNumObserver.HasBeenSet; } }
+        public bool HasBeenSet 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.HasBeenSet; } 
+        }
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public SeqNumberType SequenceNumber { get { return seqNumObserver.SequenceNumber; } }
+        public SeqNumberType SequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.SequenceNumber; }
+        }
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public SeqNumberType VolatileSequenceNumber { get { return seqNumObserver.VolatileSequenceNumber; } }
+        public SeqNumberType VolatileSequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.VolatileSequenceNumber; } 
+        }
 
         /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ISequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> UpdateInline() { Update(); return this; }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedObjectSourceObserver<RefObjectType, SeqNumberType> ISequencedObjectSourceObserver<RefObjectType, SeqNumberType>.UpdateInline() { return UpdateInline(); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedObjectSourceObserver<RefObjectType> ISequencedObjectSourceObserver<RefObjectType>.UpdateInline() { return UpdateInline(); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
@@ -1793,24 +1985,51 @@ namespace MosaicLib.Utils
 		#region ISequencedValueObjectSourceObserver<ObjectType, SeqNumberType> Members
 
         /// <summary>Getter property to return the locally cached Object value.</summary>
-        public ValueObjectType Object { get { return localObjCopy; } }
+        public ValueObjectType Object
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return localObjCopy; } 
+        }
 
         /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
-        public bool IsUpdateNeeded { get { return seqNumObserver.IsUpdateNeeded; } set { seqNumObserver.IsUpdateNeeded = value; } }
+        public bool IsUpdateNeeded
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.IsUpdateNeeded; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set { seqNumObserver.IsUpdateNeeded = value; } 
+        }
         /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Update() { if (seqNumObserver.Update()) { localObjCopy = objSource.Object; return true; } else return false; }
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return seqNumObserver.HasBeenSet; } }
+        public bool HasBeenSet
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.HasBeenSet; } 
+        }
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public SeqNumberType SequenceNumber { get { return seqNumObserver.SequenceNumber; } }
+        public SeqNumberType SequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.SequenceNumber; } 
+        }
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public SeqNumberType VolatileSequenceNumber { get { return seqNumObserver.VolatileSequenceNumber; } }
+        public SeqNumberType VolatileSequenceNumber
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return seqNumObserver.VolatileSequenceNumber; } 
+        }
 
         /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ISequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> UpdateInline() { Update(); return this; }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType> ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType>.UpdateInline() { return UpdateInline(); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedObjectSourceObserver<ValueObjectType> ISequencedObjectSourceObserver<ValueObjectType>.UpdateInline() { return UpdateInline(); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
@@ -2417,6 +2636,7 @@ namespace MosaicLib.Utils
         /// If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.
         /// Dispose method will release the held mutexObject if one is held at that time.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ScopedLock(object mutexObject = null, bool acquireLock = true)
         {
             if (acquireLock && mutexObject != null)
@@ -2424,6 +2644,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Calls Release in order to unlock any currently held lock.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Dispose()
         {
             Release();
@@ -2433,12 +2654,17 @@ namespace MosaicLib.Utils
         private object lockedMutexObject = null;
 
         /// <summary>Returns true if this object is currently holding a locked mutex object (and thus can be Released)</summary>
-        public bool HasLock { get { return (lockedMutexObject != null); } }
+        public bool HasLock
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (lockedMutexObject != null); }
+        }
 
         /// <summary>
         /// This method is used to, optionally (if the given mutexObject is non-null), lock the given mutexObject by calling Monitor.Enter on it and then saving it to be the internally held locked mutexObject.
         /// <para/>This method always calls Release inorder to Release any previoulsy held locked mutexObject before attempting to lock the given one.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Lock(object mutexObject)
         {
             Release();
@@ -2451,6 +2677,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>If the object currently HasLock on a previously locked mutexObject then this method will Exit the monitor on it and clear the HasLock indication.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Release()
         {
             if (HasLock)
@@ -2463,6 +2690,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  On success this object will indicate HasLock is true, on failure HasLock will be false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ScopedLock TryLockInline(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
         {
             TryLock(mutexObject, maxWaitTimeLimit);
@@ -2473,6 +2701,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  Returns true if the lock was successfully acquired, or false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryLock(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
         {
             Release();
@@ -2504,6 +2733,7 @@ namespace MosaicLib.Utils
         /// If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.
         /// Dispose method will release the held mutexObject if one is held at that time.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ScopedLockStruct(object mutexObject, bool acquireLock = true) 
             : this()
         {
@@ -2512,6 +2742,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Calls Release in order to unlock any currently held lock.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Dispose()
         {
             Release();
@@ -2521,12 +2752,17 @@ namespace MosaicLib.Utils
         private object lockedMutexObject;
 
         /// <summary>Returns true if this object is currently holding a locked mutex object (and thus can be Released)</summary>
-        public bool HasLock { get { return (lockedMutexObject != null); } }
+        public bool HasLock
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (lockedMutexObject != null); } 
+        }
 
         /// <summary>
         /// This method is used to, optionally (if the given mutexObject is non-null), lock the given mutexObject by calling Monitor.Enter on it and then saving it to be the internally held locked mutexObject.
         /// <para/>This method always calls Release inorder to Release any previoulsy held locked mutexObject before attempting to lock the given one.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Lock(object mutexObject)
         {
             Release();
@@ -2539,6 +2775,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>If the object currently HasLock on a previously locked mutexObject then this method will Exit the monitor on it and clear the HasLock indication.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Release()
         {
             if (HasLock)
@@ -2551,6 +2788,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  Returns true if the lock was successfully acquired, or false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryLock(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
         {
             Release();

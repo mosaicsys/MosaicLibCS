@@ -621,6 +621,58 @@ namespace MosaicLib.Semi.E005
         Denied_Internal = 255,
     }
 
+    /// <summary>
+    /// Equipment E030 Communications State.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="None"/> (0 : Initial state),
+    /// <see cref="Disabled"/> (1),
+    /// <see cref="WaitCRAFromHost"/> (2),
+    /// <see cref="WaitDelay"/> (3),
+    /// <see cref="WaitCRFromHost"/> (4),
+    /// <see cref="Communicating"/> (5)
+    /// </remarks>
+    [DataContract(Namespace = Constants.E030NameSpace)]
+    public enum CommunicationsState : byte
+    {
+        /// <summary>Placeholder default/initial value. (0)</summary>
+        [EnumMember]
+        None = 0,
+        /// <summary>Communication channel is not been enabled yet, or has been explicitly disabled.</summary>
+        /// <remarks>Display as Disabled</remarks>
+        [EnumMember]
+        Disabled = 1,
+        /// <summary>Equipment initiated connection request (S1F13) is enabled and has been sent.  Waiting for valid S1F14 response from host.  On valid response it transitions to <see cref="Communicating"/></summary>
+        /// <remarks>Display as Enabled/WaitCRA</remarks>
+        [EnumMember]
+        WaitCRAFromHost = 2,
+        /// <summary>After not receiving a valid S1F14 within the configured time limit, the equipment waits in this state for the configured holdoff period before sending the next S1F13 request.</summary>
+        /// <remarks>Display as Enabled/Wait</remarks>
+        [EnumMember]
+        WaitDelay = 3,
+        /// <summary>If the equipment is not permitted to initiate connections then it shall wait in this state until receiving an valid S1F13 from the host.  It shall then send an S1F14 with <see cref="COMMACK.Accepted"/> and transition to <see cref="Communicating"/></summary>
+        /// <remarks>Display as Enabled WaitCR</remarks>
+        [EnumMember]
+        WaitCRFromHost = 4,
+        /// <summary>Successful S1F13/S1F14 handshake has been performed and the E030 connection (usually HSMS) is now usable.</summary>
+        /// <remarks>Display as Communicating or as current <see cref="ControlState"/></remarks>
+        [EnumMember]
+        Communicating = 5,
+    }
+
+    /// <summary>
+    /// Equipment communication control state.
+    /// <para/>Note: This enumeration can be used both as the current control state (of the control state machine) and
+    /// as the current setpoint for the control state: the last requested state from the host or any other decision authority (aka user).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="None"/> (0),
+    /// <see cref="EquipmentOffline"/> (1),
+    /// <see cref="AttemptOnline"/> (2),
+    /// <see cref="HostOffline"/> (3),
+    /// <see cref="OnlineLocal"/> (4),
+    /// <see cref="OnlineRemote"/> (5),
+    /// </remarks>
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum ControlState : byte
     {

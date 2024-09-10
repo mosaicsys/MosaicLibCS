@@ -21,11 +21,9 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO.Ports;
 using MosaicLib.Utils;
-using MosaicLib.Time;
 
 namespace MosaicLib.SerialIO
 {

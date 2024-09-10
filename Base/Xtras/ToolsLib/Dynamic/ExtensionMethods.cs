@@ -20,8 +20,11 @@
  */
 
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
+using System.Dynamic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace Mosaic.ToolsLib.Dynamic
@@ -73,6 +76,64 @@ namespace Mosaic.ToolsLib.Dynamic
                 dynamicKVC.EnablePropertyGetterVCSuffixHandling = enablePropertyGetterVCSuffixHandling;
                 return dynamicKVC;
             }
+
+            /// <summary>This EM creates, populates, and returns a new <see cref="ExpandoObject"/> from the given <paramref name="nvSet"/></summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static ExpandoObject ToExpandoObject(this INamedValueSet nvSet, bool ? recursive = null)
+            {
+                return nvSet.ConvertToKVCSet().ToExpandoObject(recursive: recursive);
+            }
+
+            /// <summary>This EM creates, populates, and returns a new <see cref="ExpandoObject"/> from the given <paramref name="kvcSet"/></summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static ExpandoObject ToExpandoObject(this IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet, bool? recursive = null)
+            {
+                return kvcSet.Select(kvc => KVP.Create(kvc.Key, kvc.Value.ValueAsObject)).ToExpandoObject(recursive: recursive);
+            }
+
+            /// <summary>This EM creates, populates, and returns a new <see cref="ExpandoObject"/> from the given <paramref name="kvpSet"/></summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static ExpandoObject ToExpandoObject(this IEnumerable<KeyValuePair<string, object>> kvpSetIn, bool? recursive = null)
+            {
+                if (recursive ?? DefaultEnableToExpandoObjectRecursion)
+                {
+                    IEnumerable<KeyValuePair<string, object>> RecursiveConvert(IEnumerable<KeyValuePair<string, object>> kvpSetToConvert)
+                    {
+                        foreach (var kvp in kvpSetToConvert)
+                        {
+                            var o = kvp.Value;
+
+                            if (o is ValueContainer vc)
+                                o = vc.ValueAsObject;
+
+                            if (o is INamedValueSet nvs)
+                            {
+                                yield return KVP.Create<string, object>(kvp.Key, nvs.ToExpandoObject(recursive: true));
+                            }
+                            else if (o is IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet)
+                            {
+                                yield return KVP.Create<string, object>(kvp.Key, kvcSet.ToExpandoObject(recursive: true));
+                            }
+                            else if (o is IEnumerable<KeyValuePair<string, object>> innerKvpSet)
+                            {
+                                yield return KVP.Create<string, object>(kvp.Key, innerKvpSet.ToExpandoObject(recursive: true));
+                            }
+
+                            yield return kvp;
+                        }
+                    }
+
+                    kvpSetIn = RecursiveConvert(kvpSetIn);
+                }
+
+                var eo = new ExpandoObject();
+
+                eo.SafeAddKVPSet(kvpSetIn);
+
+                return eo;
+            }
+
+            public static bool DefaultEnableToExpandoObjectRecursion { get; set; } = true;
         }
     }
 }

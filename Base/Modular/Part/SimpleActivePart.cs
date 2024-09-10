@@ -26,7 +26,6 @@ using System.Linq;
 using System.Runtime.Serialization;
 
 using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Parts;
@@ -426,6 +425,13 @@ namespace MosaicLib.Modular.Part
         public ApartmentState ? ApartmentState { get; set; }
 
         /// <summary>
+        /// When this property is not null it is used to determine if the SAPB may setup and make use of its <see cref="SimpleActivePartBase._threadStaticWakeupNotifier"/>.  
+        /// This allows its thread can use the part's internal wakeup notifier when waiting for actions it uses from other parts without needing to assign the <see cref="INotifyable"/> instance on a call by call basis.
+        /// When this property is null, the part will use the value of the <see cref="SimpleActivePartBase.DefaultEnableUseOfThreadStaticWakeupNotifier"/> static property to enable this use.
+        /// </summary>
+        public bool? AllowUseOfThreadStaticWakeupNotifier { get; set; }
+
+        /// <summary>
         /// Contains SimplePartBaseSettings that will be used by the SimplePartBase class
         /// </summary>
         public SimplePartBaseSettings SimplePartBaseSettings { get { return simplePartBaseSettings; } set { simplePartBaseSettings = value; } }
@@ -540,7 +546,8 @@ namespace MosaicLib.Modular.Part
                                                          bool disableBusyBehavior = false,
                                                          bool disablePartBaseIVIUse = false,
                                                          GoOnlineAndGoOfflineHandling addGoOnlineAndOfflineHandling = default(GoOnlineAndGoOfflineHandling),
-                                                         SimpleActivePartBehaviorOptions addSimpleActivePartBehaviorOptions = default(SimpleActivePartBehaviorOptions)
+                                                         SimpleActivePartBehaviorOptions addSimpleActivePartBehaviorOptions = default(SimpleActivePartBehaviorOptions),
+                                                         bool ? allowUseOfThreadStaticWakeupNotifier = null
                                                          )
         {
             if (automaticallyIncAndDecBusyCountAroundActionInvoke != null)
@@ -592,6 +599,9 @@ namespace MosaicLib.Modular.Part
 
             if (addSimpleActivePartBehaviorOptions != default(SimpleActivePartBehaviorOptions))
                 settings.SimpleActivePartBehaviorOptions |= addSimpleActivePartBehaviorOptions;
+
+            if (allowUseOfThreadStaticWakeupNotifier != default(bool?))
+                settings.AllowUseOfThreadStaticWakeupNotifier = allowUseOfThreadStaticWakeupNotifier;
 
             return settings;
         }
@@ -993,7 +1003,7 @@ namespace MosaicLib.Modular.Part
                 PreStopPart();
 
                 if (actionQ != null)
-					actionQ.QueueEnable = false;	// this tells the thread to exit (if it is already running)
+					actionQ.QueueDisableReason = "PartIsStopping";	// this tells the thread to exit (if it is already running)
 
                 hasStopBeenRequested = true; 
 
@@ -1008,8 +1018,11 @@ namespace MosaicLib.Modular.Part
 				Log.Info.Emit("Part stopped");
 
                 hasBeenStopped = true;
-			}
-		}
+
+                if (actionQ != null)
+                    actionQ.QueueDisableReason = "PartHasStopped";
+            }
+        }
 
         /// <summary>Returns true if the part has been started.  May be true before main loop has started.</summary>
         public virtual bool HasBeenStarted { get { return (hasBeenStarted); } }
@@ -1355,6 +1368,11 @@ namespace MosaicLib.Modular.Part
                     if (settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline) && (entryBaseState.UseState == UseState.Initial || entryBaseState.UseState == UseState.Undefined))
                         SetBaseState(UseState.Offline, "Part has been started");
 
+                    // capture thread static version of event wait handle if enabled
+
+                    if (settings.AllowUseOfThreadStaticWakeupNotifier ?? DefaultEnableUseOfThreadStaticWakeupNotifier)
+                        _threadStaticWakeupNotifier = threadWakeupNotifier;
+
                     // The following is the part's main loop:
                     //	Loop until the action queue has been disabled
 
@@ -1401,7 +1419,7 @@ namespace MosaicLib.Modular.Part
                     exceptionDetected = ex;
 
                     // disable the queue so that clients will not block indefinitely after this part's main thread has stopped processing actions.
-                    actionQ.QueueEnable = false;
+                    actionQ.QueueDisableReason = "MainThreadFcn_Failed";
 
                     Log.Debug.Emit("{0} failed with unexpected {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
 
@@ -1423,6 +1441,10 @@ namespace MosaicLib.Modular.Part
 
                     if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
                         entryExitTrace.ExtraMessage = "Caught unexpected {0} during stopping action list".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+                }
+                finally
+                {
+                    _threadStaticWakeupNotifier = null;
                 }
 
                 if (exceptionDetected == null)
@@ -1668,13 +1690,33 @@ namespace MosaicLib.Modular.Part
             return signaled;
 		}
 
-		#endregion
+        #endregion
 
-		//-----------------------------------------------------------------
-		#region private and protected fields and related properties
+        //-----------------------------------------------------------------
+        #region private and protected fields and related properties
 
-        /// <summary>Protected readonly WaitEventNotifier used by the Part's main thread as part of the WaitForSomethingToDo pattern.</summary>
+        /// <summary>
+        /// Protected readonly <see cref="WaitEventNotifier"/> used by the Part's main thread as part of the WaitForSomethingToDo pattern.
+        /// <para/>When enabled, this instance may also be used by the actions that this part uses from other parts in their <see cref="IBasicNotificationList"/>s for use when 
+        /// waiting for those actions to complete.
+        /// </summary>
         protected readonly WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
+
+        /// <summary>
+        /// Note: this <see cref="WaitEventNotifier"/> instance is (optionally) initialized by this part's thread to be the part's <see cref="threadWakeupNotifier"/> instance.
+        /// This field may then be used by all <see cref="ActionImplBase{ParamType, ResultType}"/> <see cref="ActionImplBase{ParamType, ResultType}.WaitUntilComplete(TimeSpan)"/> 
+        /// methods in place of explicitly renting an event wait handle from somewhere else.
+        /// </summary>
+        [ThreadStatic]
+        internal static volatile WaitEventNotifier _threadStaticWakeupNotifier;
+
+        /// <summary>
+        /// When the part's current <see cref="settings"/> <see cref="SimpleActivePartBaseSettings.AllowUseOfThreadStaticWakeupNotifier"/> property is null then this static property will be used to determine
+        /// if the part assigns its <see cref="threadWakeupNotifier"/> to its <see cref="_threadStaticWakeupNotifier"/> static thread variable (or not).
+        /// <para/>Defaults to <see langword="true"/>
+        /// </summary>
+        public static bool DefaultEnableUseOfThreadStaticWakeupNotifier { get { return _DefaultEnableUseOfThreadStaticWakeupNotifier; } set { _DefaultEnableUseOfThreadStaticWakeupNotifier = value; } }
+        private static bool _DefaultEnableUseOfThreadStaticWakeupNotifier = true;
 
         private System.Threading.Thread mainThread = null;
 

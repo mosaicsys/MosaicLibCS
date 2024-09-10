@@ -210,7 +210,7 @@ namespace Mosaic.ToolsLib.Tasks.DiscreteEventTimeBase
             var cancelationCheckArray = cancelationCheckWaitItemListWithCachedArray.Array;
             var cancelationCheckArrayLength = cancelationCheckArray.Length;
 
-            for (int index = 0; index < cancelationCheckArrayLength; index++)
+            for (int index = cancelationCheckArrayLength-1; index >= 0; index--)
             {
                 var waitTaskItem = cancelationCheckArray[index];
                 if (waitTaskItem.CancellationToken.IsCancellationRequested)

@@ -20,18 +20,11 @@
  */
 
 using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using MosaicLib.Modular;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -263,8 +256,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         #endregion
 
-        #region MDRF2DefaultValue
+        #region DefaultForMDRF2
 
+        /// <summary>
+        /// Default <see cref="SetupInfo"/> values for use with MDRF2 file writing.  Standard default values with the following overrides:
+        /// <list type="bullet">
+        /// <item><see cref="SetupInfo.NominalExtraDataBlockSize"/>: 65536</item>
+        /// <item><see cref="SetupInfo.NominalMaxFileSize"/>: 50*1024*1024</item>
+        /// <item><see cref="SetupInfo.MaxFileRecordingPeriod"/>: 24 hours</item>
+        /// <item><see cref="SetupInfo.MinInterFileCreateHoldoffPeriod"/>: 15 seconds</item>
+        /// <item><see cref="SetupInfo.MinNominalFileIndexWriteInterval"/>: 10 seconds</item>
+        /// <item><see cref="SetupInfo.MinNominalWriteAllInterval"/>: 15 minutes</item>
+        /// <item><see cref="SetupInfo.FileIndexNumRows"/>: -1 (maps to 0 in ClipValues)</item>
+        /// <item><see cref="SetupInfo.I8Offset"/>: -1 (maps to 0 in ClipValues) </item>
+        /// <item><see cref="SetupInfo.I4Offset"/>: -1 (maps to 0 in ClipValues) </item>
+        /// <item><see cref="SetupInfo.I2Offset"/>: -1 (maps to 0 in ClipValues)</item>
+        /// </list>
+        /// </summary>
         public static SetupInfo DefaultForMDRF2
         {
             get
@@ -569,7 +577,20 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// <summary>Logging and debug helper</summary>
         public override string ToString()
         {
-            return "fdt:{0:f6} dt:{1:o}".CheckedFormat(fileDeltaTimeStamp, dateTime);
+            var sb = new StringBuilder();
+
+            if (qpcTimeStamp != QpcTimeStamp.Zero)
+                sb.CheckedAppendFormatWithDelimiter(" ", "qpc:{0:f6}", qpcTimeStamp.Time);
+
+            if (fileDeltaTimeStamp != 0.0)
+                sb.CheckedAppendFormatWithDelimiter(" ", "fdt:{0:f6}", fileDeltaTimeStamp);
+
+            if (dateTime != default(DateTime))
+                sb.CheckedAppendFormatWithDelimiter(" ", "dt:{0:o}", dateTime);
+            else
+                sb.CheckedAppendFormatWithDelimiter(" ", "u1601:{0:f6}", utcTimeSince1601);
+
+            return sb.ToString();
         }
 
         /// <summary>
@@ -1591,9 +1612,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     /// <summary>
     /// This enumeration defines a set of flag bit values that are used in the file index to identify what types of data blocks are present (start) in any given row of the file index.
-    /// <para/>None (0x0000), ContainsHeaderOrMetaData (0x0001), ContainsHighPriorityOccurrence (0x0002), ContainsOccurrence(0x0004), ContainsDateTime (0x0008), ContainsStartOfFullGroup (0x0080), ContainsMessage (0x0100), ContainsError (0x0200), 
-    /// <para/>MDRF2 only: ContainsObject (0x0010), ContainsSignificantObject (0x0020), ContainsGroup (0x0400), ContainsGroupSet (0x0800), ContainsEnd (0x8000)
     /// </summary>
+    /// <remarks>
+    /// <see cref="None"/> (0x0000), <see cref="ContainsHeaderOrMetaData"/> (0x0001), <see cref="ContainsHighPriorityOccurrence"/> (0x0002), 
+    /// <see cref="ContainsOccurrence"/>(0x0004), <see cref="ContainsDateTime"/> (0x0008), <see cref="ContainsStartOfFullGroup"/> (0x0080), 
+    /// <see cref="ContainsMessage"/> (0x0100), <see cref="ContainsError"/> (0x0200), 
+    /// <para/>MDRF2 only: <see cref="ContainsObject"/> (0x0010), <see cref="ContainsSignificantObject"/> (0x0020), 
+    /// <see cref="ContainsGroup"/> (0x0400), <see cref="ContainsGroupSet"/> (0x0800), <see cref="FlushRequested"/> (0x1000)
+    /// <see cref="ContainsEnd"/> (0x8000)
+    /// </remarks>
     [Flags]
     public enum FileIndexRowFlagBits : ushort
     {
@@ -1605,7 +1632,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         ContainsHighPriorityOccurrence = 0x0002,
         /// <summary>At least one occurrence data block starts in this row [0x0004]</summary>
         ContainsOccurrence = 0x0004,
-        /// <summary>At least one date time data block starts in this row [0x0008]</summary>
+        /// <summary>
+        /// At least one <see cref="DateTimeInfo"/> data block starts in this row.
+        /// Normally this is only generated in the extended file header region 
+        /// (right after inline index in MDRF1, in the start record for MDRF2).
+        /// [0x0008]
+        /// </summary>
         ContainsDateTime = 0x0008,
         /// <summary>At least one custom object block was added to this "row" [0x0010] [MDRF2 only]</summary>
         ContainsObject = 0x0010,
@@ -1621,6 +1653,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         ContainsGroup = 0x0400,
         /// <summary>At least one group set is in this "row" [0x0800] [MDRF2 only]</summary>
         ContainsGroupSet = 0x0800,
+        /// <summary>The current block was ended/closed/completed due to an explicit flush request [0x1000] [MDRF2 only]</summary>
+        FlushRequested = 0x1000,
+        /// <summary>The current block was ended/closed/completed because a record (non-monotonic) time order change was detected [0x2000] [MDRF2 only]</summary>
+        TimeOrderChanged = 0x2000,
         /// <summary>This "row"/block contains an End record [0x8000] [MDRF2 only]</summary>
         ContainsEnd = 0x8000,
     }

@@ -38,7 +38,6 @@ using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
-
 namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 {
     #region Constants (especially LibInfo and related version information)
@@ -136,18 +135,33 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     /// <summary>
     /// Flags that are used with the IMDRFWriter Flush method to configure/select what specific actions it should perform.
-    /// <para/>None (0x00), File (0x01), Index (0x02), All (File | Index)
     /// </summary>
+    /// <remarks>
+    /// <see cref="None"/> (0x00), <see cref="File"/> (0x01), <see cref="Index"/> (0x02), <see cref="ToDisk"/> (0x04),
+    /// <see cref="All"/> (<see cref="File"/> | <see cref="Index"/>: 0x03)
+    /// </remarks>
     [Flags]
     	public enum FlushFlags
 	{
-        /// <summary>Placeholder value, not intended for external use (0x00)</summary>
+        /// <summary>
+        /// Placeholder default value (0x00)
+        /// </summary>
+        /// <remarks>
+        /// NOTE: using this flag with MDRF2 flush operations will allow the caller to complete the current block without
+        /// causing the file stream to be flushed thereafter.
+        /// </remarks>
         None = 0x00,
 
         /// <summary>Requests that the flush operation flush file buffers that are used by the writer (0x01)</summary>
         File = 0x01,
 
-        /// <summary>Requests that the flush operation update/write the file index (0x02)</summary>
+        /// <summary>
+        /// Requests that the flush operation update/write the file index (0x02)
+        /// </summary>
+        /// <remarks>
+        /// NOTE: this flag has no unique meaning when used with MDRF2 files.  
+        /// All flush operations complete the current block and generate an inline index record.
+        /// </remarks>
         Index = 0x02,
 
         /// <summary>

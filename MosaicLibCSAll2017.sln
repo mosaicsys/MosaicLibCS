@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.1259
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase", "Base\MosaicLibCSBase.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
 EndProject
@@ -20,6 +20,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mosaic_ToolsLib", "Base\Xtras\ToolsLib\Mosaic_ToolsLib.csproj", "{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConvertMDRF2toJSON", "Base\Xtras\Tools\ConvertMDRFtoJSON\ConvertMDRF2toJSON.csproj", "{D038D41F-2E63-4931-A6EE-16876C5DA5B4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HostCycle", "Base\Xtras\Tools\HostCycle\HostCycle.csproj", "{4C2FC8BD-45FF-4518-A947-1CE110863214}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -63,6 +65,10 @@ Global
 		{D038D41F-2E63-4931-A6EE-16876C5DA5B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D038D41F-2E63-4931-A6EE-16876C5DA5B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D038D41F-2E63-4931-A6EE-16876C5DA5B4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

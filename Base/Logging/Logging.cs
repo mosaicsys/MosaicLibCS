@@ -1041,7 +1041,7 @@ namespace MosaicLib
             }
 
             /// <summary>
-            /// Externally usable factory for LogMessage objects.  Typcially used during deserialization.
+            /// Externally usable factory for LogMessage objects.  Typcially used during deserialization.  Also useful in unit tests.
             /// </summary>
             public static LogMessage Generate(string loggerName, int loggerID, MesgType mesgType, string mesg, INamedValueSet nvs, byte [] data, bool emitted, QpcTimeStamp emittedQpcTime, int seqNum, int threadID, int win32ThreadID, string threadName, DateTime emittedDateTime, bool setThreadIDIfNeeded = true)
             {

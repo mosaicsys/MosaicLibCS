@@ -20,12 +20,7 @@
  */
 
 using System;
-using System.Text;
-using System.Windows.Controls;
-using MosaicLib.Utils;
 using System.Windows;
-using System.Windows.Threading;
-using System.Windows.Data;
 using System.Windows.Controls.Primitives;
 using System.ComponentModel;
 

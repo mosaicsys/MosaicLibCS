@@ -19,24 +19,36 @@
  * limitations under the License.
  */
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
 using MosaicLib.Modular.Common;
 using MosaicLib.Semi.E005.Data;
 using MosaicLib.Utils;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Mosaic.ToolsLib.Semi.SMLPD
 {
-    /// <summary>
-    /// This class provides a helper object type that supports formatting standard E005 Data <see cref="ValueContainer"/>
-    /// contents using a nominal version of the public domain SECS Message Log or SECS Message Language (SML) approach.
-    /// Instances of this class can be used to generate both indented and unindented output.
-    /// </summary>
-    public class SMLPDFormatter
+    public class SMLPDFormatterSettings
     {
+        /// <summary>
+        ///  Default constructor
+        /// </summary>
+        public SMLPDFormatterSettings() { }
+
+        /// <summary>
+        ///  Copy constructor
+        /// </summary>
+        public SMLPDFormatterSettings(SMLPDFormatterSettings settings) 
+        {
+            Indent = settings.Indent;
+            LevelIndentStr = settings.LevelIndentStr;
+            MessageCloseString = settings.MessageCloseString;
+            Rethrow = settings.Rethrow;
+            NominalElementLineSplitLength = settings.NominalElementLineSplitLength;
+            MessageBodyIndentLevel = settings.MessageBodyIndentLevel;
+            LinePrefix = settings.LinePrefix;
+        }
+
         /// <summary>
         /// Set to true to produce indented output.
         /// Defaults to false.
@@ -76,14 +88,32 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         public int MessageBodyIndentLevel { get; set; } = 1;
 
         /// <summary>
+        /// prefix for text lines - often used to indent an entire block.  Defaults to the empty string [""].
+        /// </summary>
+        public string LinePrefix { get; set; } = "";
+    }
+
+    /// <summary>
+    /// This class provides a helper object type that supports formatting standard E005 Data <see cref="ValueContainer"/>
+    /// contents using a nominal version of the public domain SECS Message Log or SECS Message Language (SML) approach.
+    /// Instances of this class can be used to generate both indented and unindented output.
+    /// </summary>
+    public class SMLPDFormatter
+    {
+        public SMLPDFormatterSettings Settings { get; set; } = new SMLPDFormatterSettings() { Indent = true };
+
+        /// <summary>
         /// Formats the given <paramref name="message"/> into the given <paramref name="tw"/> using the current object's settings.
         /// </summary>
-        public void Format(MosaicLib.Semi.E005.IMessage message, System.IO.TextWriter tw)
+        public void Format(MosaicLib.Semi.E005.IMessage message, System.IO.TextWriter tw, bool includeLinePrefixForFirstLine = false)
         {
             try
             {
                 if (message == null)
                     return;
+
+                if (includeLinePrefixForFirstLine)
+                    tw.Write(Settings.LinePrefix);
 
                 var sf = message.SF;
                 tw.Write($"S{sf.StreamByte}F{sf.FunctionByte}");
@@ -96,18 +126,18 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
                 {
                     ValueContainer vc = ValueContainer.Empty.ConvertFromE005Data(contentBytes, throwOnException: true);
 
-                    InnerStartNewLineOrAddSpace(tw, MessageBodyIndentLevel);
+                    InnerStartNewLineOrAddSpace(tw, Settings.MessageBodyIndentLevel);
 
-                    InnerFormat(vc, tw, MessageBodyIndentLevel, true);
+                    InnerFormat(vc, tw, Settings.MessageBodyIndentLevel, true);
                 }
 
                 InnerStartNewLineOrAddSpace(tw, 0);
 
-                tw.Write(MessageCloseString);
+                tw.Write(Settings.MessageCloseString);
             }
             catch (System.Exception ex)
             {
-                if (Rethrow)
+                if (Settings.Rethrow)
                     throw;
 
                 tw.WriteLine($"{Fcns.CurrentMethodName} failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
@@ -117,16 +147,21 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         /// <summary>
         /// Formats the given <paramref name="vc"/> into the given <paramref name="tw"/> using the current object's settings.
         /// </summary>
-        public void Format(ValueContainer vc, System.IO.TextWriter tw, int startingIndentLevel = 0)
+        public void Format(ValueContainer vc, System.IO.TextWriter tw, int startingIndentLevel = 0, bool includeLinePrefixForFirstLine = false)
         {
             try
             {
                 if (!vc.IsEmpty)
+                {
+                    if (includeLinePrefixForFirstLine)
+                        tw.Write(Settings.LinePrefix);
+
                     InnerFormat(vc, tw, startingIndentLevel, true);
+                }
             }
             catch (System.Exception ex)
             {
-                if (Rethrow)
+                if (Settings.Rethrow)
                     throw;
 
                 tw.WriteLine($"{Fcns.CurrentMethodName} failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}");
@@ -137,7 +172,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         {
             if (!isOutermostCall)
             {
-                if (Indent && currentIndentLevel > 0)
+                if (Settings.Indent && currentIndentLevel > 0)
                     InnerStartNewLine(tw, currentIndentLevel);
                 else
                     tw.Write(" ");
@@ -146,7 +181,12 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
             switch (vc.cvt)
             {
                 case ContainerStorageType.Bo: tw.Write($"<Bo {vc.u.b.MapToInt()}>"); break;
-                case ContainerStorageType.Bi: tw.Write($"<Bi 0x{vc.u.bi:x2}>"); break;
+                case ContainerStorageType.Bi: 
+                    if (vc.o is BiArray)
+                        InnerFormat(vc.o, tw, currentIndentLevel);
+                    else
+                       tw.Write($"<Bi 0x{vc.u.bi:x2}>"); 
+                    break;
                 case ContainerStorageType.I1: tw.Write($"<I1 {vc.u.i8}>"); break;
                 case ContainerStorageType.I2: tw.Write($"<I2 {vc.u.i16}>"); break;
                 case ContainerStorageType.I4: tw.Write($"<I4 {vc.u.i32}>"); break;
@@ -160,11 +200,11 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
 
                 case ContainerStorageType.A: InnerFormat(vc.o as string, tw, currentIndentLevel); break;
 
-                case ContainerStorageType.L: InnerFormat(vc.GetValueL(rethrow: Rethrow), tw, currentIndentLevel); break;
-                case ContainerStorageType.LS: InnerFormat(vc.GetValueL(rethrow: Rethrow), tw, currentIndentLevel); break;
+                case ContainerStorageType.L: InnerFormat(vc.GetValueL(rethrow: Settings.Rethrow), tw, currentIndentLevel); break;
+                case ContainerStorageType.LS: InnerFormat(vc.GetValueL(rethrow: Settings.Rethrow), tw, currentIndentLevel); break;
 
-                case ContainerStorageType.NVS: InnerFormat(vc.GetValueNVS(rethrow: Rethrow), tw, currentIndentLevel); break;
-                case ContainerStorageType.NV: InnerFormat(vc.GetValueNV(rethrow: Rethrow), tw, currentIndentLevel); break;
+                case ContainerStorageType.NVS: InnerFormat(vc.GetValueNVS(rethrow: Settings.Rethrow), tw, currentIndentLevel); break;
+                case ContainerStorageType.NV: InnerFormat(vc.GetValueNV(rethrow: Settings.Rethrow), tw, currentIndentLevel); break;
 
                 case ContainerStorageType.Object: InnerFormat(vc.o, tw, currentIndentLevel); break;
 
@@ -182,7 +222,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
             {
                 tw.Write("<A>");
             }
-            else if (isBasicAscii && !Indent)
+            else if (isBasicAscii && !Settings.Indent)
             {
                 tw.Write($"<A [{s.Length}] \"{s}\">");
             }
@@ -228,7 +268,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
                         linePos += hexStr.Length;
                     }
 
-                    if (!isLastChar && Indent && linePos >= NominalElementLineSplitLength)
+                    if (!isLastChar && Settings.Indent && linePos >= Settings.NominalElementLineSplitLength)
                     {
                         if (inQuote)
                         {
@@ -319,7 +359,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
                     InnerFormat(vc, tw, nextIndentLevel, false);
                 }
 
-                if (Indent)
+                if (Settings.Indent)
                     InnerStartNewLine(tw, currentIndentLevel);
 
                 tw.Write(">");
@@ -347,7 +387,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
 
         private void InnerStartNewLineOrAddSpace(System.IO.TextWriter tw, int currentIndentLevel, string spaceStr = " ")
         {
-            if (Indent)
+            if (Settings.Indent)
                 InnerStartNewLine(tw, currentIndentLevel);
             else
                 tw.Write(spaceStr);
@@ -356,38 +396,9 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         private void InnerStartNewLine(System.IO.TextWriter tw, int currentIndentLevel)
         {
             tw.WriteLine();
+            tw.Write(Settings.LinePrefix);
             for (int index = 0; index < currentIndentLevel; index++)
-                tw.Write(LevelIndentStr);
-        }
-    }
-
-    public class StringBuilderTextWriter : System.IO.TextWriter
-    {
-        public StringBuilderTextWriter(StringBuilder sb = null, Encoding encoding = null, IFormatProvider formatProvider = null)
-            : base (formatProvider)
-        {
-            StringBuilder = sb ?? new StringBuilder();
-            _Encoding = encoding ?? Encoding.UTF8;
-        }
-
-        public StringBuilder StringBuilder { get; private set; }
-
-        public override Encoding Encoding => _Encoding;
-        private readonly Encoding _Encoding;
-
-        public override void Write(char value)
-        {
-            StringBuilder.Append(value);
-        }
-
-        public override void Write(char[] buffer, int index, int count)
-        {
-            StringBuilder.Append(buffer, index, count);
-        }
-
-        public override string ToString()
-        {
-            return StringBuilder.ToString();
+                tw.Write(Settings.LevelIndentStr);
         }
     }
 
@@ -413,17 +424,19 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
             if (newLineStr != null)
                 sbtw.NewLine = newLineStr;
 
-            var smlPDFormatter = new SMLPDFormatter() 
-            { 
-                Indent = indent, 
+            var settings = new SMLPDFormatterSettings()
+            {
+                Indent = indent,
                 Rethrow = rethrow,
             };
 
             if (levelIndentStr != null)
-                smlPDFormatter.LevelIndentStr = levelIndentStr;
+                settings.LevelIndentStr = levelIndentStr;
 
             if (nominalElementLineSplitLength != null)
-                smlPDFormatter.NominalElementLineSplitLength = nominalElementLineSplitLength ?? default;
+                settings.NominalElementLineSplitLength = nominalElementLineSplitLength ?? default;
+
+            var smlPDFormatter = new SMLPDFormatter() { Settings = settings };
 
             smlPDFormatter.Format(vc, sbtw);
 
@@ -447,17 +460,19 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
             if (newLineStr != null)
                 sbtw.NewLine = newLineStr;
 
-            var smlPDFormatter = new SMLPDFormatter()
+            var settings = new SMLPDFormatterSettings()
             {
                 Indent = indent,
                 Rethrow = rethrow,
             };
 
             if (levelIndentStr != null)
-                smlPDFormatter.LevelIndentStr = levelIndentStr;
+                settings.LevelIndentStr = levelIndentStr;
 
             if (nominalElementLineSplitLength != null)
-                smlPDFormatter.NominalElementLineSplitLength = nominalElementLineSplitLength ?? default;
+                settings.NominalElementLineSplitLength = nominalElementLineSplitLength ?? default;
+
+            var smlPDFormatter = new SMLPDFormatter() { Settings = settings };
 
             smlPDFormatter.Format(message, sbtw);
 

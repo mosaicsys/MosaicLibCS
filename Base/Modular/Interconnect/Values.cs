@@ -23,7 +23,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-
+using System.Runtime.CompilerServices;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Reflection.Attributes;
@@ -1571,16 +1571,25 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
 
             /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum or MetaDataSeqNum is not the same as CurrentMetaDataSeqNum.</summary>
-            public bool IsUpdateNeeded { get { return ((ValueSeqNum != CurrentSeqNum) || (MetaDataSeqNum != CurrentMetaDataSeqNum)); } }
+            public bool IsUpdateNeeded
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return ((ValueSeqNum != CurrentSeqNum) || (MetaDataSeqNum != CurrentMetaDataSeqNum)); } 
+            }
 
             /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum.</summary>
-            public bool IsValueUpdateNeeded { get { return (ValueSeqNum != CurrentSeqNum); } }
+            public bool IsValueUpdateNeeded
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return (ValueSeqNum != CurrentSeqNum); } 
+            }
 
             /// <summary>
             /// This method updates the locally stored value, metadata, and seqNums from the interconnection table space's corresponding table entry.  
             /// If the value IsSetPending then its value will be replaced by the table entry's value.
             /// This method supports call chaining.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public IValueAccessor Update()
             {
                 if ((IsUpdateNeeded || IsSetPending) && IVI != null)
@@ -1590,24 +1599,38 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
 
             /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.  The value zero is only used when the table entry has never been assigned a value.</summary>
-            public UInt32 CurrentSeqNum { get { return ((TableEntry != null) ? TableEntry.ValueSeqNum : 0); } }
+            public UInt32 CurrentSeqNum
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return ((TableEntry != null) ? TableEntry.ValueSeqNum : 0); } 
+            }
 
             /// <summary>Gives the sequence number of the value that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentSeqNum.</summary>
             public UInt32 ValueSeqNum { get; set; }
 
             /// <summary>Gives the current sequence number of the value/md that is currently in the interconnection table.  The value zero is only used when the table entry has never been changed from its initial empty state.</summary>
-            public UInt32 CurrentMetaDataSeqNum { get { return ((TableEntry != null) ? TableEntry.MetaDataSeqNum : 0); } }
+            public UInt32 CurrentMetaDataSeqNum
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return ((TableEntry != null) ? TableEntry.MetaDataSeqNum : 0); } 
+            }
 
             /// <summary>Gives the sequence number of the value/md that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentMetaDataSeqNum.</summary>
             public UInt32 MetaDataSeqNum { get; set; }
 
             /// <summary>True if the corresponding table entry has been explicitly set to a value and this object has been Updated from it.  This is a synonym for ((ValueSeqNum != 0) || IsSetPending)</summary>
-            public bool HasValueBeenSet { get { return ((ValueSeqNum != 0) || IsSetPending); } }
+            public bool HasValueBeenSet
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return ((ValueSeqNum != 0) || IsSetPending); }
+            }
 
             /// <inheritdoc/>
             public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return isReadOnly; }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set
                 {
                     if (value)
@@ -2231,6 +2254,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public bool IsUpdateNeeded
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 RebuildArraysIfNeeded();
@@ -2245,6 +2269,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public bool IsValueUpdateNeeded
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 RebuildArraysIfNeeded();
@@ -2258,6 +2283,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IValueSetAdapter Update()
         {
             RebuildArraysIfNeeded();
@@ -2275,6 +2301,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IValueAccessor[] IVAArray
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { RebuildArraysIfNeeded(); return ivaArray; }
         }
 
@@ -2283,7 +2310,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public int NumItems
         {
-            get 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             { 
                 RebuildArraysIfNeeded();
 
@@ -2299,11 +2327,13 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <inheritdoc/>
         public bool IsReadOnly
         {
-            get 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             {
                 RebuildArraysIfNeeded();
                 return imvsaArray.Any(imvsa => imvsa.IsReadOnly);
             }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 RebuildArraysIfNeeded();
@@ -2316,6 +2346,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Transfers the current values from the associated set of IVAs (<seealso cref="IVAArray"/>) to the adapter specific set of value endpoints.
         /// This method expects/requires that some other logic has already updated the IVAs from this adapter to contain useful values.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void TransferValuesFromIVAs()
         {
             RebuildArraysIfNeeded();
@@ -2328,6 +2359,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This method simply assigns the locally contained values for the set of affected IVAs.  It does not make any effort to propagate these values to any corresponding <seealso cref="IValuesInterconnection"/>
         /// table entry(s).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void TransferValuesToIVAs()
         {
             RebuildArraysIfNeeded();
@@ -2861,19 +2893,28 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsUpdateNeeded
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
-        public bool IsUpdateNeeded { get { return IVAArray.IsUpdateNeeded(); } }
+        public bool IsUpdateNeeded
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return IVAArray.IsUpdateNeeded(); } 
+        }
 
         /// <summary>
         /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsValueUpdateNeeded 
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
-        public bool IsValueUpdateNeeded { get { return IVAArray.IsValueUpdateNeeded(); } }
+        public bool IsValueUpdateNeeded
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return IVAArray.IsValueUpdateNeeded(); } 
+        }
 
         /// <summary>
         /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IValueSetAdapter Update()
         {
             if (!IsValueSetValid)
@@ -2900,7 +2941,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <inheritdoc/>
         public bool IsReadOnly
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return isReadOnly; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 if (value)
@@ -3293,19 +3336,28 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Returns true if any of the Update specific IValueAccessors to which this adapter is attached indicate IsUpdateNeeded
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
-        public bool IsUpdateNeeded { get { return updateSpecificIvaArray.IsUpdateNeeded(); } }
+        public bool IsUpdateNeeded
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return updateSpecificIvaArray.IsUpdateNeeded(); } 
+        }
 
         /// <summary>
         /// Returns true if any of the Update specific IValueAccessors to which this adapter is attached indicate IsValueUpdateNeeded
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
-        public bool IsValueUpdateNeeded { get { return updateSpecificIvaArray.IsValueUpdateNeeded(); } }
+        public bool IsValueUpdateNeeded
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return updateSpecificIvaArray.IsValueUpdateNeeded(); } 
+        }
 
         /// <summary>
         /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding setter delegates.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DelegateValueSetAdapter Update()
         {
             IVI.Update(updateSpecificIvaArray, numEntriesToUpdate: updateSpecificIvaArrayLength);
@@ -3331,7 +3383,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <inheritdoc/>
         public bool IsReadOnly
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return isReadOnly; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 if (value)
@@ -3517,6 +3571,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Checks each IVA in the given array and returns true if any such non-null IVA's IsUpdateNeeded flag is set.
         /// Returns false if no such IVA IsUpdateNeeded flag is set, or the array is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUpdateNeeded(this IValueAccessor[] ivaArray)
         {
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
@@ -3532,6 +3587,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Checks each IVA in the given array and returns true if any such non-null IVA's IsValueUpdateNeeded flag is set.
         /// Returns false if no such IVA IsValueUpdateNeeded flag is set, or the array is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsValueUpdateNeeded(this IValueAccessor[] ivaArray)
         {
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
@@ -3547,6 +3603,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Checks each IVA in the given array and returns true if any such non-null IVA's IsSetPending flag is set.
         /// Returns false if no such IVA IsSetPending flag is set, or the array is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsSetPending(this IValueAccessor[] ivaArray)
         {
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
@@ -3564,6 +3621,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This extension method allows the caller to check if the given <paramref name="iva"/>'s IsSetPending property is true and, if so, call Set() on it.
         /// Returns true if Set was called, or false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool SetIfNeeded(this IValueAccessor iva)
         {
             if (iva != null && iva.IsSetPending)
@@ -3579,6 +3637,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This extension method allows the caller to set the given <paramref name="iva"/>'s VC to from the given <paramref name="valueAsObject"/> value.  
         /// This will also cause the <paramref name="iva"/>'s IsSetPending flag to be set if the contained value is not equal to the newly assigned one.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TIValueAccessor SetVCInline<TIValueAccessor>(this TIValueAccessor iva, object valueAsObject)
             where TIValueAccessor : IValueAccessor
         {
@@ -3592,6 +3651,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This extension method allows the caller to set the given <paramref name="iva"/>'s VC to from the given <paramref name="vc"/> value.  
         /// This will also cause the <paramref name="iva"/>'s IsSetPending flag to be set.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TIValueAccessor SetVCInline<TIValueAccessor>(this TIValueAccessor iva, ValueContainer vc)
             where TIValueAccessor : IValueAccessor
         {
@@ -3606,6 +3666,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// If the table entry has already been set (ValueSetNum != 0) then this method has no effect.
         /// <para/>Note: this method is generally used with the SetVCInline extension method.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TIValueAccessor SetInitialValueIfNeeded<TIValueAccessor>(this TIValueAccessor iva) 
             where TIValueAccessor : IValueAccessor
         {
@@ -3625,6 +3686,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="iva">Gives the IValueAccessor instance on which to set or update the meta data.</param>
         /// <param name="metaDataIn">Gives the meta date that is to be used to update the selected items (as determined by the <paramref name="mergeBehavior"/> parameter)</param>
         /// <param name="mergeBehavior">Defines how the selected items existing meta data will be combined with the given value.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TIValueAccessor SetMetaData<TIValueAccessor>(this TIValueAccessor iva, INamedValueSet metaDataIn, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
             where TIValueAccessor : IValueAccessor
         {
@@ -3641,6 +3703,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This extension method is used to set the given <paramref name="iva"/>'s RethrowOnValueGetter to the given <paramref name="rethrow"/> value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IValueAccessor<TValueType> SetRethrowInValueGetter<TValueType>(this IValueAccessor<TValueType> iva, bool rethrow)
         {
             iva.RethrowInValueGetter = rethrow;

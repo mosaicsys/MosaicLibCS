@@ -23,15 +23,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-
+using System.Runtime.Serialization;
 using MessagePack;
 using MessagePack.Formatters;
-
+using Mosaic.ToolsLib.Dynamic;
 using Mosaic.ToolsLib.MDRF2.Reader;
 using Mosaic.ToolsLib.MessagePackUtils;
 using MosaicLib;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Time;
 using MosaicLib.Utils;
@@ -50,7 +49,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// <para/>This information is included in the "Lib" record which is found in the second block of each MDRF2 file.
         /// </summary>
         /// <remarks>
-        /// Version history:
+        /// MDRF2 content version history:
         /// 2.0.0 (2020-06-03) : First MDRF2 version.
         /// 2.1.0 (2022-05-26) : Added KeyID/KeyName concept for use with RecordObject.  Writen files are format compatible with prior version(s) when KeyID/KeyName concept is not actively being used.
         ///                      Added TypeID/TypeKeyName concept for use with RecordObject in order to support client provided custom object serializers (formatters) and matching deserializers for use during query operations.  
@@ -58,12 +57,14 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// 2.1.1 (2022-07-28) : Addition of SessionInfo in InlineMap in second header.
         /// 2.1.2 (2022-10-01) : Addition of optional MDRF2WriterConfigBehavior.SortPointsByDataType concept.
         ///                      Added IMDRF2Writer.RecordObjects method.
+        /// 2.1.3 (2024-07-18) : Added automatic start of a new block if given time stamp pair contents are non-monotonic in time order.
+        ///                      Added FileIndexRowFlagBits FlushRequested (set when block closed by flush request) and TimeOrderChanged (set when block closed by non-monotonic date time pair given).
         /// </remarks>
         public static readonly ILibraryInfo Lib2Info = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File version 2.1 (MDRF2)",
             Name = "Mosaic Data Recording Engine version 2.1 (MDRE2) CS API",
-            Version = "2.1.2 (2022-10-01)",
+            Version = "2.1.3 (2024-07-18)",
         };
     }
 
@@ -308,42 +309,150 @@ namespace Mosaic.ToolsLib.MDRF2.Common
     }
 
     /// <summary>
+    /// This enum indicates the type of content that the <see cref="MDRF2DateTimeStampPair.FileDeltaTime"/> currently contains.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="None"/>, <see cref="ContainsFileDeltaTime"/>, <see cref="ContainsQPC"/>
+    /// </remarks>
+    public enum FileDeltaTimeContents : byte
+    {
+        None = 0,
+        ContainsFileDeltaTime = 1,
+        ContainsQPC = 2,
+    }
+
+    /// <summary>
     /// This object is used as the pairing of a FileDeltaTime and a UTCTimeSince1601 for use with MDRF2 recording and query related logic.
     /// Depending on context the FileDeltaTime may contain a qpc time stamp or a file delta time stamp.
     /// </summary>
     public struct MDRF2DateTimeStampPair
     {
-        /// <summary>When this value is positive it is a file delta time.  When it is negative it is a QpcTimeStamp.Time value</summary>
-        public double FileDeltaTime { get; set; }
+        /// <summary>
+        /// This property is use in two ways.  The getter returns the most recently assigned time stamp value (either a file delta timestamp or a qpc timestamp).
+        /// The setter saves the given value and sets the <see cref="FileDeltaTimeContents"/> property to <see cref="FileDeltaTimeContents.ContainsFileDeltaTime"/>.
+        /// The <see cref="QpcTimeStamp"/> property setter sets this value to the negative of the time stamp and sets the <see cref="FileDeltaTimeContents"/> property to <see cref="FileDeltaTimeContents.ContainsQPC"/>.
+        /// </summary>
+        /// <remarks>
+        /// In most cases this value will be 0.0 if no timestamp has been given and it will be negative if the value was assigned from a <see cref="QpcTimeStamp"/> value.
+        /// </remarks>
+        public double FileDeltaTime 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _FileDeltaTime;
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set 
+            { 
+                _FileDeltaTime = value;
+                FileDeltaTimeContents = FileDeltaTimeContents.ContainsFileDeltaTime;
+            } 
+        }
+        /// <summary>
+        /// Explicit backing store for the <see cref="FileDeltaTime"/> property.
+        /// </summary>
+        private double _FileDeltaTime;
 
-        /// <summary>When non-zero this is a UTC DateTime as seconds since 00:00:00.000 Jan 1 1601 (aka the FTime base offset)</summary>
+        /// <summary>
+        /// When non-zero this is a UTC DateTime as seconds since 00:00:00.000 Jan 1 1601 (aka the FTime base offset)
+        /// </summary>
         public double UTCTimeSince1601 { get; set; }
+
+        /// <summary>
+        /// This records type of contents that the <see cref="FileDeltaTime"/> property currently contains.
+        /// </summary>
+        public FileDeltaTimeContents FileDeltaTimeContents { get; set; }
+
+        /// <summary>
+        /// Returns true if the <see cref="FileDeltaTime"/> value was last assigned using the 
+        /// <see cref="MDRF2DateTimeStampPair.QpcTimeStamp"/> setter
+        /// </summary>
+        public bool ContainsQPC
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => FileDeltaTimeContents == FileDeltaTimeContents.ContainsQPC;
+        }
+
+        /// <summary>
+        /// Returns true if the <see cref="FileDeltaTime"/> value was last assigned using its property setter
+        /// </summary>
+        public bool ContainsFileDeltaTime
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => FileDeltaTimeContents == FileDeltaTimeContents.ContainsFileDeltaTime;
+        }
+
+        /// <summary>
+        /// Returns true if the contents of this object are their initial default (aka unset) values.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="UTCTimeSince1601"/> == 0.0 
+        ///   && <see cref="FileDeltaTime"/> == 0.0 
+        ///   && <see cref="FileDeltaTimeContents"/> == <see cref="FileDeltaTimeContents.None"/>
+        /// </remarks>
+        public bool IsEmpty
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (UTCTimeSince1601 == 0.0 && FileDeltaTime == 0.0 && FileDeltaTimeContents == FileDeltaTimeContents.None); }
+        }
+
+
+        /// <summary>
+        /// This property is used to access the <see cref="FileDeltaTime"/> property as a <see cref="QpcTimeStamp"/>.
+        /// If the <see cref="ContainsQPC"/> property is true then the getter returns the negative of the <see cref="FileDeltaTime"/> as a <see cref="QpcTimeStamp"/> otherwise it returns <see cref="QpcTimeStamp.Zero"/>
+        /// The setter sets the <see cref="FileDeltaTime"/> to the negative of the given <see cref="QpcTimeStamp.Time"/> and set the <see cref="ContainsQPC"/> to true and the <see cref="ContainsFileDeltaTime"/> to false.
+        /// </summary>
+        public QpcTimeStamp QpcTimeStamp
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (ContainsQPC ? new QpcTimeStamp(-_FileDeltaTime) : QpcTimeStamp.Zero);
+            set
+            {
+                _FileDeltaTime = -value.Time;
+                FileDeltaTimeContents = FileDeltaTimeContents.ContainsQPC;
+            }
+        }
+
+        /// <summary>
+        /// "Copy" constructor
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public MDRF2DateTimeStampPair(MDRF2DateTimeStampPair ? other, bool setQpcTimeStampIfNeeded = true, bool setUTCTimeSince1601IfNeeded = true)
+        {
+            _FileDeltaTime = other?._FileDeltaTime ?? default;
+            FileDeltaTimeContents = other?.FileDeltaTimeContents ?? default;
+            UTCTimeSince1601 = other?.UTCTimeSince1601 ?? default;
+
+            if (setQpcTimeStampIfNeeded && FileDeltaTimeContents == FileDeltaTimeContents.None)
+                QpcTimeStamp = QpcTimeStamp.Now;
+
+            if (setUTCTimeSince1601IfNeeded && UTCTimeSince1601 == 0.0)
+                UTCTimeSince1601 = DateTime.UtcNow.GetUTCTimeSince1601();
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public MDRF2DateTimeStampPair(DateTimeStampPair dtPair, bool setQpcTimeStampIfNeeded = true, bool setUTCTimeSince1601IfNeeded = true)
+            : this()
         {
             if (!dtPair.qpcTimeStamp.IsZero)
-                FileDeltaTime = -dtPair.qpcTimeStamp.Time;
+                QpcTimeStamp = dtPair.qpcTimeStamp;
+            else if (dtPair.fileDeltaTimeStamp != 0.0)
+                FileDeltaTime = dtPair.fileDeltaTimeStamp;
             else if (setQpcTimeStampIfNeeded)
-                FileDeltaTime = -QpcTimeStamp.Now.Time;
-            else
-                FileDeltaTime = 0.0;
+                QpcTimeStamp = QpcTimeStamp.Now;
 
             if (dtPair.utcTimeSince1601 == 0.0 && !dtPair.dateTime.IsZero())
                 UTCTimeSince1601 = dtPair.dateTime.GetUTCTimeSince1601();
             else if (dtPair.utcTimeSince1601 > 0.0)
                 UTCTimeSince1601 = dtPair.utcTimeSince1601;
             else if (setUTCTimeSince1601IfNeeded)
-                UTCTimeSince1601 = DateTime.Now.GetUTCTimeSince1601();
-            else
-                UTCTimeSince1601 = 0.0;
+                UTCTimeSince1601 = DateTime.UtcNow.GetUTCTimeSince1601();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public MDRF2DateTimeStampPair(DateTimeStampPair dtPair, ref MDRF2DateTimeStampPair fileReferenceQPCDTPair)
+            : this()
         {
             if (!dtPair.qpcTimeStamp.IsZero)
-                FileDeltaTime = dtPair.qpcTimeStamp.Time + fileReferenceQPCDTPair.FileDeltaTime;
+                FileDeltaTime = dtPair.qpcTimeStamp.Time - fileReferenceQPCDTPair.QpcTimeStamp.Time;
             else
                 FileDeltaTime = dtPair.fileDeltaTimeStamp;
 
@@ -357,16 +466,10 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         {
             if (IsEmpty)
                 return "[Empty]";
-            else if (FileDeltaTime < 0.0)
-                return $"qpc:{-FileDeltaTime:f6} utcTimeSince1601:{UTCTimeSince1601:f6} [{UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601().ToLocalTime():o}]";
+            else if (ContainsQPC)
+                return $"qpc:{QpcTimeStamp.Time:f6} utcTimeSince1601:{UTCTimeSince1601:f6} [{UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601().ToLocalTime():o}]";
             else
                 return $"fdt:{FileDeltaTime:f6} utcTimeSince1601:{UTCTimeSince1601:f6} [{UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601().ToLocalTime():o}]";
-        }
-
-        public bool IsEmpty
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return (UTCTimeSince1601 == 0.0 && FileDeltaTime == 0.0); }
         }
 
         /// <summary>
@@ -382,6 +485,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601();
+            set => UTCTimeSince1601 = value.GetUTCTimeSince1601();
         }
 
         /// <summary>
@@ -393,18 +497,6 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             get => DateTimeUTC.ToLocalTime();
         }
 
-        public QpcTimeStamp QpcTimeStamp
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return (ContainsQPC ? new QpcTimeStamp(-FileDeltaTime) : QpcTimeStamp.Zero); }
-        }
-
-        public bool ContainsQPC
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return (FileDeltaTime < 0.0); }
-        }
-
         public static MDRF2DateTimeStampPair NowUTCTimeSince1601Only
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -414,22 +506,55 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         public static MDRF2DateTimeStampPair NowQPCOnly
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return new MDRF2DateTimeStampPair() { FileDeltaTime = -Qpc.TimeNow, UTCTimeSince1601 = 0.0 }; }
+            get { return new MDRF2DateTimeStampPair() { QpcTimeStamp = QpcTimeStamp.Now, UTCTimeSince1601 = 0.0 }; }
         }
 
         public static MDRF2DateTimeStampPair Now
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get { return new MDRF2DateTimeStampPair() { FileDeltaTime = -Qpc.TimeNow, UTCTimeSince1601 = DateTime.Now.GetUTCTimeSince1601() }; }
+            get { return new MDRF2DateTimeStampPair() { QpcTimeStamp = QpcTimeStamp.Now, UTCTimeSince1601 = DateTime.Now.GetUTCTimeSince1601() }; }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double ConvertQPCToFDT(ref MDRF2DateTimeStampPair fileReferenceQPCDTPair)
         {
             if (ContainsQPC && fileReferenceQPCDTPair.ContainsQPC)
-                return fileReferenceQPCDTPair.FileDeltaTime - FileDeltaTime;  // WARNING: this logic is intentionally odd as it is only used if both the curernt value and the reference one contain QPC values and not file delta values
+                return QpcTimeStamp.Time - fileReferenceQPCDTPair.QpcTimeStamp.Time;
 
             return FileDeltaTime;
+        }
+
+        /// <summary>
+        /// Returns a new <see cref="MDRF2DateTimeStampPair"/> with both its <see cref="FileDeltaTime"/> and <see cref="UTCTimeSince1601"/> shifted by the given <paramref name="offsetTC"/>
+        /// </summary>
+        public static MDRF2DateTimeStampPair operator + (MDRF2DateTimeStampPair dtPairIn, TimeSpan offsetTC)
+        {
+            var offsetSeconds = offsetTC.TotalSeconds;
+            var result = dtPairIn;
+
+            switch (result.FileDeltaTimeContents)
+            {
+                default:
+                case FileDeltaTimeContents.None:
+                case FileDeltaTimeContents.ContainsFileDeltaTime:
+                    result.FileDeltaTime += offsetTC.TotalSeconds;
+                    break;
+                case FileDeltaTimeContents.ContainsQPC:
+                    result.QpcTimeStamp += offsetTC.TotalSeconds;
+                    break;
+            }
+
+            result.UTCTimeSince1601 += offsetSeconds;
+
+            return result;
+        }
+
+        /// <summary>
+        /// Returns a new <see cref="MDRF2DateTimeStampPair"/> with both its <see cref="FileDeltaTime"/> and <see cref="UTCTimeSince1601"/> shifted backwards by the given <paramref name="offsetTC"/>
+        /// </summary>
+        public static MDRF2DateTimeStampPair operator -(MDRF2DateTimeStampPair dtPairIn, TimeSpan offsetTC)
+        {
+            return dtPairIn + -offsetTC;
         }
     }
 
@@ -510,7 +635,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         {
             blockFDTTimeSpan = (BlockLastFileDeltaTime - BlockFirstFileDeltaTime);
             blockUDT1601TimeSpan = (BlockLastUDTTimeSince1601 - BlockFirstUDTTimeSince1601);
-            oneOverBlockFDTTimeSpan = blockUDT1601TimeSpan.SafeOneOver();
+            oneOverBlockFDTTimeSpan = blockFDTTimeSpan.SafeOneOver();
 
             return this;
         }
@@ -688,7 +813,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
             mpWriter.WriteArrayHeader(3);
 
-            mpWriter.Write(dtPair.FileDeltaTime);       // NOTE: When this value is negative it givs the QPC timestamp at the point the message was queued.
+            mpWriter.Write(dtPair.FileDeltaTime);       // NOTE: When this value is negative it gives the QPC timestamp at the point the message was queued.
             mpWriter.Write(dtPair.UTCTimeSince1601);
             mpWriter.Write(mesg);
         }
@@ -954,15 +1079,14 @@ namespace Mosaic.ToolsLib.MDRF2.Common
                 mpWriter.Write(mesg.ContentBytes);
             }
 
-            /// <inheritdoc/>
-            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            /// <summary>
+            /// Allows the caller to use this object to directly deserialize <see cref="MosaicLib.Semi.E005.IMessage"/> objects.
+            /// </summary>
+            public MosaicLib.Semi.E005.IMessage Deserialize(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions)
             {
-                var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
-
                 if (mpReader.TryReadNil())
                 {
-                    record.Data = null;
-                    return record;
+                    return null;
                 }
 
                 var arrayLen = mpReader.ReadArrayHeader();
@@ -974,7 +1098,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                     if (mpReader.NextMessagePackType == MessagePackType.Integer)
                         sf.B2B3 = mpReader.ReadUInt16();
-                    else                        
+                    else
                     {
                         tbh = tbhSerializer.Deserialize(ref mpReader, mpOptions);
                         sf = tbh.SF;
@@ -987,12 +1111,20 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                     mesg.SetContentBytes(mpReader.ReadBytes()?.First.ToArray());
 
-                    record.Data = mesg;
+                    return mesg;
                 }
                 else
                 {
-                    new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 2, was {arrayLen}]").Throw();
+                    throw new System.ArgumentOutOfRangeException($"{Fcns.CurrentClassLeafName} Deserialize failed: contents are not valid [arrayLen was not 2, was {arrayLen}]");
                 }
+            }
+
+            /// <inheritdoc/>
+            public IMDRF2QueryRecord DeserializeAndGenerateTypeSpecificRecord(ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IMDRF2QueryRecord refQueryRecord, bool allowRecordReuse)
+            {
+                var record = GetOrCreateAndUpdateQueryRecord(refQueryRecord, allowRecordReuse);
+
+                record.Data = Deserialize(ref mpReader, mpOptions);
 
                 return record;
             }
@@ -1071,27 +1203,52 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// </remarks>
         public class DynamicObjectTypeNameHandler : TypeNameHandlerQueryRecordReuseHelperBase<dynamic>, IMDRF2TypeNameHandler
         {
+            /// <summary>Gives the MDRF2 type name that is generally used with this object type</summary>
+            public const string MDRF2TypeName = "DynamicObject";
+
             /// <inheritdoc/>
             public void Serialize(ref MessagePackWriter mpWriter, object value, MessagePackSerializerOptions mpOptions)
             {
+                IEnumerable<KeyValuePair<string, ValueContainer>> RecursiveConvert(IEnumerable<KeyValuePair<string, ValueContainer>> kvcSetIn)
+                {
+                    foreach (var kvc in kvcSetIn)
+                    {
+                        var o = kvc.Value.o;
+
+                        if (o is DynamicKVC dynamicKVC)
+                        {
+                            yield return KVP.Create(kvc.Key, dynamicKVC.ConvertToNamedValueSet().CreateVC());
+                        }
+                        else if (o is System.Dynamic.ExpandoObject expandoObject)
+                        {
+                            yield return KVP.Create(kvc.Key, expandoObject.ConvertToNamedValueSet().CreateVC());
+                        }
+                        else
+                        {
+                            yield return kvc;
+                        }
+                    }
+                }
+
                 KeyValuePair<string, ValueContainer> [] kvcSet;
 
-                switch (value)
+                if (value == null)
                 {
-                    case null:
-                        kvcSet = null;
-                        break;
-                    case System.Dynamic.ExpandoObject expandoObject:
-                        kvcSet = expandoObject
-                                    .Select(kvp => KVP.Create(kvp.Key, ValueContainer.CreateFromObject(kvp.Value)))
-                                    .ToArray();
-                        break;
-                    default:
-                        kvcSet = value.GetType()
-                                    .GetProperties()
-                                    .Select(prop => KVP.Create(prop.Name, ValueContainer.CreateFromObject(prop.GetValue(value))))
-                                    .ToArray();
-                        break;
+                    kvcSet = null;
+                }
+                else if (value is DynamicKVC dynamicKVC)
+                {
+                    kvcSet = RecursiveConvert(dynamicKVC).ToArray();
+                }
+                else if (value is System.Dynamic.ExpandoObject expandoObject)
+                {
+                    kvcSet = RecursiveConvert(expandoObject.Select(kvp => KVP.Create(kvp.Key, ValueContainer.CreateFromObject(kvp.Value))))
+                            .ToArray();
+                }
+                else
+                {
+                    kvcSet = RecursiveConvert(value.GetType().GetProperties().Select(prop => KVP.Create(prop.Name, ValueContainer.CreateFromObject(prop.GetValue(value)))))
+                            .ToArray();
                 }
 
                 KVCSetFormatter.Instance.Serialize(ref mpWriter, kvcSet, mpOptions);
@@ -1106,13 +1263,23 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                 if (kvcSet != null)
                 {
-                    var eo = new System.Dynamic.ExpandoObject();
-                    var eoDictionary = (IDictionary<string, object>)eo;
+                    switch (DeserializeUsingDynamicTypeSelect ?? DefaultDeserializeUsingDynamicTypeSelect)
+                    {
+                        default:
+                        case DynamicTypeSelect.DynamicKVC:
+                            record.Data = DynamicKVCFactory.Create(kvcSet);
+                            break;
 
-                    foreach (var kvc in kvcSet)
-                        eoDictionary[kvc.Key] = kvc.Value.ValueAsObject;
+                        case DynamicTypeSelect.ExpandoObject:
+                            var eo = new System.Dynamic.ExpandoObject();
+                            var eoDictionary = (IDictionary<string, object>)eo;
 
-                    record.Data = eo;
+                            foreach (var kvc in kvcSet)
+                                eoDictionary[kvc.Key] = kvc.Value.ValueAsObject;
+
+                            record.Data = eo;
+                            break;
+                    }
                 }
                 else
                 {
@@ -1121,6 +1288,22 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
                 return record;
             }
+
+            public DynamicTypeSelect ? DeserializeUsingDynamicTypeSelect { get; set; }
+
+            public static DynamicTypeSelect DefaultDeserializeUsingDynamicTypeSelect { get; set; }
+
+            public DynamicKVCFactory DynamicKVCFactory { get; set; } = DynamicKVCFactory.Default;
+        }
+
+
+        [DataContract(Namespace = MosaicLib.Constants.ToolsLibNameSpace)]
+        public enum DynamicTypeSelect : int
+        {
+            [EnumMember]
+            ExpandoObject = 0,
+            [EnumMember]
+            DynamicKVC,
         }
 
         /// <summary>

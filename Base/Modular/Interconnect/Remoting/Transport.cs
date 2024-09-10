@@ -28,7 +28,6 @@ using System.Runtime.InteropServices;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Remoting.Sessions;
-using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 

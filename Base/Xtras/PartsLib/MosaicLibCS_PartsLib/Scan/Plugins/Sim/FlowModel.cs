@@ -23,13 +23,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.PartsLib.Common.Physics;
 using MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure;
 using MosaicLib.PartsLib.Helpers;
 using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
@@ -364,7 +360,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// </summary>
             public double MinimumPercentOpen { get; set; }
 
-            /// <summary>Uses constructor defaults and sets TimeToOpen to 0.3 seconds adn TimeToClose to 0.5 seconds</summary>
+            /// <summary>Uses constructor defaults and sets TimeToOpen to 0.3 seconds and TimeToClose to 0.5 seconds</summary>
             public static ValveConfig Default { get { return new ValveConfig() { TimeToOpen = (0.300).FromSeconds(), TimeToClose = (0.500).FromSeconds() }; } }
             /// <summary>Uses constructor defaults and sets TimeToOpen to 0.1 seconds and TimeToClose to 0.1 seconds</summary>
             public static ValveConfig Fast { get { return new ValveConfig() { TimeToOpenAndClose = (0.1).FromSeconds() }; } }

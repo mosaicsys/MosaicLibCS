@@ -21,16 +21,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Linq;
-using System.Text;
 using System.Windows;
-using System.Windows.Threading;
 
-
-using MosaicLib;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Values;

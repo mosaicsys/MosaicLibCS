@@ -41,7 +41,22 @@ namespace Mosaic.ToolsLib.Dynamic
     /// </summary>
     public struct DynamicKVCConfig
     {
-        /// <summary>When true, special VC suffix handling is enabled for property getters this instance.  Defaults to <see langword="true"/>.</summary>
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        public DynamicKVCConfig(DynamicKVCConfig other)
+            : this()
+        {
+            _EnablePropertyGetterVCSuffixHandling = other._EnablePropertyGetterVCSuffixHandling;
+            OverrideIgnoreCase = other.OverrideIgnoreCase;
+            _TryGetMemberAlwaysReturnsTrue = other._TryGetMemberAlwaysReturnsTrue;
+            _UseRecursiveConversion = other._UseRecursiveConversion;
+        }
+
+        /// <summary>
+        /// When true, special VC suffix handling is enabled for property getters this instance.  
+        /// Defaults to <see langword="true"/>.
+        /// </summary>
         public bool EnablePropertyGetterVCSuffixHandling 
         { 
             get { return _EnablePropertyGetterVCSuffixHandling ?? (EnablePropertyGetterVCSuffixHandling = true); } 
@@ -60,7 +75,7 @@ namespace Mosaic.ToolsLib.Dynamic
         /// <summary>
         /// When set to true, the <see cref="DynamicKVC.TryGetMember(GetMemberBinder, out object)"/> method will always return true
         /// even if the requested key was not found.  
-        /// This allows the client to try to use keys that may or may not exist adn then to use standard nullible techniques
+        /// This allows the client to try to use keys that may or may not exist and then to use standard nullible techniques
         /// to determine which value to use (such as with ??).
         /// Defaults to <see langword="false"/>.
         /// </summary>
@@ -70,6 +85,19 @@ namespace Mosaic.ToolsLib.Dynamic
             set { _TryGetMemberAlwaysReturnsTrue = value; } 
         }
         private bool? _TryGetMemberAlwaysReturnsTrue;
+
+
+        /// <summary>
+        /// When true, the <see cref="DynamicKVC.UpdateFrom(object)"/> method (and related methods) will use recursive conversion where
+        /// keyed values that can be converted to <see cref="DynamicKVC"/> will be converted recursively.
+        /// Defaults to <see langword="true"/>
+        /// </summary>
+        public bool UseRecursiveConversion 
+        {
+            get { return _UseRecursiveConversion ?? (UseRecursiveConversion = true); }
+            set { _UseRecursiveConversion = value; } 
+        }
+        private bool? _UseRecursiveConversion;
     }
 
     /// <summary>
@@ -175,35 +203,42 @@ namespace Mosaic.ToolsLib.Dynamic
         /// <remarks>
         /// Supports the following key source mechanisms:
         /// <list type="bullet">
-        /// <item>From another <see cref="DynamicKVC"/>, <see cref="INamedValueSet"/>, or a set of <see cref="KeyValuePair{String, ValueContainer}"/> instances without change.</item>
-        /// <item>From a set of <see cref="KeyValuePair{String, Object}"/> instances, from a <see cref="DynamicObject"/> instance, or from a <see cref="ExpandoObject"/> instance, using <see cref="ValueContainer.CreateFromObject(object)"/> on each of the given keyed object values.</item>
+        /// <item>From another <see cref="DynamicKVC"/>, or a set of <see cref="KeyValuePair{String, ValueContainer}"/> instances without change.</item>
+        /// <item>From an <see cref="INamedValueSet"/></item>
+        /// <item>From an <see cref="IEnumerable{KeyValuePair{String, ValueContainer}}"/></item>
+        /// <item>From an <see cref="IEnumerable{KeyValuePair{String, object}}"/></item>
+        /// <item>From an <see cref="JObject"/></item>
+        /// <item>From a <see cref="DynamicObject"/></item>
         /// <item>From any other <see cref="System.Object"/> by extracting the member names and values for all public instance members (properties or fields) from the given object and converting them using <see cref="ValueContainer.CreateFromObject(object)"/>.</item>
         /// </list>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DynamicKVC UpdateFrom(object other)
         {
+            if (other is ValueContainer vc)
+                other = vc.o;
+
             if (other == null)
             { }
             else if (other is DynamicKVC otherDKVC)
             {
                 foreach (var kvc in otherDKVC.kvcDictionary)
-                    kvcDictionary[GetKeyName(kvc.Key)] = kvc.Value;
+                    kvcDictionary[GetKeyName(kvc.Key)] = ConvertRecursively(kvc.Value);
             }
             else if (other is INamedValueSet nvs)
             {
                 foreach (var nv in nvs)
-                    kvcDictionary[GetKeyName(nv.Name)] = nv.VC;
+                    kvcDictionary[GetKeyName(nv.Name)] = ConvertRecursively(nv.VC);
             }
             else if (other is IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet)
             {
                 foreach (var kvc in kvcSet)
-                    kvcDictionary[GetKeyName(kvc.Key)] = kvc.Value;
+                    kvcDictionary[GetKeyName(kvc.Key)] = ConvertRecursively(kvc.Value);
             }
             else if (other is IEnumerable<KeyValuePair<string, object>> kvpSet)     // note: this handles the ExpandoObject case as well as it directly supports this enumerable type.
             {
                 foreach (var kvc in kvpSet)
-                    kvcDictionary[GetKeyName(kvc.Key)] = ValueContainer.CreateFromObject(kvc.Value);
+                    kvcDictionary[GetKeyName(kvc.Key)] = ConvertRecursively(ValueContainer.CreateFromObject(kvc.Value));
             }
             else if (other is JObject jObject)
             {
@@ -212,7 +247,7 @@ namespace Mosaic.ToolsLib.Dynamic
                     if (jProperty.Value is JObject subJObject)
                         kvcDictionary[GetKeyName(jProperty.Name)] = ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(subJObject));
                     else
-                        kvcDictionary[GetKeyName(jProperty.Name)] = jProperty.Value.ConvertToVC();
+                        kvcDictionary[GetKeyName(jProperty.Name)] = ConvertRecursively(jProperty.Value.ConvertToVC());
                 }
             }
             else if (other is DynamicObject d)
@@ -223,7 +258,7 @@ namespace Mosaic.ToolsLib.Dynamic
                 {
                     var gmb = new LocalGetMemberBinder(memberName);
                     if (d.TryGetMember(gmb, out object value))
-                        kvcDictionary[GetKeyName(gmb.Name)] = ValueContainer.CreateFromObject(value);
+                        kvcDictionary[GetKeyName(gmb.Name)] = ConvertRecursively(ValueContainer.CreateFromObject(value));
                 }
             }
             else
@@ -234,13 +269,57 @@ namespace Mosaic.ToolsLib.Dynamic
                 foreach (var member in memberSet)
                 {
                     if (member is System.Reflection.PropertyInfo propertyInfo)
-                        kvcDictionary[GetKeyName(member.Name)] = ValueContainer.CreateFromObject(propertyInfo.GetValue(other));
+                        kvcDictionary[GetKeyName(member.Name)] = ConvertRecursively(ValueContainer.CreateFromObject(propertyInfo.GetValue(other)));
                     else if (member is System.Reflection.FieldInfo fieldInfo)
-                        kvcDictionary[GetKeyName(member.Name)] = ValueContainer.CreateFromObject(fieldInfo.GetValue(other));
+                        kvcDictionary[GetKeyName(member.Name)] = ConvertRecursively(ValueContainer.CreateFromObject(fieldInfo.GetValue(other)));
                 }
             }
 
             return this;
+        }
+
+        /// <summary>
+        /// This method implements the value by value recursive conversion.  
+        /// When <see cref="Config.UseRecursiveConversion"/> is true and it is given a type that 
+        /// </summary>
+        protected ValueContainer ConvertRecursively(ValueContainer vcIn)
+        {
+            var o = vcIn.o;
+
+            if (o != null && Config.UseRecursiveConversion)
+            {
+                if (o is INamedValueSet nvs)
+                {
+                    return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(nvs));
+                }
+                else if (o is IEnumerable<INamedValue> nvSet)
+                {
+                    return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(nvSet));
+                }
+                else if (o is IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet)
+                {
+                    return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(kvcSet));
+                }
+                else if (o is IEnumerable<KeyValuePair<string, object>> kvpSet)
+                {
+                    return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(kvpSet));
+                }
+                else if (o is JObject jObject)
+                {
+                    return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(jObject));
+                }
+                else
+                {
+                    var testVC = ValueContainer.CreateFromObject(o);
+
+                    if (testVC.cvt == ContainerStorageType.Object)
+                        return ValueContainer.CreateFromObject(new DynamicKVC(Config).UpdateFrom(testVC.o));
+                    else
+                        return testVC;  // we already covered the rest of the viable conversion paths
+                }
+            }
+
+            return vcIn;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

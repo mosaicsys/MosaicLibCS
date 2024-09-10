@@ -19,9 +19,10 @@
  * limitations under the License.
  */
 
-using System.Text;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 using MosaicLib.Utils;
 
@@ -442,6 +443,243 @@ namespace MosaicLib.File
             }
 
             return dirInfo;
+        }
+    }
+}
+
+namespace MosaicLib.File.Path
+{
+    /// <summary>
+    /// Path Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.GetFullPath(string)"/>
+        /// on the given <paramref name="path"/>.
+        /// </summary>
+        public static string GetFullPath(this string path)
+        {
+            return System.IO.Path.GetFullPath(path);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.GetDirectoryName(string)"/>
+        /// on the given <paramref name="path"/>.
+        /// </summary>
+        public static string GetDirectoryNameFromPath(this string path)
+        {
+            return System.IO.Path.GetDirectoryName(path);
+        }
+
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.GetExtension(string)"/>
+        /// on the given <paramref name="path"/>.
+        /// </summary>
+        public static string GetFileExtensionFromPath(this string path)
+        {
+            return System.IO.Path.GetExtension(path);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.GetFileName(string)"/> (when <paramref name="withoutExtension"/> is false)
+        /// or <see cref="System.IO.Path.GetFileNameWithoutExtension(string)"/> (when <paramref name="withoutExtension"/> is true)
+        /// on the given <paramref name="path"/>.
+        /// </summary>
+        public static string GetFileNameFromPath(this string path, bool withoutExtension = false)
+        {
+            if (!withoutExtension)
+                return System.IO.Path.GetFileName(path);
+            else
+                return System.IO.Path.GetFileNameWithoutExtension(path);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.GetPathRoot(string)"/>
+        /// on the given <paramref name="path"/>.
+        /// </summary>
+        public static string GetRootFromPath(this string path)
+        {
+            return System.IO.Path.GetPathRoot(path);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.ChangeExtension(string, string)"/>
+        /// on the given <paramref name="path"/> and <paramref name="extension"/>.
+        /// </summary>
+        public static string ChangePathFileExtension(this string path, string extension)
+        {
+            return System.IO.Path.ChangeExtension(path, extension);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string, string)"/>
+        /// on the given path parameters.
+        /// </summary>
+        public static string CombinePaths(this string path1, string path2)
+        {
+            return System.IO.Path.Combine(path1, path2);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string, string, string)"/>
+        /// on the given path parameters.
+        /// </summary>
+        public static string CombinePaths(this string path1, string path2, string path3)
+        {
+            return System.IO.Path.Combine(path1, path2, path3);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string, string, string, string)"/>
+        /// on the given path parameters.
+        /// </summary>
+        public static string CombinePaths(this string path1, string path2, string path3, string path4)
+        {
+            return System.IO.Path.Combine(path1, path2, path3, path4);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string[])"/> 
+        /// on the given path parameters.
+        /// </summary>
+        public static string CombinePaths(this string path, params string [] pathParams)
+        {
+            return System.IO.Path.Combine(path.ConcatItems(pathParams).ToArray());
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string[])"/> 
+        /// on the set of paths in the <paramref name="paths"/> parameter.
+        /// </summary>
+        public static string CombinePaths(this string [] paths)
+        {
+            return System.IO.Path.Combine(paths);
+        }
+
+        /// <summary>
+        /// This EM returns the result of calling <see cref="System.IO.Path.Combine(string, string, string, string)"/> 
+        /// on the given <paramref name="path"/> parameter.
+        /// </summary>
+        public static bool IsPathRooted(this string path)
+        {
+            return System.IO.Path.IsPathRooted(path);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="path"/> <see cref="IsPathRooted(string)"/> then this method returns the portion
+        /// after the part the specifies the root.
+        /// </summary>
+        public static string UnrootPath(this string path)
+        {
+            if (path == null)
+                return null;
+
+            if (path.Length >= 3 && path[1].IsVolumeSeparatorChar() && path[2].IsDirectorySeperatorChar())
+                return path.Substring(3);
+
+            if (path.Length >= 2 && path[1].IsVolumeSeparatorChar())
+                return path.Substring(2);
+
+            if (path.Length >= 1 && path[0].IsDirectorySeperatorChar())
+                return path.Substring(1);
+
+            return path;
+        }
+
+        /// <summary>
+        /// Splits the given <paramref name="path"/> into path segments: optional volume and root specification and then by directory seperator characters.
+        /// If the given <paramref name="path"/> is absolute (non-relative) and it starts with volume specifier then the first item will be the first 3 characters of the <paramref name="path"/>.
+        /// If the given <paramref name="path"/> is relative and it starts with a volume specifier then the first item will be the first 2 characters of the <paramref name="path"/>.
+        /// If the given <paramref name="path"/> is absolute (non-relative) and it does not start with a volume specifier then the first item will be the first character of the <paramref name="path"/>.
+        /// Then the rest of the items are the tokens from the remaining portion of the <paramref name="path"/> split on the directory seperator characters.
+        /// </summary>
+        /// <remarks>
+        /// Note: due to the need for representing split paths as relative or absolute by including a custom first item,
+        /// it is recommended that the caller use this method on the result of calling <see cref="UnrootPath(string)"/> to remove abiguity on the contents of the first item.
+        /// <para/>Note: the format of the resulting items is choosen to support simple re-combination of the results using
+        /// methods such as <see cref="CombinePaths(string[])"/>, where the first item is the root specifier item (if any).
+        /// </remarks>
+        public static string[] SplitPath(this string path, int maxElements = 0)
+        {
+            if (path == null)
+                return null;
+
+            int pathLength = path.Length;
+
+            if (pathLength == 0 || maxElements == 1)
+                return new[] { path }; 
+
+            var resultList = new List<string>();
+
+            int scanIndex = 0;
+
+            // if the path is rooted then consume and attach the portion that is the root prefix as the first item in the result list
+            if (path.Length >= 3 && path[1].IsVolumeSeparatorChar() && path[2].IsDirectorySeperatorChar())
+            {
+                scanIndex = 3;
+                resultList.Add(path.Substring(0, scanIndex));
+            }
+            else if (path.Length >= 2 && path[1].IsVolumeSeparatorChar())
+            {
+                scanIndex = 2;
+                resultList.Add(path.Substring(0, scanIndex));
+            }
+            else if (path.Length >= 1 && path[0].IsDirectorySeperatorChar())
+            {
+                scanIndex = 1;
+                resultList.Add(path.Substring(0, scanIndex));
+            }
+
+            int lastTokenStartIndex = scanIndex;
+
+            for (; ; )
+            {
+                if (scanIndex >= pathLength)
+                    break;
+
+                var ch = path[scanIndex];
+                if (ch == System.IO.Path.DirectorySeparatorChar || ch == System.IO.Path.AltDirectorySeparatorChar)
+                {
+                    if (maxElements > 0 && resultList.Count + 1 >= maxElements)
+                        break;
+
+                    resultList.Add(path.Substring(lastTokenStartIndex, scanIndex - lastTokenStartIndex));
+                    scanIndex += 1;
+                    lastTokenStartIndex = scanIndex;
+                }
+                else
+                {
+                    scanIndex++;
+                }
+            }
+
+            if (lastTokenStartIndex < pathLength - 1)
+            {
+
+                resultList.Add(path.Substring(lastTokenStartIndex));
+            }
+
+            return resultList.ToArray();
+        }
+
+        /// <summary>
+        /// This EM returns true if the given <paramref name="ch"/> is equal to
+        /// <see cref="System.IO.Path.VolumeSeparatorChar"/>.
+        /// </summary>
+        public static bool IsVolumeSeparatorChar(this char ch)
+        {
+            return ch == System.IO.Path.VolumeSeparatorChar;
+        }
+
+        /// <summary>
+        /// This EM returns true if the given <paramref name="ch"/> is equal to
+        /// <see cref="System.IO.Path.DirectorySeparatorChar"/> or <see cref="System.IO.Path.AltDirectorySeparatorChar"/>
+        /// </summary>
+        public static bool IsDirectorySeperatorChar(this char ch)
+        {
+            return ch == System.IO.Path.DirectorySeparatorChar || ch == System.IO.Path.AltDirectorySeparatorChar;
         }
     }
 }

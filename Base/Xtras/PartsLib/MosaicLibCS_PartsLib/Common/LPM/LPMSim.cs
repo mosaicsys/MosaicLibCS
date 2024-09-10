@@ -21,16 +21,9 @@
 
 using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Runtime.Serialization;
 using System.Linq;
 using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular;
 using MosaicLib.Modular.Part;
-using MosaicLib.PartsLib.Helpers;
-using MosaicLib.Semi.E084;
-using MosaicLib.Semi.E087;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 

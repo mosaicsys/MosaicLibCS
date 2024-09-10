@@ -31,60 +31,77 @@ using MosaicLib.Semi.E005;
 using MosaicLib.Semi.E005.Port;
 using MosaicLib.Semi.E005.Manager;
 using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
 using MosaicLib.Time;
+using MosaicLib.Semi.E005.Data;
+using MosaicLib.Modular.Action;
 
 namespace MosaicLib.Semi.E037
 {
     //-------------------------------------------------------------------
-	/// <remarks>
-	/// HSMS Packet Format (14 + n bytes total)
-	///		0: 4 byte unsigned packet length
-	///		4: 10 byte HSMS Message Header
-	///	   14: n bytes of PacketData (per length - 10)
-	///	   
-	/// length field defines the number of bytes that follow the length in the packet including the mandetory 10 byte HSMS Message Header and all 
-	/// contents specific PacketData bytes that follow it.  Minimum length value is 10 and minimum total packet size is 14.
-	/// </remarks>
-	/// 
+    // HSMS Packet Format (14 + n bytes total)
+    //		0: 4 byte unsigned packet length
+    //		4: 10 byte HSMS Message Header
+    //	   14: n bytes of PacketData (per length - 10)
+    //	   
+    // length field defines the number of bytes that follow the length in the packet including the mandetory 10 byte HSMS Message Header and all 
+    // contents specific PacketData bytes that follow it.  Minimum length value is 10 and minimum total packet size is 14.
+    // 
 
-	/// <remarks>
-	/// HSMS Mesg Header (10 bytes)
-	///		0: 2 byte Session ID/Device ID
-	///		2: 1 byte HeaderByte2
-	///		3: 1 byte HeaderByte3
-	///		4: 1 byte PType (presentation type)
-	///		5: 1 byte SType (session type)
-	///		6: 4 bytes System Bytes
-	///		
-	/// SessionID - UInt16 field that passes the SessionID for most traffic (0x0000 through 0x7fff are legal).  
-	///			SessionID is determined by initiator of a SelectReq SType packet.
-	///			0xFFFF for LinkTestReq and LinkTestRsp SType packets.  Copied from message being rejected for RejectReq SType packets.
-	///			0xFFFF used for SessionID on all HSMS-SS connections.
-	/// HeaderByte2 - 1 byte
-	///			Carries E005 Stream and W bit for DataMessage SType packets,
-	///			Carries PType or SType of rejected message for RejectReq SType packets.
-	///	HeaderByte3 - 1 byte
-	///			Carries E005 Function for all DataMessage SType packets,
-	///			Carries Select Status in SelectRsp SType packets
-	///			Carries Deselect Status in DeselectRsp SType packets
-	///			Carries Reason Code in RejectReq SType packets
-	/// PType - 1 byte, 0 in all cases
-	/// SType - 1 byte, see enum below
-	/// System Bytes - 4 byte UInt32 transaction identifier.  
-	///			Must be unique in any Primary DataMessage and in all Req SType packets (except RejectReq).  
-	///			Must match value from corresponding Primary DataMessage or in all Rsp SType packets.
-	///			Matches message being rejected for all RejectReq SType packets.
-	///			
-	/// Note PacketData must be empty for all SType packets except for DataMessage SType packets.
-	/// </remarks>
+    // HSMS Mesg Header (10 bytes)
+    //		0: 2 byte Session ID/Device ID
+    //		2: 1 byte HeaderByte2
+    //		3: 1 byte HeaderByte3
+    //		4: 1 byte PType (presentation type)
+    //		5: 1 byte SType (session type)
+    //		6: 4 bytes System Bytes
+    //		
+    // SessionID - UInt16 field that passes the SessionID for most traffic (0x0000 through 0x7fff are legal).  
+    //			SessionID is determined by initiator of a SelectReq SType packet.
+    //			0xFFFF for LinkTestReq and LinkTestRsp SType packets.  Copied from message being rejected for RejectReq SType packets.
+    //			0xFFFF used for SessionID on all HSMS-SS connections.
+    // HeaderByte2 - 1 byte
+    //			Carries E005 Stream and W bit for DataMessage SType packets,
+    //			Carries PType or SType of rejected message for RejectReq SType packets.
+    //	HeaderByte3 - 1 byte
+    //			Carries E005 Function for all DataMessage SType packets,
+    //			Carries Select Status in SelectRsp SType packets
+    //			Carries Deselect Status in DeselectRsp SType packets
+    //			Carries Reason Code in RejectReq SType packets
+    // PType - 1 byte, 0 in all cases
+    // SType - 1 byte, see enum below
+    // System Bytes - 4 byte UInt32 transaction identifier.  
+    //			Must be unique in any Primary DataMessage and in all Req SType packets (except RejectReq).  
+    //			Must match value from corresponding Primary DataMessage or in all Rsp SType packets.
+    //			Matches message being rejected for all RejectReq SType packets.
+    //			
+    // Note PacketData must be empty for all SType packets except for DataMessage SType packets.
+    // 
 
+    /// <summary>
+    /// Gives the values supported for the <see cref="E037TenByteHeader.PType"/> property which carry the "presentation type"
+    /// for each HSMS message.  This is generally used as a protocol type selector and at present only one such protocol is supported (<see cref="SECSII"/>)
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SECSII"/>, <see cref="Invalid"/>
+    /// </remarks>
 	public enum PType : byte
 	{
 		Invalid = 255,
 		SECSII = 0,
 	}
 
+    /// <summary>
+    /// Gives the values supported for the <see cref="E037TenByteHeader.SType"/> property which carry the "session type"
+    /// for each HSMS message.  This is generally used as a packet type selector with most values used for HSMS connection management
+    /// and with the <see cref="DataMessage"/> value being used to carry actual SECSII traffic.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Invalid"/>, <see cref="DataMessage"/>,
+    /// <see cref="SelectReq"/>, <see cref="SelectRsp"/>,
+    /// <see cref="DeselectReq"/>, <see cref="DeselectRsp"/>,
+    /// <see cref="LinktestReq"/>, <see cref="LinktestRsp"/>,
+    /// <see cref="RejectReq"/>, <see cref="SeparateReq"/>
+    /// </remarks>
 	public enum SType : byte
 	{
 		Invalid = 255,
@@ -136,15 +153,15 @@ namespace MosaicLib.Semi.E037
     {
         /// <summary>Defines unsigned short E037 HSMS SessionID (0..32767) of supported sessionID for Passive Port, or of intended session for Active Port.  [Defaults to 0]</summary>
         [NamedValueSetItem]
-        public UInt16 SessionID = 0;
+        public UInt16 SessionID { get; set; }
 
         /// <summary>For Active ports, this gives the target HostName.  It is ignored for Passive ports or when a non-empty IPAddress is specified.</summary>
         [NamedValueSetItem]
-        public string HostName;
+        public string HostName { get; set; }
 
         /// <summary>When non-empty this defines the IPAddress that is to be used as the connection target with Active ports, or as the interface address to bind to with Passive ports.</summary>
         [NamedValueSetItem]
-        public string IPAddress;
+        public string IPAddress { get; set; }
 
         /// <summary>This gives the TCP port number to connect to or to listen on.  [Defaults to 5000]</summary>
         [NamedValueSetItem]
@@ -199,7 +216,15 @@ namespace MosaicLib.Semi.E037
 
         public E037PortConfig UpdateFromNVS(INamedValueSet nvs, string keyPrefix = "", Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueNoteEmitter = null)
         {
-            NamedValueSetAdapter<E037PortConfig> adapter = new NamedValueSetAdapter<E037PortConfig>() { ValueSet = this, IssueEmitter = issueEmitter, ValueNoteEmitter = valueNoteEmitter }.Setup(keyPrefix).Set(nvs, merge: true);
+            NamedValueSetAdapter<E037PortConfig> adapter 
+                = new NamedValueSetAdapter<E037PortConfig>() 
+                { 
+                    ValueSet = this, 
+                    IssueEmitter = issueEmitter, 
+                    ValueNoteEmitter = valueNoteEmitter 
+                }
+                .Setup(keyPrefix)
+                .Set(nvs, merge: true);
 
             MaxConcurrentPostedSends = MaxConcurrentPostedSends.Clip(1, 100);
 
@@ -220,17 +245,23 @@ namespace MosaicLib.Semi.E037
             isPassivePort = (PortType == PortType.E037_Passive_SingleSession);
             isActivePort = (PortType == PortType.E037_Active_SingleSession);
             isSingleSession = (PortType == PortType.E037_Passive_SingleSession || PortType == PortType.E037_Active_SingleSession);
-            useSessionID = (isSingleSession ? (ushort)0xffff : E037PortConfig.SessionID);
-            useDeviceID = PortBaseConfig.DeviceID;
 
-            E037PortConfig = new E037PortConfig().UpdateFromNVS(portConfigNVS, issueEmitter: Log.Debug, valueNoteEmitter: Log.Trace);
-
-            LinkTestEmitter = TraceLogger.Emitter(E037PortConfig.LinkTestMesgType);
+            E037PortConfig = new E037PortConfig();
+            UpdateE037PortConfig(E037PortConfig, PortConfigNVS);
 
             AddMainThreadStoppingAction(() => { TerminateTcpClient(); TerminateTcpListener(); });
 
             SetupReceiever();
 		}
+
+        protected void UpdateE037PortConfig(E037PortConfig e037PortConfig, INamedValueSet nvs)
+        {
+            e037PortConfig.UpdateFromNVS(nvs, issueEmitter: IssueEmitter, valueNoteEmitter: Log.Trace);
+
+            UseSessionID = (isSingleSession ? (ushort)0xffff : E037PortConfig.SessionID);
+
+            LinkTestEmitter = TraceLogger.Emitter(E037PortConfig.LinkTestMesgType);
+        }
 
         private E037PortConfig E037PortConfig { get; set; }
 
@@ -240,11 +271,12 @@ namespace MosaicLib.Semi.E037
 
         #region connection information
 
-        protected readonly ushort useSessionID;
-        protected readonly ushort useDeviceID;
         protected readonly bool isPassivePort;
         protected readonly bool isActivePort;
         protected readonly bool isSingleSession;
+
+        protected ushort UseSessionID { get; private set; }
+        protected ushort UseDeviceID { get { return PortBaseConfig.DeviceID; } }
 
         private IPAddress IPAddress { get; set; }
         private TcpListener tcpListener = null;
@@ -445,14 +477,28 @@ namespace MosaicLib.Semi.E037
 
         #region PerformGoOnlineAction, PerformGoOfflineAction
 
-        protected override string PerformGoOnlineAction(bool andInitialize)
+        protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             string ec = null;
 
+            var entryBaseState = BaseState;
             var entryPortConnectionState = PortConnectionState;
 
             if (isActivePort)
                 SetConnectionState(PortConnectionState.Connecting, "Issuing Port.GoOnline", QpcTimeStamp.Now);
+
+            if (andInitialize && npv.IsNeitherNullNorEmpty())
+            {
+                // allow the client to change internal settings during GoOnline(true)
+                PortConfigNVS = PortConfigNVS.MergeWith(npv).MakeReadOnly();
+            }
+
+            // the port will only update its internal configuration values when it is fully not connected (aka is Offline)
+            if (tcpClient == null && tcpListener == null)
+            {
+                UpdatePortBaseConfig(PortBaseConfig, PortConfigNVS);
+                UpdateE037PortConfig(E037PortConfig, PortConfigNVS);
+            }
 
             if (andInitialize && tcpClient != null)
             {
@@ -597,7 +643,7 @@ namespace MosaicLib.Semi.E037
 
                         if (quickDeselectTimer.IsTriggered)
                         {
-                            Log.Warning.Emit("GoOffline: timeout waiting for connection Deslect to complete after {0:f3} seconds", quickDeselectTimer.ElapsedTimeInSeconds);
+                            IssueEmitter.Emit("GoOffline: timeout waiting for connection Deslect to complete after {0:f3} seconds", quickDeselectTimer.ElapsedTimeInSeconds);
                             break;
                         }
                     }
@@ -644,7 +690,7 @@ namespace MosaicLib.Semi.E037
             var mesgE037TBH = mesg.TenByteHeader as E037TenByteHeader;
             if (mesgE037TBH == null)
             {
-                mesgE037TBH = new E037TenByteHeader() { SF = mesg.SF, SystemBytes = mesg.SeqNum, SessionID = useDeviceID, PType = PType.SECSII, SType = SType.DataMessage };
+                mesgE037TBH = new E037TenByteHeader() { SF = mesg.SF, SystemBytes = mesg.SeqNum, SessionID = UseDeviceID, PType = PType.SECSII, SType = SType.DataMessage };
                 mesg.SetTenByteHeader(mesgE037TBH, keepMessageSF: true, keepMessageSeqNum: true);
             }
             // future: we may want to validate that the message header is a DataMessage.
@@ -749,8 +795,82 @@ namespace MosaicLib.Semi.E037
 
                     while (ec.IsNullOrEmpty() && decodedReceiveMesgList.Count > 0)
                     {
-                        // note: The following method can call ServiceTransmitter if the received message generates and immediate response (S6F11W -> S6F12 for example)
-                        ec = HandleReceivedMessage(decodedReceiveMesgList.SafeTakeFirst());     
+                        IMessage nextRxMesg = null;
+                        try
+                        {
+                            nextRxMesg = decodedReceiveMesgList.SafeTakeFirst();
+
+                            PortRecording.NoteE005MessageReceived(this, nextRxMesg);
+
+                            var tbh = nextRxMesg.TenByteHeader;
+                            var sf = tbh.SF;
+                            var e037TBH = (E037TenByteHeader) tbh;
+
+                            if (PortBaseConfig.RejectIncorrectDeviceID && e037TBH.SessionID != UseDeviceID && sf.StreamByte != 9 && sf.FunctionByte != 1)
+                                throw new MessageHandlingException(StreamFunction.S9F1_UDN, nextRxMesg, "Given DeviceID:{0} is not valid.  Expecting {1}".CheckedFormat(e037TBH.SessionID, UseDeviceID));
+
+                            // note: The following method can call ServiceTransmitter if the received message generates and immediate response (S6F11W -> S6F12 for example)
+                            ec = HandleReceivedMessage(nextRxMesg);
+                        }
+                        catch (MessageHandlingException mhe)
+                        {
+                            IMessage mesg = mhe.RxMesg ?? nextRxMesg;
+                            IMessage faultReply;
+
+                            PortRecording.NoteIssueObject(this, new NamedValueSet()
+                            {
+                                { "mesgStr", "Handler generated MessageHandlingException" },
+                                { "errorSF", mhe.ErrorSF.ToString() },
+                                { "faultReplyType", mhe.MessageFaultReplyType },
+                                { "faultMmssage", mhe.Message },
+                                { "rxMesgHeader", new BiArray(mesg.TenByteHeader.ByteArray).CreateVC()},
+                            });
+
+                            if (mesg != null)
+                            {
+                                switch (mhe.MessageFaultReplyType)
+                                {
+                                    case MessageFaultReplyType.None:
+                                        IssueEmitter.Emit("{0} [no reply will be sent]", mhe);
+                                        faultReply = null; // there will be no reply
+                                        break;
+                                    case MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader:
+                                        IssueEmitter.Emit("{0}", mhe);
+                                        faultReply = mesg.CreateReply(mhe.ErrorSF);
+                                        faultReply.SetContentBytes(new Bi() { BiArray = new BiArray(mesg.TenByteHeader.ByteArray) });
+                                        break;
+                                    case MessageFaultReplyType.Fault_BodyIsEmpty:
+                                    case MessageFaultReplyType.Abort_BodyIsEmpty:
+                                        IssueEmitter.Emit("{0}", mhe);
+                                        faultReply = mesg.CreateReply(mhe.ErrorSF);
+                                        break;
+                                    case MessageFaultReplyType.Unknown:
+                                    default:
+                                        IssueEmitter.Emit("{0} [no reply will be sent]", mhe);
+                                        faultReply = null;
+                                        break;
+                                }
+                            }
+                            else
+                            {
+                                IssueEmitter.Emit("{0} [no message was provided and no reply will be sent]", mhe);
+                                faultReply = null;
+                            }
+
+                            if (faultReply != null) 
+                                PerformSendMessageAction(faultReply, null);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            IssueEmitter.Emit("Port.HandleReceivedMessage generated unexpected exception: {0} [no reply will be sent]", ex.ToString(ExceptionFormat.TypeAndMessage));
+
+                            PortRecording.NoteIssueObject(this, new NamedValueSet()
+                            {
+                                { "mesgStr", "Port.HandleReceivedMessage generated unexpected exception" },
+                                { "rxMesgHeader", new BiArray(nextRxMesg.TenByteHeader.ByteArray).CreateVC()},
+                                { "ex", ex }
+                            });
+                        }
                     }
 
                     if (ec.IsNeitherNullNorEmpty())
@@ -763,11 +883,11 @@ namespace MosaicLib.Semi.E037
                     }
                 }
 
-                if (pendingReceiveIAR == null)
+                if (pendingReceiveIAR == null && tcpClient != null)
                 {
                     int bufferDataCount = slidingBuffer.BufferDataCount;
 
-                    int availableBytes = tcpClient.Available;
+                    int availableBytes = (tcpClient != null) ? tcpClient.Available : 0;
                     int requestForBytes = Math.Max(Math.Max(1, nextRequirdByteCount - bufferDataCount), availableBytes);
 
                     if (!slidingBuffer.IsAligned)
@@ -915,6 +1035,7 @@ namespace MosaicLib.Semi.E037
             UInt32 portsMaximumE037MessageLength = PortBaseConfig.MaximumMesgBodySize + 14;
             if (e037MessageLength < 10 || e037MessageLength > portsMaximumE037MessageLength)
             {
+                // for now this error faults the connectdion rather than sending an S9F11 (DLN)
                 return "Invalid E037 MessageLength:{0}, value must be between 10 and {1} for this port [from buffer at idx:{1}, len:{2}]".CheckedFormat(e037MessageLength, portsMaximumE037MessageLength, scanIdx, buffer.Length);
             }
 
@@ -946,37 +1067,44 @@ namespace MosaicLib.Semi.E037
                 default: TraceHeaders.Emit("Received header {0}", headerDecoder); break;
             }
 
-            if (headerDecoder.SType != SType.DataMessage && PortRecording != null)
+            if (headerDecoder.SType != SType.DataMessage || headerDecoder.PType != PType.SECSII)
                 PortRecording.NoteE005HeaderReceived(this, headerDecoder);
 
             string ec;
-            switch (headerDecoder.SType)
+            if (headerDecoder.PType == PType.SECSII)
             {
-                case SType.LinktestReq: ec = HandleLinktestReq(headerDecoder, qpcTimeStamp); break;
-                case SType.LinktestRsp: ec = HandleLinktestRsp(headerDecoder, qpcTimeStamp); break;
-                case SType.SelectReq: ec = HandleSelectReq(headerDecoder, qpcTimeStamp); break;
-                case SType.SelectRsp: ec = HandleSelectRsp(headerDecoder, qpcTimeStamp); break;
-                case SType.RejectReq: ec = HandleRejectReq(headerDecoder, qpcTimeStamp); break;
-                case SType.DeselectReq: ec = HandleDeselectReq(headerDecoder, qpcTimeStamp); break;
-                case SType.DeselectRsp: ec = HandleDeselectRsp(headerDecoder, qpcTimeStamp); break;
-                case SType.DataMessage:
-                    {
-                        byte[] contentBytes = null;
-                        if (messageMayContainNonEmptyDataPayload && secsPayloadDataLength > 0)
+                switch (headerDecoder.SType)
+                {
+                    case SType.LinktestReq: ec = HandleLinktestReq(headerDecoder, qpcTimeStamp); break;
+                    case SType.LinktestRsp: ec = HandleLinktestRsp(headerDecoder, qpcTimeStamp); break;
+                    case SType.SelectReq: ec = HandleSelectReq(headerDecoder, qpcTimeStamp); break;
+                    case SType.SelectRsp: ec = HandleSelectRsp(headerDecoder, qpcTimeStamp); break;
+                    case SType.RejectReq: ec = HandleRejectReq(headerDecoder, qpcTimeStamp); break;
+                    case SType.DeselectReq: ec = HandleDeselectReq(headerDecoder, qpcTimeStamp); break;
+                    case SType.DeselectRsp: ec = HandleDeselectRsp(headerDecoder, qpcTimeStamp); break;
+                    case SType.DataMessage:
                         {
-                            contentBytes = new byte[secsPayloadDataLength];
-                            System.Buffer.BlockCopy(buffer, scanIdx, contentBytes, 0, secsPayloadDataLength);
+                            byte[] contentBytes = null;
+                            if (messageMayContainNonEmptyDataPayload && secsPayloadDataLength > 0)
+                            {
+                                contentBytes = new byte[secsPayloadDataLength];
+                                System.Buffer.BlockCopy(buffer, scanIdx, contentBytes, 0, secsPayloadDataLength);
 
-                            scanIdx += secsPayloadDataLength;
+                                scanIdx += secsPayloadDataLength;
+                            }
+
+                            decodedReceiveMesgList.Add(new Message(headerDecoder.MakeCopyOfThis(), this, ManagerPortFacet).SetContentBytes(contentBytes, makeCopy: false));
+                            ec = string.Empty;
+                            break;
                         }
-
-                        decodedReceiveMesgList.Add(new Message(headerDecoder.MakeCopyOfThis(), this, ManagerPortFacet).SetContentBytes(contentBytes, makeCopy: false));
-                        ec = string.Empty;
-                        break;
-                    }
-                case SType.SeparateReq: ec = HandleSeparateReq(headerDecoder, qpcTimeStamp); break;
-                default:
-                case SType.Invalid: return "Header decode failed: Invalid SType: ${0:x2}".CheckedFormat(headerDecoder.STypeByte);
+                    case SType.SeparateReq: ec = HandleSeparateReq(headerDecoder, qpcTimeStamp); break;
+                    default:
+                    case SType.Invalid: return "Header decode failed: Invalid SType: ${0:x2}".CheckedFormat(headerDecoder.STypeByte);
+                }
+            }
+            else
+            {
+                return "Header decode failed: Invalid PType: ${0:x2}".CheckedFormat(headerDecoder.PTypeByte);
             }
 
             int usedNBytes = (scanIdx - nextGetIdx);
@@ -1147,8 +1275,8 @@ namespace MosaicLib.Semi.E037
 
             // we are selecting or we have already been selected
 
-            if (reqHeader.SessionID != useSessionID)
-                return "Invalid Select.req: SessionID:${0:x4} is not valid [{1}, req SystemBytes ${2:x8}, expected SessionID:{3:x4}]".CheckedFormat(reqHeader.SessionID, PortConnectionState, reqHeader.SystemBytes, useSessionID);
+            if (reqHeader.SessionID != UseSessionID)
+                return "Invalid Select.req: SessionID:${0:x4} is not valid [{1}, req SystemBytes ${2:x8}, expected SessionID:{3:x4}]".CheckedFormat(reqHeader.SessionID, PortConnectionState, reqHeader.SystemBytes, UseSessionID);
 
             string ec = SendSelectRsp(reqHeader, qpcTimeStamp);
 
@@ -1166,28 +1294,28 @@ namespace MosaicLib.Semi.E037
             if (selectSendTracker.Header == null)
             {
                 if (PortConnectionState.IsSelected())
-                    Log.Info.Emit("Ignoring unexpected Select.rsp: there is no outstanding req to match this rsp to and port is already Selected.  [rsp.SystemBytes ${0:x8}]", rspHeader.SystemBytes);
+                    IssueEmitter.Emit("Ignoring unexpected Select.rsp: there is no outstanding req to match this rsp to and port is already Selected.  [rsp.SystemBytes ${0:x8}]", rspHeader.SystemBytes);
                 else
-                    Log.Warning.Emit("Ignoring unexpected Select.rsp: there is no outstanding req to match this rsp to and port is not selected.  [{0}, rsp.SystemBytes ${1:x8}]", PortConnectionState, rspHeader.SystemBytes);
+                    IssueEmitter.Emit("Ignoring unexpected Select.rsp: there is no outstanding req to match this rsp to and port is not selected.  [{0}, rsp.SystemBytes ${1:x8}]", PortConnectionState, rspHeader.SystemBytes);
 
                 return String.Empty;
             }
 
             if (rspHeader.SystemBytes != selectSendTracker.Header.SystemBytes)
             {
-                Log.Info.Emit("Ignoring unexpected Select.rsp: expecting SystemBytes:${0:x8}, found SystemBytes:${1:x8}", selectSendTracker.Header.SystemBytes, rspHeader.SystemBytes);
+                IssueEmitter.Emit("Ignoring unexpected Select.rsp: expecting SystemBytes:${0:x8}, found SystemBytes:${1:x8}", selectSendTracker.Header.SystemBytes, rspHeader.SystemBytes);
                 return String.Empty;
             }
 
             if (rspHeader.SessionID != selectSendTracker.Header.SessionID)
             {
-                Log.Info.Emit("Ignoring unexpected Select.rsp: expecting SessionID:${0:x4}, found SessionID:${1:x4}", selectSendTracker.Header.SessionID, rspHeader.SessionID);
+                IssueEmitter.Emit("Ignoring unexpected Select.rsp: expecting SessionID:${0:x4}, found SessionID:${1:x4}", selectSendTracker.Header.SessionID, rspHeader.SessionID);
                 return String.Empty;
             }
 
             if (PortConnectionState != PortConnectionState.Selecting)
             {
-                Log.Info.Emit("Ignoring unexpected Select.rsp: while in unexpected state {0}, [SystemBytes:${0:x8}]", PortConnectionState, rspHeader.SystemBytes);
+                IssueEmitter.Emit("Ignoring unexpected Select.rsp: while in unexpected state {0}, [SystemBytes:${0:x8}]", PortConnectionState, rspHeader.SystemBytes);
                 return String.Empty;
             }
 
@@ -1246,28 +1374,28 @@ namespace MosaicLib.Semi.E037
             if (deselectSendTracker.Header == null)
             {
                 if (!PortConnectionState.IsSelected())
-                    Log.Info.Emit("Ignoring unexpected Deselect.rsp: there is no outstanding req to match this rsp to and port is already Deselected.  [rsp.SystemBytes ${0:x8}]", rspHeader.SystemBytes);
+                    IssueEmitter.Emit("Ignoring unexpected Deselect.rsp: there is no outstanding req to match this rsp to and port is already Deselected.  [rsp.SystemBytes ${0:x8}]", rspHeader.SystemBytes);
                 else
-                    Log.Warning.Emit("Ignoring unexpected Deselect.rsp: there is no outstanding req to match this rsp to and port is selected.  [{0}, rsp.SystemBytes ${1:x8}]", PortConnectionState, rspHeader.SystemBytes);
+                    IssueEmitter.Emit("Ignoring unexpected Deselect.rsp: there is no outstanding req to match this rsp to and port is selected.  [{0}, rsp.SystemBytes ${1:x8}]", PortConnectionState, rspHeader.SystemBytes);
 
                 return String.Empty;
             }
 
             if (rspHeader.SystemBytes != deselectSendTracker.Header.SystemBytes)
             {
-                Log.Info.Emit("Ignoring unexpected Deselect.rsp: expecting SystemBytes:${0:x8}, found SystemBytes:${1:x8}", selectSendTracker.Header.SystemBytes, rspHeader.SystemBytes);
+                IssueEmitter.Emit("Ignoring unexpected Deselect.rsp: expecting SystemBytes:${0:x8}, found SystemBytes:${1:x8}", selectSendTracker.Header.SystemBytes, rspHeader.SystemBytes);
                 return String.Empty;
             }
 
             if (rspHeader.SessionID != deselectSendTracker.Header.SessionID)
             {
-                Log.Info.Emit("Ignoring unexpected Deselect.rsp: expecting SessionID:${0:x4}, found SessionID:${1:x4}", selectSendTracker.Header.SessionID, rspHeader.SessionID);
+                IssueEmitter.Emit("Ignoring unexpected Deselect.rsp: expecting SessionID:${0:x4}, found SessionID:${1:x4}", selectSendTracker.Header.SessionID, rspHeader.SessionID);
                 return String.Empty;
             }
 
             if (PortConnectionState != PortConnectionState.Deselecting)
             {
-                Log.Info.Emit("Ignoring unexpected Deselect.rsp: while in unexpected state {0}, [SystemBytes:${0:x8}]", PortConnectionState, rspHeader.SystemBytes);
+                IssueEmitter.Emit("Ignoring unexpected Deselect.rsp: while in unexpected state {0}, [SystemBytes:${0:x8}]", PortConnectionState, rspHeader.SystemBytes);
                 return String.Empty;
             }
 
@@ -1288,7 +1416,7 @@ namespace MosaicLib.Semi.E037
         {
             UInt32 reqHeaderSeqNum = ManagerPortFacet.GetNextMessageSequenceNum();
 
-            E037TenByteHeader reqHeader = new E037TenByteHeader() { SType = SType.SelectReq, PType = PType.SECSII, SystemBytes = reqHeaderSeqNum, SessionID = useSessionID };
+            E037TenByteHeader reqHeader = new E037TenByteHeader() { SType = SType.SelectReq, PType = PType.SECSII, SystemBytes = reqHeaderSeqNum, SessionID = UseSessionID };
 
             selectSendTracker.SetHeader(reqHeader, qpcTimeStamp);
 
@@ -1303,7 +1431,7 @@ namespace MosaicLib.Semi.E037
         {
             UInt32 reqHeaderSeqNum = ManagerPortFacet.GetNextMessageSequenceNum();
 
-            E037TenByteHeader reqHeader = new E037TenByteHeader() { SType = SType.DeselectReq, PType = PType.SECSII, SystemBytes = reqHeaderSeqNum, SessionID = useSessionID };
+            E037TenByteHeader reqHeader = new E037TenByteHeader() { SType = SType.DeselectReq, PType = PType.SECSII, SystemBytes = reqHeaderSeqNum, SessionID = UseSessionID };
 
             deselectSendTracker.SetHeader(reqHeader, qpcTimeStamp);
 
@@ -1460,8 +1588,7 @@ namespace MosaicLib.Semi.E037
                         var arraySegmentList = new List<ArraySegment<byte>>()
                             .SafeAddItems(new ArraySegment<byte>(lengthByteArray), new ArraySegment<byte>(headerByteArray));
 
-                        if (PortRecording != null)
-                            PortRecording.NoteSendingE005Header(this, header);
+                        PortRecording.NoteSendingE005Header(this, header);
 
                         pendingSendIARList.Add(tcpClient.Client.BeginSend(arraySegmentList, SocketFlags.None, iar => this.Notify(), header));
                     }
@@ -1482,8 +1609,7 @@ namespace MosaicLib.Semi.E037
                             .SafeAddItems(new ArraySegment<byte>(lengthByteArray), new ArraySegment<byte>(headerByteArray))
                             .ConditionalAddItems(!bodyByteArray.IsNullOrEmpty(), new ArraySegment<byte>(bodyByteArray));
 
-                        if (PortRecording != null)
-                            PortRecording.NoteSendingE005Message(this, nextSendMesg);
+                        PortRecording.NoteSendingE005Message(this, nextSendMesg);
 
                         pendingSendIARList.Add(tcpClient.Client.BeginSend(arraySegmentList, SocketFlags.None, iar => this.Notify(), nextSendMessageOp));
                         NoteMesgSendPosted(nextSendMessageOp, qpcTimeStamp);
@@ -1508,7 +1634,7 @@ namespace MosaicLib.Semi.E037
         {
             var qpcTimeStamp = QpcTimeStamp.Now;
             UInt32 headerSeqNum = ManagerPortFacet.GetNextMessageSequenceNum();
-            E037TenByteHeader header = new E037TenByteHeader() { SType = SType.SeparateReq, PType = PType.SECSII, SystemBytes = headerSeqNum, SessionID = useSessionID };
+            E037TenByteHeader header = new E037TenByteHeader() { SType = SType.SeparateReq, PType = PType.SECSII, SystemBytes = headerSeqNum, SessionID = UseSessionID };
             var headerStr = header.ToString();
 
             PostTransmitHeaderBuffer(ref header, qpcTimeStamp, serviceTransmitter: false);
@@ -1566,7 +1692,6 @@ namespace MosaicLib.Semi.E037
         }
 
         #endregion
-
     }
 
 	//-------------------------------------------------------------------
@@ -1595,7 +1720,12 @@ namespace MosaicLib.Semi.E037
     /// <remarks>used to generate and interpret E004/E037 Message/Block Headers</remarks>
     public class E037TenByteHeader : TenByteHeaderBase, IE037TenByteHeader, ICopyable<E037TenByteHeader>
 	{
-        /// <summary>Gets/Sets the SessionID for this E037 TBH.  Corresponds to TBH B0B1 word.</summary>
+        /// <summary>
+        /// Gets/Sets the SessionID for this E037 TBH.  Corresponds to TBH B0B1 word.
+        /// </summary>
+        /// <remarks>
+        /// This property is use to carry the DeviceID in standard SECSII 
+        /// </remarks>
         public UInt16 SessionID { get { return B0B1; } set { B0B1 = value; } }
 
         /// <summary>Gets/Sets PType as a byte.  Stored in TBH Byte4 (part of TBH B4B5)</summary>

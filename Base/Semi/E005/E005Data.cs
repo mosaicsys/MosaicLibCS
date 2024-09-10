@@ -21,11 +21,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
 using System.Linq;
 using System.Text;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -262,6 +260,11 @@ namespace MosaicLib.Semi.E005.Data
 
                 return emptyByteArray;
             }
+        }
+
+        public static ValueContainer ConvertFromE005Data(this byte[] byteArray, bool throwOnException)
+        {
+            return ValueContainer.Empty.ConvertFromE005Data(byteArray, throwOnException);
         }
 
         public static ValueContainer ConvertFromE005Data(this ValueContainer vc, byte[] byteArray, bool throwOnException)
@@ -1919,7 +1922,7 @@ namespace MosaicLib.Semi.E005.Data
         public string Value
         {
             get { return _value; }
-            set { ValueContainer = ValueContainer.Create(_value = value.MapNullToEmpty()); }
+            set { VC = ValueContainer.CreateA(_value = value.MapNullToEmpty()); }
         }
 
         private string _value = null;
@@ -1937,17 +1940,30 @@ namespace MosaicLib.Semi.E005.Data
     /// <summary>Shorthand ValueContainerBuilder that builds a Bi value</summary>
     public class Bi : ValueContainerBuilder
     {
-        /// <summary>Base constructor</summary>
+        /// <summary>Basic and default constructor</summary>
         public Bi(byte value = default(byte)) 
         {
             Value = value; 
+        }
+
+        /// <summary><see cref="BiArray"/> specific constructor.</summary>
+        public Bi(BiArray biArray)
+        {
+            BiArray = biArray;
         }
 
         /// <summary>This property can be used to get or set the contained value.</summary>
         public byte Value
         {
             get { return _value; }
-            set { ValueContainer = ValueContainer.Create(_value = value, ContainerStorageType.Bi); }
+            set { VC = ValueContainer.CreateBi(_value = value); }
+        }
+
+        /// <summary></summary>
+        public BiArray BiArray
+        {
+            get { return VC.GetValueBiArray(rethrow: false); }
+            set { VC = value.CreateVC(); _value = value.SafeAccess(0); }
         }
 
         private byte _value = default(byte);

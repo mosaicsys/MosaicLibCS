@@ -20,13 +20,6 @@
  */
 
 using System;
-using MosaicLib;
-using MosaicLib.Utils;
-using MosaicLib.PartsLib.Common.MassFlow;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.Time;
-using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.PartsLib.Scan.Plugin.Sim.Common
 {

@@ -26,6 +26,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 using MosaicLib.Modular.Common;
@@ -47,6 +48,7 @@ namespace MosaicLib.Utils
         /// Extension method version of static Utils.Fcns.Equals method for two arrays
         /// Returns true if both arrays have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, ItemType[] rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
@@ -56,6 +58,7 @@ namespace MosaicLib.Utils
         /// Extension method version of static Utils.Fcns.Equals method for an array and a list, both generics with the same ItemType.
         /// Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, IList<ItemType> rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
@@ -65,6 +68,7 @@ namespace MosaicLib.Utils
         /// Extension method version of static Utils.Fcns.Equals method for a list and an array, both generics with the same ItemType.
         /// Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo<ItemType>(this IList<ItemType> lhs, ItemType[] rhs)
         {
             return Utils.Fcns.Equals(rhs, lhs);
@@ -74,6 +78,7 @@ namespace MosaicLib.Utils
         /// Extension method version of static Utils.Fcns.Equals method for two lists, both generics with the same ItemType.
         /// Returns true if both lists have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo<ItemType>(this IList<ItemType> lhs, IList<ItemType> rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
@@ -82,6 +87,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Retruns true if the pair of given System.Array objects are the same size, the same length and who's corresponding content items are Equal
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo(this System.Array lhs, System.Array rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
@@ -91,6 +97,7 @@ namespace MosaicLib.Utils
         /// Returns true if the given <paramref name="lhs"/> dictionary has the same key and value contents, in the same order, as the given <paramref name="rhs"/> dictionary using the default <typeparamref name="TKey"/> and <typeparamref name="TValue"/> equality comparers.
         /// Returns false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualTo<TKey, TValue>(this IDictionary<TKey, TValue> lhs, IDictionary<TKey, TValue> rhs) 
             where TKey : IEquatable<TKey>
             where TValue: IEquatable<TValue>
@@ -111,6 +118,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length - (<paramref name="length"/> - 1)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex, int length = 1)
         {
             return (array != null && testIndex >= 0 && length > 0 && (testIndex + length) <= array.Length);
@@ -119,6 +127,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count - (<paramref name="length"/> - 1)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex, int length = 1)
         {
             return (list != null && testIndex >= 0 && length > 0 && (testIndex + length) <= list.Count);
@@ -127,6 +136,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, ItemType defaultValue = default(ItemType))
         {
             if (fromArray.IsSafeIndex(getFromIndex))
@@ -147,6 +157,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeSubArray<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength = int.MaxValue)
         {
             int fromArrayLength = fromArray.SafeLength();
@@ -164,6 +175,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of IList indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeSubArray<ItemType>(this IList<ItemType> fromList, int getFromIndex, int getSubArrayLength = int.MaxValue)
         {
             int fromListCount = fromList.SafeCount();
@@ -184,9 +196,10 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of string indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static char SafeAccess(this string fromStr, int getFromIndex, char defaultValue = default(char))
         {
-            if (fromStr == null || getFromIndex < 0 || getFromIndex > fromStr.Length)
+            if (fromStr == null || getFromIndex < 0 || getFromIndex >= fromStr.Length)
                 return defaultValue;
             else
                 return fromStr[getFromIndex];
@@ -197,6 +210,7 @@ namespace MosaicLib.Utils
         /// Does nothing if the intoArray is not valid or does not have any such value.
         /// Returns the given intoArray value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafePut<ItemType>(this ItemType[] intoArray, int putIndex, ItemType value)
         {
             if (intoArray != null && putIndex >= 0 && putIndex < intoArray.Length)
@@ -210,6 +224,7 @@ namespace MosaicLib.Utils
         /// Will perform a partial copy of the fromArray if only part of its fits into the intoArray. 
         /// Returns the given intoArray value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafePut<ItemType>(this ItemType[] intoArray, int putStartIndex, ItemType[] fromArray)
         {
             if (intoArray != null && fromArray != null && putStartIndex >= 0 && putStartIndex < intoArray.Length)
@@ -225,6 +240,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array that returns the last item of the array or the given defaultValue if the array is null or it is empty
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType SafeLast<ItemType>(this ItemType[] fromArray, ItemType defaultValue = default(ItemType))
         {
             if (fromArray == null || fromArray.Length <= 0)
@@ -237,6 +253,7 @@ namespace MosaicLib.Utils
         /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
         /// Returns the number of elements copied (or 0 if none where)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
             return copyIntoArray.SafeCopyFrom(copyToIndex: 0, copyFromArray: copyFromArray, copyFromIndex: copyFromIndex, copyLengthLimitIn: copyLengthLimitIn);
@@ -246,6 +263,7 @@ namespace MosaicLib.Utils
         /// Extension method version of Array.Copy with copy length clipped to prevent exceptions.
         /// Returns the number of array elements copied (or 0 if none where)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, int copyToIndex, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
             int fromArrayLength = copyFromArray.SafeLength();
@@ -301,6 +319,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty<TItemType>(this TItemType[] array)
         {
             return ((array == null) || (array.Length == 0));
@@ -309,6 +328,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if given <paramref name="collection"/> is null or empty (Count == 0)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty(this ICollection collection)
         {
             return (collection == null || collection.Count == 0);
@@ -317,6 +337,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if the given IEnumerable <paramref name="ien"/> is null or empty (initial MoveNext returns false).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty(this IEnumerable ien)
         {
             return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
@@ -325,6 +346,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if given <paramref name="array"/> is null or empty (Length == 0)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEmpty<ItemType>(this ItemType[] array)
         {
             return (array == null || array.Length == 0);
@@ -333,6 +355,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if given <paramref name="collection"/> is null or empty (Count == 0)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEmpty<TItemType>(this ICollection<TItemType> collection)
         {
             return (collection == null || collection.Count == 0);
@@ -341,6 +364,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if the given IEnumerable <paramref name="ien"/> is null or empty (initial MoveNext returns false).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEmpty(this IEnumerable ien)
         {
             return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
@@ -349,6 +373,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="arrayIn"/> (if it is not null) or returns a new empty array of <typeparamref name="TItemType"/> if the given <paramref name="arrayIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TItemType [] MapNullToEmpty<TItemType>(this TItemType [] arrayIn, TItemType [] fallbackArray = null)
         {
             return arrayIn ?? fallbackArray ?? EmptyArrayFactory<TItemType>.Instance;
@@ -357,6 +382,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="arrayIn"/> is non-empty otherwise this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TItemType[] MapEmptyToNull<TItemType>(this TItemType[] arrayIn)
         {
             return (arrayIn.SafeLength() != 0) ? arrayIn : null;
@@ -365,6 +391,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="arrayIn"/> is non-empty otherwise this method returns <paramref name="mapEmptyTo"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TItemType[] MapEmptyTo<TItemType>(this TItemType[] arrayIn, TItemType[] mapEmptyTo = null)
         {
             return (arrayIn.SafeLength() != 0) ? arrayIn : mapEmptyTo;
@@ -373,6 +400,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="listIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="listIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<TItemType> MapNullToEmpty<TItemType>(this List<TItemType> listIn)
         {
             return listIn ?? new List<TItemType>();
@@ -381,6 +409,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iListIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="iListIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IList<TItemType> MapNullToEmpty<TItemType>(this IList<TItemType> iListIn)
         {
             return iListIn ?? new List<TItemType>();
@@ -389,6 +418,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="iListIn"/> is non-empty otherwise this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IList<TItemType> MapEmptyToNull<TItemType>(this IList<TItemType> iListIn)
         {
             return (iListIn.SafeCount() != 0) ? iListIn : null;
@@ -397,6 +427,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iSetIn"/> (if it is not null) or returns an empty enumerable instance (derived from array) if the given <paramref name="iSetIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItemType> MapNullToEmpty<TItemType>(this IEnumerable<TItemType> iSetIn)
         {
             return iSetIn ?? EmptyArrayFactory<TItemType>.Instance;
@@ -405,6 +436,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the Length from the given <paramref name="array"/> or zero if the given <paramref name="array"/> is null
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SafeLength<ItemType>(this ItemType[] array)
         {
             return (array != null ? array.Length : 0);
@@ -413,6 +445,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the Count from the given <paramref name="collection"/> or zero if the given <paramref name="collection"/> is null
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SafeCount<TItemType>(this ICollection<TItemType> collection)
         {
             return (collection != null ? collection.Count : 0);
@@ -421,6 +454,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method sets all of the elements of the given <paramref name="array"/> to the given <paramref name="value"/>.  Has no effect if the <paramref name="array"/> is null or is zero length.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void SetAll<ItemType>(this ItemType[] array, ItemType value)
         {
             int numItems = ((array != null) ? array.Length : 0);
@@ -432,6 +466,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method sets all of the elements of the given <paramref name="arraySegment"/> to the given <paramref name="value"/>.  Has no effect if the <paramref name="arraySegment"/> is empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void SetAll<ItemType>(this ArraySegment<ItemType> arraySegment, ItemType value)
         {
             ItemType[] array = arraySegment.Array;
@@ -444,6 +479,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method sets all of the elements of the given array to their default value.  Has no effect if the array is null or is zero length.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Clear<ItemType>(this ItemType[] array)
         {
             array.SetAll(default(ItemType));
@@ -452,6 +488,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of IList indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType SafeAccess<ItemType>(this IList<ItemType> fromList, int getFromIndex, ItemType defaultValue = default(ItemType))
         {
             if (fromList == null || getFromIndex < 0 || getFromIndex >= fromList.Count)
@@ -465,6 +502,7 @@ namespace MosaicLib.Utils
         /// If the <paramref name="set"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
         /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (set != null)
@@ -478,6 +516,7 @@ namespace MosaicLib.Utils
         /// If the <paramref name="collection"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
         /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (collection != null && (collection.Count > 0 || fallbackArray == null || fallbackArray.Length != 0))
@@ -491,6 +530,7 @@ namespace MosaicLib.Utils
         /// If the <paramref name="list"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
         /// If the <paramref name="list"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeToArray<ItemType>(this Utils.Collections.LockedObjectListWithCachedArray<ItemType> list, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (list != null)
@@ -505,6 +545,7 @@ namespace MosaicLib.Utils
         /// If the collection/set is null and the given fallbackArray is non-null then this method returns the fallbackArray.
         /// If the collection/set and the fallbackArray values are null then this creates and returns an empty array of the given ItemType.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] SafeToArray<ItemType>(this IEnumerable set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (set != null)
@@ -530,6 +571,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="mapNullToEmpty"/> is true and the <paramref name="set"/> is null then this method return a new empty list.
         /// If <paramref name="mapNullToEmpty"/> is false and the <paramref name="set"/> is null then this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<ItemType> SafeToList<ItemType>(this IEnumerable<ItemType> set, bool mapNullToEmpty = true)
         {
             if (set != null)
@@ -543,6 +585,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType SafeTakeFirst<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
             if (itemList.IsNullOrEmpty())
@@ -557,6 +600,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType SafeTakeLast<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
             if (itemList.IsNullOrEmpty())
@@ -572,6 +616,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method to "safely" take (remove) and return an array of all of the items that were taken from given list.  Returns the empty array if the given list is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType [] SafeTakeAll<ItemType>(this IList<ItemType> itemList, ItemType [] defaultValue = default(ItemType []))
         {
             if (itemList.IsNullOrEmpty())
@@ -592,6 +637,7 @@ namespace MosaicLib.Utils
         /// <param name="array">Gives the caller provided array that this method is to make a copy of.</param>
         /// <param name="fallbackArray">If the given <paramref name="array"/> is null and this parameter is non-null then this method returns the value given to this parameter.</param>
         /// <param name="mapNullToEmpty">If both the given <paramref name="array"/> and the <paramref name="fallbackArray"/> parameters are null then if mapNullToEmpty is false, this method will return null, otherwise this method will return a new empty {ItemType} array.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ItemType[] MakeCopyOf<ItemType>(this ItemType[] array, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (array != null)
@@ -614,6 +660,7 @@ namespace MosaicLib.Utils
         /// If createListIfNeeded is true, <paramref name="list"/> is null and <paramref name="itemSet"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, IEnumerable<ItemType> itemSet, bool createListIfNeeded = true)
         {
             if (!itemSet.IsNullOrEmpty())
@@ -632,6 +679,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="list"/> is null and <paramref name="itemsArray"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<ItemType> SafeAddItems<ItemType>(this List<ItemType> list, params ItemType[] itemsArray)
         {
             if (!itemsArray.IsNullOrEmpty())
@@ -646,6 +694,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Adds the given <paramref name="fromList"/> set of items to the given <paramref name="intoList"/> and returns it (to support call chaining)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<TItemType> SafeAddItems<TItemType>(this List<TItemType> intoList, IList<TItemType> fromList, int startAtOffset = 0, int maxItemsToAdd = -1)
         {
             if (fromList != null && intoList != null)
@@ -683,6 +732,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="list"/> is null and <paramref name="itemsArray"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static List<ItemType> ConditionalAddItems<ItemType>(this List<ItemType> list, bool condition, params ItemType[] itemsArray)
         {
             if (condition)
@@ -694,6 +744,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns true if the given <paramref name="set"/> is non-null and it Contains the given <paramref name="item"/>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool SafeContains<TItemType>(this ICollection<TItemType> set, TItemType item)
         {
             return (set != null && set.Contains(item));
@@ -705,6 +756,7 @@ namespace MosaicLib.Utils
         /// Returns the given <paramref name="set"/> or the newly created one if it was passed as null.
         /// <para/>Note: at present this EM can only be used with reference <typeparamref name="ItemType"/> types.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ICollection<ItemType> SafeAddIfNeeded<ItemType>(this ICollection<ItemType> set, ItemType item) 
             where ItemType : class
         {
@@ -719,6 +771,43 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region IList methods (Rotate)
+
+        /// <summary>
+        /// Rotates the given <paramref name="list"/> by the given <paramref name="rotationDistance"/>.  
+        /// If <paramref name="rotationDistance"/> is positive then that many elements are moved from the back of the list to its front.
+        /// If <paramref name="rotationDistance"/> is negative then that many elements are moved from the front of the list to its back.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static IList<TItemType> SafeRotate<TItemType>(this IList<TItemType> list, int rotationDistance)
+        {
+            var listCount = list.SafeCount();
+            var absRotationCount = Math.Abs(rotationDistance);
+
+            if (listCount <= 1 || rotationDistance == 0 || absRotationCount == listCount || list.IsReadOnly)
+                return list;
+
+            if (rotationDistance < 0)
+            {
+                rotationDistance = -rotationDistance;
+                rotationDistance %= listCount;
+
+                for (int i = 0; i < rotationDistance; i++)
+                    list.Add(list.SafeTakeFirst());
+            }
+            else
+            {
+                rotationDistance %= listCount;
+
+                for (int i = 0; i < rotationDistance; i++)
+                    list.Insert(0, list.SafeTakeLast());
+            }
+
+            return list;
+        }
+
+        #endregion
+
         #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects, SetToString
 
         /// <summary>
@@ -726,6 +815,7 @@ namespace MosaicLib.Utils
         /// Returns an IEnumerable set of the objects found in the given <paramref name="set"/>.
         /// If the given <paramref name="set"/> is null then the <paramref name="mapNullToEmpty"/> parameter determines if this method returns null (false) or an empty set (true - default)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<object> SafeToSet(this IEnumerable set, bool mapNullToEmpty = true)
         {
             return set.SafeToSet<object>(mapNullToEmpty: mapNullToEmpty);
@@ -737,6 +827,7 @@ namespace MosaicLib.Utils
         /// To guarantee that all objects from the set are returned, the caller should pass <typeparamref name="TItemType"/> as System.Object.
         /// If the given <paramref name="set"/> is null then the <paramref name="mapNullToEmpty"/> parameter determines if this method returns null (false) or an empty set (true - default)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItemType> SafeToSet<TItemType>(this IEnumerable set, bool mapNullToEmpty = true)
         {
             if (set == null)
@@ -813,6 +904,7 @@ namespace MosaicLib.Utils
         /// This EM accepts an IDictionary <paramref name="dict"/> and attempts to obtain and return the value from it at the given <paramref name="key"/>.  
         /// If <paramref name="dict"/> is null or it if does not contain the indicated <paramref name="key"/> then this method returns the given <paramref name="fallbackValue"/>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValue SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue fallbackValue = default(TValue))
         {
             TValue value;
@@ -827,6 +919,7 @@ namespace MosaicLib.Utils
         /// This method returns <see langword="true"/> if the given <paramref name="key"/> was found and <see langword="false"/> if it was not, or if the given <paramref name="dictionary"/> was <see langword="null"/>, 
         /// in either which case the <paramref name="foundValue"/> output parameter will have been set to the given value of the <paramref name="fallbackValue"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, out TValue foundValue, TValue fallbackValue = default(TValue))
         {
             if ((dictionary != null) && dictionary.TryGetValue(key, out foundValue))
@@ -842,11 +935,31 @@ namespace MosaicLib.Utils
         /// then this method updates the given <paramref name="dictionary"/> by setting the <paramref name="key"/> to the given <paramref name="value"/>.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TDictionary ConditionalSetKeyValue<TDictionary, TKey, TVAlue>(this TDictionary dictionary, TKey key, bool condition, TVAlue value) 
             where TDictionary : IDictionary<TKey, TVAlue>
         {
             if (condition && dictionary != null && !dictionary.IsReadOnly)
                 dictionary[key] = value;
+
+            return dictionary;
+        }
+
+        /// <summary>
+        /// Converts the given <paramref name="dictionary"/> to be writable (if needed) and then attempts to add/merge each of the given
+        /// <see cref="KeyValuePair{TKey, TValue}"/> instances from the given <paramref name="kvpSetIn"/> to the dictionary.
+        /// <para/>If <paramref name="newKeyValuesReplaceOld"/> is passed as false then items in the given <paramref name="kvpSetIn"/> will be ignored
+        /// if their key is already in the dictionary or if they appear earlier in the <paramref name="kvpSetIn"/>.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static IDictionary<TKey, TValue> SafeAddKVPSet<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, IEnumerable<KeyValuePair<TKey, TValue>> kvpSetIn, bool newKeyValuesReplaceOld = true)
+        {
+            dictionary = dictionary.ConvertToWritable();
+
+            foreach (var kvp in kvpSetIn.MapNullToEmpty())
+            {
+                dictionary.SafeSetKeyValue(kvp.Key, kvp.Value, onlyTakeFirst: !newKeyValuesReplaceOld);
+            }
 
             return dictionary;
         }
@@ -858,6 +971,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Safe Extension method version of Queue.Dequeue that returns the next item from <paramref name="fromQueue"/> if it is non-empty or <paramref name="fallbackValue"/> if it is null or empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TItemType SafeTryDequeue<TItemType>(this Queue<TItemType> fromQueue, TItemType fallbackValue = default(TItemType))
         {
             if (fromQueue != null && fromQueue.Count > 0)
@@ -876,6 +990,7 @@ namespace MosaicLib.Utils
         /// An empty byteArray is treated as if it has zero length.
         /// <para/>Supports call chaining
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte[] SetBit(this byte[] byteArray, int bitIndex, bool value)
         {
             int byteIdx = (bitIndex >> 3);
@@ -892,6 +1007,7 @@ namespace MosaicLib.Utils
             return byteArray;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool GetBit(this byte[] byteArray, int bitIndex)
         {
             int byteIdx = (bitIndex >> 3);
@@ -908,42 +1024,49 @@ namespace MosaicLib.Utils
         #region Math and number related extension methods (Ceiling, Floor, Round, Clip, IsInRange, IncrementSkipZero, SafeOneOver)
 
         /// <summary>Returns the Math.Ceiling of the given value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Ceiling(this double value)
         {
             return Math.Ceiling(value);
         }
 
         /// <summary>Returns the Math.Floor of the given value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Floor(this double value)
         {
             return Math.Floor(value);
         }
 
         /// <summary>Returns the Math.Round of the given value</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Round(this double value)
         {
             return Math.Round(value);
         }
 
         /// <summary>Returns the Math.Round of the given value using the given MidpointRounding mode</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Round(this double value, MidpointRounding mode)
         {
             return Math.Round(value, mode);
         }
 
         /// <summary>Returns the Math.Round of the given value using the given number of digits and the given MidpointRounding mode</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Round(this double value, int digits, MidpointRounding mode = MidpointRounding.ToEven)
         {
             return Math.Round(value, digits, mode);
         }
 
         /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValueType Clip<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit) where TValueType : IComparable<TValueType>
         {
             return value.Clip(lowLimit, highLimit, value);
         }
 
         /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValueType Clip<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit, TValueType invalidCompareValue) where TValueType : IComparable<TValueType>
         {
             int lowToHighLimitCompare = lowLimit.CompareTo(highLimit);
@@ -965,18 +1088,21 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Clip(this double value, double lowLimit, double highLimit)
         {
             return value.Clip(lowLimit, highLimit, double.NaN);
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Clip(this float value, float lowLimit, float highLimit)
         {
             return value.Clip(lowLimit, highLimit, float.NaN);
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Clip(this double value, double lowLimit, double highLimit, double invalidCompareValue)
         {
             if (double.IsNaN(value))
@@ -989,6 +1115,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="lowLimit"/> and <paramref name="highLimit"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Clip(this float value, float lowLimit, float highLimit, float invalidCompareValue)
         {
             if (float.IsNaN(value))
@@ -1001,6 +1128,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between (<paramref name="reference"/> - <paramref name="delta"/>) and (<paramref name="reference"/> + <paramref name="delta"/>).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double ClipDelta(this double value, double reference, double delta, double invalidCompareValue = double.NaN)
         {
             if (delta < 0.0 || delta.IsNaN())
@@ -1010,12 +1138,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="reference"/> + <paramref name="lowDeltaOffset"/> and <paramref name="reference"/> + <paramref name="highDeltaOffset"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double ClipOffsetRange(this double value, double reference, double lowDeltaOffset, double highDeltaOffset, double invalidCompareValue = double.NaN)
         {
             return value.Clip(lowLimit: reference + lowDeltaOffset, highLimit: reference + highDeltaOffset, invalidCompareValue: invalidCompareValue);
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between (<paramref name="reference"/> - <paramref name="delta"/>) and (<paramref name="reference"/> + <paramref name="delta"/>).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ClipDelta(this float value, float reference, float delta, float invalidCompareValue = float.NaN)
         {
             if (delta < 0.0 || delta.IsNaN())
@@ -1025,12 +1155,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the given <paramref name="value"/> clipped to make certain that it is between <paramref name="reference"/> + <paramref name="lowDeltaOffset"/> and <paramref name="reference"/> + <paramref name="highDeltaOffset"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ClipOffsetRange(this float value, float reference, float lowDeltaOffset, float highDeltaOffset, float invalidCompareValue = float.NaN)
         {
             return value.Clip(lowLimit: reference + lowDeltaOffset, highLimit: reference + highDeltaOffset, invalidCompareValue: invalidCompareValue);
         }
 
         /// <summary>Returns true if, and only if, the given value is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInRange<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit) where TValueType : IComparable<TValueType>
         {
             int lowToHighLimitCompare = lowLimit.CompareTo(highLimit);
@@ -1044,6 +1176,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if, and only if, the given value is not a NaN, it is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInRange(this double value, double lowLimit, double highLimit)
         {
             if (double.IsNaN(value) || double.IsNaN(lowLimit) || double.IsNaN(highLimit))
@@ -1053,6 +1186,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if, and only if, the given value is not a NaN, it is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInRange(this float value, float lowLimit, float highLimit)
         {
             if (float.IsNaN(value) || float.IsNaN(lowLimit) || float.IsNaN(highLimit))
@@ -1062,12 +1196,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if the given value is divisible by 2.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEven(this int value)
         {
             return ((value & 1) == 0);
         }
 
         /// <summary>Returns true if the given value is not divisible by 2.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsOdd(this int value)
         {
             return ((value & 1) != 0);
@@ -1076,6 +1212,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// returns the given <paramref name="value"/> incremented.  If the incremented <paramref name="value"/> is 0 then this method returns 1 in its place
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int IncrementSkipZero(this int value)
         {
             if (++value == 0)
@@ -1087,6 +1224,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// returns the given <paramref name="value"/> incremented.  If the incremented <paramref name="value"/> is 0 then this method returns 1 in its place
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint IncrementSkipZero(this uint value)
         {
             if (++value == 0)
@@ -1100,6 +1238,7 @@ namespace MosaicLib.Utils
         /// If the given <paramref name="value"/> is not zero then this method returns (1.0 / <paramref name="value"/>).  
         /// Otherwise this method returns the given <paramref name="fallbackValue"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double SafeOneOver(this double value, double fallbackValue = 0.0)
         {
             return ((value != 0.0) ? (1.0 / value) : fallbackValue);
@@ -1109,33 +1248,42 @@ namespace MosaicLib.Utils
         /// If the given <paramref name="value"/> is not zero then this method returns (1.0f / <paramref name="value"/>).  
         /// Otherwise this method returns the given <paramref name="fallbackValue"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float SafeOneOver(this float value, float fallbackValue = 0.0f)
         {
             return ((value != 0.0f) ? (1.0f / value) : fallbackValue);
         }
 
         /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNaN(this double value) { return double.IsNaN(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNaN(this float value) { return float.IsNaN(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInfinity(this double value) { return double.IsInfinity(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInfinity(this float value) { return float.IsInfinity(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsPositiveInfinity(this double value) { return double.IsPositiveInfinity(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsPositiveInfinity(this float value) { return float.IsPositiveInfinity(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNegativeInfinity(this double value) { return double.IsNegativeInfinity(value); }
 
         /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNegativeInfinity(this float value) { return float.IsNegativeInfinity(value); }
 
         #endregion
@@ -1145,6 +1293,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns the given <paramref name="angleInDegrees"/> converted to Radians
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double DegreesToRadians(this double angleInDegrees)
         {
             return angleInDegrees * Math.PI * oneOver180;
@@ -1153,6 +1302,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns the given <paramref name="angleInRadians"/> converted to Degrees
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double RadiansToDegrees(this double angleInRadians)
         {
             return angleInRadians * 180.0 * oneOverPI;
@@ -1162,6 +1312,7 @@ namespace MosaicLib.Utils
         /// Generic angle wrap method - accepts an <paramref name="value"/>, and a <paramref name="modulo"/>.
         /// <para/>Returns value - (Floor(value / modulo) * modulo)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Wrap(this double value, double modulo)
         {
             return value - Math.Floor(value * modulo.SafeOneOver()) * modulo;
@@ -1171,6 +1322,7 @@ namespace MosaicLib.Utils
         /// Generic angle wrap method - accepts an <paramref name="value"/>, an <paramref name="offset"/>, and a <paramref name="modulo"/>.
         /// <para/>Returns ((angle + offset).Wrap(modulo) - offset;
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Wrap(this double value, double offset, double modulo)
         {
             return (value + offset).Wrap(modulo) - offset;
@@ -1180,6 +1332,7 @@ namespace MosaicLib.Utils
         /// Returns the given <paramref name="angleInDegrees"/> angle in degrees to be in the range [0.0 .. 360.0)
         /// <para/>0.0 inclusive, 360.0 exclusive
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double WrapDegrees(this double angleInDegrees)
         {
             return angleInDegrees.Wrap(0.0, 360.0);
@@ -1189,6 +1342,7 @@ namespace MosaicLib.Utils
         /// Returns the given <paramref name="differentialAngleInDegrees"/> differential angle in degrees to be in the range (-180.0 .. +180.0]
         /// <para/>-180.0 exclusive, +180.0 inclusive
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double WrapDifferentialDegrees(this double differentialAngleInDegrees)
         {
             return -((-differentialAngleInDegrees).Wrap(180.0, 360.0));
@@ -1198,6 +1352,7 @@ namespace MosaicLib.Utils
         /// Returns the given <paramref name="angleInRadians"/> angle in radians to be in the range [0.0 .. 2 pi)
         /// <para/>0.0 inclusive, 2 pi exclusive
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double WrapRadians(this double angleInRadians)
         {
             return angleInRadians.Wrap(0.0, twoPI);
@@ -1207,6 +1362,7 @@ namespace MosaicLib.Utils
         /// Returns the given <paramref name="differentialAngleInRadians"/> differential angle in radians to be in the range (-pi .. +pi]
         /// <para/>-pi exclusive, pi inclusive
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double WrapDifferentialRadians(this double differentialAngleInRadians)
         {
             return -((-differentialAngleInRadians).Wrap(Math.PI, twoPI));
@@ -1236,6 +1392,7 @@ namespace MosaicLib.Utils
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsSet<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
             return value.IsMatch(test, test);
@@ -1246,6 +1403,7 @@ namespace MosaicLib.Utils
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsAnySet<TValueType>(this TValueType value, TValueType mask)
         {
             return !value.IsMatch(mask, default(TValueType));
@@ -1256,6 +1414,7 @@ namespace MosaicLib.Utils
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsClear<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
             return value.IsMatch(test, default(TValueType));
@@ -1334,6 +1493,7 @@ namespace MosaicLib.Utils
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return default(startingValue);
         /// <para/>Note: These Clear and Set extension methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValueType Clear<TValueType>(this TValueType startingValue, TValueType pattern) where TValueType : struct
         {
             return Set(startingValue, pattern, setPattern: false);
@@ -1513,6 +1673,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromDays that does not round the <paramref name="timeSpanInDays"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerDay
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromDays(this double timeSpanInDays)
         {
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerDay * timeSpanInDays)));
@@ -1522,6 +1683,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromHours that does not round the <paramref name="timeSpanInHours"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerHour
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromHours(this double timeSpanInHours)
         {
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerHour * timeSpanInHours)));
@@ -1531,6 +1693,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromMinutes that does not round the <paramref name="timeSpanInMinutes"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMinute
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromMinutes(this double timeSpanInMinutes)
         {
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMinute * timeSpanInMinutes)));
@@ -1540,6 +1703,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromSeconds that does not round the <paramref name="timeSpanInSeconds"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerSecond
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromSeconds(this double timeSpanInSeconds)
         {
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerSecond * timeSpanInSeconds)));
@@ -1549,6 +1713,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromSeconds that does not round the <paramref name="timeSpanInMilliseconds"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMillisecond
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromMilliseconds(this double timeSpanInMilliseconds)
         {
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMillisecond * timeSpanInMilliseconds)));
@@ -1558,6 +1723,7 @@ namespace MosaicLib.Utils
         /// Variant of TimeSpan.FromSeconds that derives the time span from the recriprocal of the given <paramref name="hz"/> value measured in Hertz (cycles per second) as a TimeSpan.
         /// If the given <paramref name="hz"/> value is zero then this method returns the given fallbackValue.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan FromHz(this double hz, TimeSpan fallbackValue = default(TimeSpan))
         {
             if (hz != 0.0 && !hz.IsNaN() && !hz.IsInfinity())
@@ -1569,32 +1735,41 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsZero(this TimeSpan timeSpan)
         {
             return (timeSpan == TimeSpan.Zero);
         }
 
         /// <summary>Returns the Min of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Min(this TimeSpan a, TimeSpan b) { return (a <= b) ? a : b; }
         /// <summary>Returns the Min of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Min(this TimeSpan a, TimeSpan b, TimeSpan c) { return a.Min(b).Min(c); }
         /// <summary>Returns the Min of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Min(this TimeSpan a, params TimeSpan[] more) { return a.Concat(more).Min(); }
 
         /// <summary>Returns the Max of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Max(this TimeSpan a, TimeSpan b) { return (a >= b) ? a : b; }
         /// <summary>Returns the Max of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Max(this TimeSpan a, TimeSpan b, TimeSpan c) { return a.Max(b).Max(c); }
         /// <summary>Returns the Max of the given TimeSpan values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Max(this TimeSpan a, params TimeSpan[] more) { return a.Concat(more).Max(); }
 
         /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Sleep(this TimeSpan timeSpan)
         {
             System.Threading.Thread.Sleep(timeSpan);
         }
 
         /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is not null</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void SleepIfNotNull(this TimeSpan ? timeSpan)
         {
             if (timeSpan != null)
@@ -1602,6 +1777,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is greater than zero.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ConditionalSleep(this TimeSpan timeSpan)
         {
             if (timeSpan > TimeSpan.Zero)
@@ -1615,6 +1791,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns the Age of the given <paramref name="dateTime"/>.  Caller can optionally provide the current time, preferrably already in the same DateTimeKind as the given value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan Age(this DateTime dateTime, DateTime ? dateTimeNowIn = null)
         {
             if (dateTimeNowIn != null)
@@ -1638,22 +1815,29 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the Min of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Min(this DateTime a, DateTime b) { return (a <= b) ? a : b; }
         /// <summary>Returns the Min of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Min(this DateTime a, DateTime b, DateTime c) { return a.Min(b).Min(c); }
         /// <summary>Returns the Min of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Min(this DateTime a, params DateTime[] more) { return a.Concat(more).Min(); }
 
         /// <summary>Returns the Max of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Max(this DateTime a, DateTime b) { return (a >= b) ? a : b; }
         /// <summary>Returns the Max of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Max(this DateTime a, DateTime b, DateTime c) { return a.Max(b).Max(c); }
         /// <summary>Returns the Max of the given DateTime values</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime Max(this DateTime a, params DateTime[] more) { return a.Concat(more).Max(); }
 
         /// <summary>
         /// Returns true if the given <paramref name="dateTime"/> value is equal to default(DateTime)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsZero(this DateTime dateTime)
         {
             return (dateTime == default(DateTime));
@@ -1666,6 +1850,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method for Random.  Returns the NextDouble number produced by the given Random rng source scaled and offset to fall in the range [-1.0 .. 1.0)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double GetNextRandomInMinus1ToPlus1Range(this Random rng)
         {
             return (rng.NextDouble() * 2.0 - 1.0);
@@ -1682,6 +1867,7 @@ namespace MosaicLib.Utils
         /// which default to default(TValueType)
         /// </summary>
         /// <typeparam name="TValueType">This is the generic value type that is to be returned by the provided getterDelegate</typeparam>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValueType TryGet<TValueType>(this Func<TValueType> getterDelegate, TValueType getFailedResult = default(TValueType))
         {
             try
@@ -1735,48 +1921,56 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Concatinates the given <paramref name="item"/> onto the end of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item)
         {
             return InnerConcat(set ?? EmptyArrayFactory<TItem>.Instance, item);
         }
 
         /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, IEnumerable<TItem> set)
         {
             return InnerConcat(item, set ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/> where the null <paramref name="array"/> is handled as if it is empty.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, TItem [] array)
         {
             return InnerConcat(item, array ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2)
         {
             return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2 });
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3)
         {
             return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2, item3 });
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3, params TItem[] moreParamsItemArray)
         {
             return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2, item3 }.Concat(moreParamsItemArray ?? EmptyArrayFactory<TItem>.Instance));
         }
 
         /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="itemParamsArray"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> ConcatItems<TItem>(this TItem item, params TItem[] itemParamsArray)
         {
             return InnerConcat(item, itemParamsArray ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>Concatinates the given <paramref name="itemParamsArray"/> params items onto the end of the given <paramref name="set"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> ConcatItems<TItem>(this IEnumerable<TItem> set, params TItem[] itemParamsArray)
         {
             return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, itemParamsArray ?? EmptyArrayFactory<TItem>.Instance);
@@ -1786,6 +1980,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="condition"/> is true then this method returns an enumeable with the given  set of items (<paramref name="itemsParamArray"/>) concatinated onto the end of the given <paramref name="set"/>.
         /// Otherwise this method returns the given <paramref name="set"/> unmodified.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> ConditionalConcatItems<TItem>(this IEnumerable<TItem> set, bool condition, params TItem [] itemsParamArray)
         {
             if (!condition || itemsParamArray.IsNullOrEmpty())
@@ -1798,6 +1993,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="condition"/> is true then this method returns an enumeable with the given sets of items (<paramref name="concatWithItemsSet"/>) concatinated onto the end of the given <paramref name="set"/>.
         /// Otherwise this method returns the given <paramref name="set"/> unmodified.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItem> ConditionalConcatItems<TItem>(this IEnumerable<TItem> set, bool condition, IEnumerable<TItem> concatWithItemsSet)
         {
             if (!condition || concatWithItemsSet.IsNullOrEmpty())
@@ -1867,6 +2063,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set)
         {
             return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(DefaultValueHelpers<TItemType>.IsNotEqualToDefaultValueDelegate);
@@ -1876,6 +2073,7 @@ namespace MosaicLib.Utils
         /// Linq style extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
         /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp)
         {
             if (eqCmp == null)
@@ -1946,6 +2144,7 @@ namespace MosaicLib.Utils
         /// returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)
         /// NOTE: this method has been re-implemented using the GetTypeDigestName(recursive: true) method.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetTypeLeafName(this Type type) 
         {
             return type.GetTypeDigestName(recursive: true);
@@ -1958,6 +2157,7 @@ namespace MosaicLib.Utils
         /// the sub-type.  If so then each of the sub-types will also be digested in the returned string otherwise only
         /// the main type will be digested.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetTypeDigestName(this Type type, bool recursive = true)
         {
             return type.SafeToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
@@ -1966,6 +2166,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// This generic extension method attempts to obtain and return the Type Digest Name from the Type of the given <paramref name="instance"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetInstanceTypeDigestName<TItemType>(this TItemType instance, bool recursive = true, string fallbackValue = "")
         {
             if (instance != null)
@@ -2044,12 +2245,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if the give type <paramref name="t"/> is Nullable</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullable(this Type t)
         {
             return (t != null && t.IsGenericType && (t.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
         }
 
         /// <summary>For Nullable types <paramref name="t"/> this method returns the base type (from first type in GetGenericArguments()).  Otherwise this method return <paramref name="fallbackValue"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Type GetNullableBaseType(this Type t, Type fallbackValue = null)
         {
             if (t.IsNullable())
@@ -2059,6 +2262,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the default value for the given type <paramref name="t"/>.  Will be null for reference types.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object CreateDefaultInstance(this Type t)
         {
             return (t.IsValueType ? Activator.CreateInstance(t) : null);
@@ -2069,6 +2273,7 @@ namespace MosaicLib.Utils
         #region FileSystemInfo, FileInfo EMs (SafeGetOldestDateTimeUtc, SafeGetCreationAge, SafeExists, SafeLength)
 
         /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, its last modified time, and (optionally) its last access time, in UTC.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime), bool includeLastAccess = true)
         {
             if (!fsi.SafeExists())
@@ -2080,6 +2285,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a TimeSpan (returns zero if the given <paramref name="fsi"/> instance is null)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan SafeGetCreationAge(this FileSystemInfo fsi, TimeSpan fallbackValue = default(TimeSpan))
         {
             if (fsi.SafeExists())
@@ -2089,12 +2295,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if the given <paramref name="fsi"/> is not null and fsi.Exists is true</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool SafeExists(this FileSystemInfo fsi)
         {
             return (fsi != null && fsi.Exists);
         }
 
         /// <summary>If the given <paramref name="fi"/> is non-null and it Exists then this method returns its Length, otherwise this method returns 0</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long SafeLength(this FileInfo fi)
         {
             return (fi.SafeExists() ? fi.Length : 0);
@@ -2145,6 +2353,7 @@ namespace MosaicLib.Utils
         #region ISequencedSourceObserver (UpdateInline)
 
         /// <summary>Calls <paramref name="observer"/>.Update() and returns the <paramref name="observer"/> in order to support call chaining</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TObserverType UpdateInline<TObserverType>(this TObserverType observer) 
             where TObserverType : ISequencedSourceObserver
         {
@@ -2188,7 +2397,7 @@ namespace MosaicLib.Utils
                     sb.AppendFormat(" Src:{0}", ex.Source);
 
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeMessage) && !ex.Message.IsNullOrEmpty())
-                    sb.AppendFormat(" Mesg:[{0}]", ex.Message.GenerateEscapedVersion(boxEscapeCharsList));
+                    sb.AppendFormat(" Mesg:[{0}]", ex.Message.GenerateEscapedVersion(boxEscapeCharsSet));
 
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeData) && !ex.Data.IsNullOrEmpty())
                 {
@@ -2197,7 +2406,7 @@ namespace MosaicLib.Utils
                 }
 
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeStackTrace) && !ex.StackTrace.IsNullOrEmpty())
-                    sb.AppendFormat(" Stack:[{0}]", ex.StackTrace.Trim().GenerateEscapedVersion(boxEscapeCharsList));
+                    sb.AppendFormat(" Stack:[{0}]", ex.StackTrace.Trim().GenerateEscapedVersion(boxEscapeCharsSet));
 
                 return sb.ToString();
             }
@@ -2207,7 +2416,7 @@ namespace MosaicLib.Utils
             }
         }
 
-        private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
+        private static readonly ISet<char> boxEscapeCharsSet = new ReadOnlyHashSet<char>(new [] { '[', ']' });
 
         /// <summary>
         /// Calls <see cref="AddToNVS(Exception, NamedValueSet, ExceptionFormat)"/> passing in a new <see cref="NamedValueSet"/>
@@ -2273,6 +2482,7 @@ namespace MosaicLib.Utils
         /// Helper extension method used to obtain, and/or create, a linked list node from the given <paramref name="linkedList"/>.  
         /// If such a node could be obtained (or contructed) its Value will be set to the given <paramref name="value"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static LinkedListNode<TItemType> TryGetFirstNode<TItemType>(this LinkedList<TItemType> linkedList, TItemType value = default(TItemType), bool createNewNodeIfNeeded = true)
         {
             LinkedListNode<TItemType> node = null;
@@ -2296,6 +2506,7 @@ namespace MosaicLib.Utils
         /// If the <paramref name="maxNumberOfNodesToKeep"/> is non-zero and the given <paramref name="linkedList"/>'s Count it at least that large then the reference to the given <paramref name="node"/> will simply be discarded.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static LinkedList<TItemType> TryInsertFirstNode<TItemType>(this LinkedList<TItemType> linkedList, ref LinkedListNode<TItemType> node, int maxNumberOfNodesToKeep = 10)
         {
             if (linkedList != null && node != null && (maxNumberOfNodesToKeep == 0 || linkedList.Count < maxNumberOfNodesToKeep))
@@ -2319,6 +2530,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns the result of calling <paramref name="item"/>.MakeCopyOfThis(<paramref name="deepCopy"/>) is <paramref name="item"/> is not null.  Otherwise returns <paramref name="fallbackValue"/>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TItemType SafeMakeCopyOfThis<TItemType>(this TItemType item, bool deepCopy = true, TItemType fallbackValue = default(TItemType)) 
             where TItemType : ICopyable<TItemType>
         {
@@ -2335,6 +2547,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// If <paramref name="item"/> is not null, then returns the results of calling <paramref name="item"/>.Equals(<paramref name="other"/>), or returns true if <paramref name="other"/> is also null, or returns false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool SafeEquals<TItemType>(this TItemType item, TItemType other) where TItemType : IEquatable<TItemType>
         {
             if (item != null)
@@ -2346,6 +2559,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// If the given <paramref name="item"/> is not null then this method returns the result of calling <paramref name="item"/>.GetHashCode, otherwise this method returns the given <paramref name="hashCodeForNull"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SafeGetHashCode<TItemType>(this TItemType item, int hashCodeForNull = -1)
         {
             if (item != null)
@@ -2390,6 +2604,7 @@ namespace MosaicLib.Utils
         /// This EM calls Start on the given <paramref name="task"/> instance and then returns it to support a call-chained version of Task.Start().
         /// </summary>
         /// <remarks>Note that attempt to use Task.StartInline for this method name caused collision with the ICF.StateInline version.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TTaskType StartTaskInline<TTaskType>(this TTaskType task) where TTaskType : System.Threading.Tasks.Task
         {
             task.Start();
@@ -2474,6 +2689,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given <paramref name="item"/> is not equal to its <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNotEqualToDefaultValue(TItemType item)
         {
             return !DefaultEqualiyComparer.Equals(item, DefaultValue);
@@ -2487,6 +2703,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given <paramref name="item"/> is equal to its <see cref="DefaultValue"/> using the <see cref="DefaultEqualiyComparer"/>
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsEqualToDefaultValue(TItemType item)
         {
             return DefaultEqualiyComparer.Equals(item, DefaultValue);
@@ -2596,12 +2813,15 @@ namespace MosaicLib.Utils
         #region Migrated MapTo methods for booleans and similar cases.
 
         /// <summary>Maps the given boolean value to either "1" or "0"</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string MapToString(this bool value) { return (value ? "1" : "0"); }
 
         /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
 
         /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int MapToInt(this bool value) { return (value ? 1 : 0); }
 
         /// <summary>

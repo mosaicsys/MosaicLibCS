@@ -23,8 +23,6 @@
 using System;
 using System.IO.Ports;
 using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
 
 namespace MosaicLib.SerialIO

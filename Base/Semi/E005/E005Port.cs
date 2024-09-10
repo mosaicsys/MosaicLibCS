@@ -26,6 +26,7 @@ using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.Modular.Part;
+using MosaicLib.Semi.E005.Manager;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
@@ -115,7 +116,14 @@ namespace MosaicLib.Semi.E005.Port
         /// [Defaults to 0]
         /// </summary>
         [NamedValueSetItem]
-        public UInt16 DeviceID = 0;
+        public UInt16 DeviceID { get; set; }
+
+        /// <summary>
+        /// When true, incomming messages that do not carry the expected DeviceID will be rejected with and S9F1 (UDN - Unrecognized Device ID).
+        /// When false, the DeviceID in the incomming message will be ignored, however, messages that are originated from this end will carry this end's configured DeviceID.
+        /// </summary>
+        [NamedValueSetItem]
+        public bool RejectIncorrectDeviceID { get; set; }
 
         /// <summary>Sets the delay before attempting an automatic reconnect.  Set this to null to turn off auto reconnect.  [Defaults to 5.0 seconds]</summary>
         [NamedValueSetItem]
@@ -150,7 +158,14 @@ namespace MosaicLib.Semi.E005.Port
 
         public PortBaseConfig UpdateFromNVS(INamedValueSet nvs, string keyPrefix = "", Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueNoteEmitter = null)
         {
-            NamedValueSetAdapter<PortBaseConfig> adapter = new NamedValueSetAdapter<PortBaseConfig>() { ValueSet = this, IssueEmitter = issueEmitter, ValueNoteEmitter = valueNoteEmitter }.Setup(keyPrefix).Set(nvs, merge: true);
+            NamedValueSetAdapter<PortBaseConfig> adapter = new NamedValueSetAdapter<PortBaseConfig>() 
+            { 
+                ValueSet = this, 
+                IssueEmitter = issueEmitter, 
+                ValueNoteEmitter = valueNoteEmitter 
+            }
+            .Setup(keyPrefix)
+            .Set(nvs, merge: true);
 
             return this;
         }
@@ -237,29 +252,38 @@ namespace MosaicLib.Semi.E005.Port
 		{
 			PortNum = portNum;
             PortType = portType;
-            PortConfigNVS = PortConfigNVS.ConvertToReadOnly();
+            PortConfigNVS = portConfigNVS.ConvertToReadOnly();
 			ManagerPortFacet = managerPortFacet;
-            PortRecording = ManagerPortFacet.PortRecording;
-
-            PortBaseConfig = new Port.PortBaseConfig().UpdateFromNVS(portConfigNVS, issueEmitter: Log.Debug, valueNoteEmitter: Log.Trace);
+            PortRecording = ManagerPortFacet.PortRecording ?? NullPortRecording.Instance;
 
             {
-                var doneMesgType = portConfigNVS["DoneMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
-                var errorMesgType = portConfigNVS["ErrorMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Debug;
-                var stateMesgType = portConfigNVS["StateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
-                var updateMesgType = portConfigNVS["UpdateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var issueMesgType = PortConfigNVS["IssueMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Info;
+                var stateChangeMesgType = PortConfigNVS["StateChangeMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Debug;
 
-                ActionLoggingReference.Config = new ActionLoggingConfig(doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+                IssueEmitter = Log.Emitter(issueMesgType);
+                StateChangeEmitter = Log.Emitter(stateChangeMesgType);
             }
 
             TraceLogger = new Logging.Logger(PartID + ".Trace", Logging.LookupDistributionGroupName);
 
+            PortBaseConfig = new PortBaseConfig();
+            UpdatePortBaseConfig(PortBaseConfig, PortConfigNVS);
+
             {
-                var useTraceLoggerForHighRateMesg = portConfigNVS["UseTraceLoggerForHighRateMesgs"].VC.GetValue<bool?>(rethrow: false) ?? true;
-                var doneHighRateMesgType = portConfigNVS["DoneHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
-                var errorHighRateMesgType = portConfigNVS["ErrorHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
-                var stateHighRateMesgType = portConfigNVS["StateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
-                var updateHighRateMesgType = portConfigNVS["UpdateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+                var doneMesgType = PortConfigNVS["DoneMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var errorMesgType = PortConfigNVS["ErrorMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Debug;
+                var stateMesgType = PortConfigNVS["StateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+                var updateMesgType = PortConfigNVS["UpdateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+
+                ActionLoggingReference.Config = new ActionLoggingConfig(doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            }
+
+            {
+                var useTraceLoggerForHighRateMesg = PortConfigNVS["UseTraceLoggerForHighRateMesgs"].VC.GetValue<bool?>(rethrow: false) ?? true;
+                var doneHighRateMesgType = PortConfigNVS["DoneHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var errorHighRateMesgType = PortConfigNVS["ErrorHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var stateHighRateMesgType = PortConfigNVS["StateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+                var updateHighRateMesgType = PortConfigNVS["UpdateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
 
                 HighRateMesgActionLogging = new ActionLogging(useTraceLoggerForHighRateMesg ? TraceLogger : Log, new ActionLoggingConfig(doneMesgType: doneHighRateMesgType, errorMesgType: errorHighRateMesgType, stateMesgType: stateHighRateMesgType, updateMesgType: updateHighRateMesgType));
             }
@@ -271,16 +295,24 @@ namespace MosaicLib.Semi.E005.Port
             SetConnectionState(PortConnectionState.Initial, CurrentMethodName, QpcTimeStamp.Now);
 		}
 
+        protected void UpdatePortBaseConfig(PortBaseConfig portBaseConfig, INamedValueSet nvs)
+        {
+            portBaseConfig.UpdateFromNVS(nvs, issueEmitter: IssueEmitter, valueNoteEmitter: TraceLogger.Trace);
+        }
+
         protected Manager.IManagerPortFacet ManagerPortFacet { get; private set; }
         protected Manager.IPortRecording PortRecording { get; private set; }
 
         public int PortNum { get; private set; }
         public PortType PortType { get; private set; }
-        public INamedValueSet PortConfigNVS { get; private set; }
+        public INamedValueSet PortConfigNVS { get; protected set; }
 
         public PortBaseConfig PortBaseConfig { get; private set; }
 
         protected ActionLogging HighRateMesgActionLogging { get; private set; }
+
+        public Logging.IMesgEmitter IssueEmitter = Logging.NullEmitter;
+        public Logging.IMesgEmitter StateChangeEmitter = Logging.NullEmitter;
 
         protected Logging.ILogger TraceLogger { get; private set; }
 
@@ -362,8 +394,12 @@ namespace MosaicLib.Semi.E005.Port
                 ec = null;      // completion will be indicated elsewhere.
             }
 
-            if (ec.IsNeitherNullNorEmpty() && PortRecording != null)
+            if (ec.IsNeitherNullNorEmpty())
+            {
                 PortRecording.NoteIssueMesg(this, "SendMessage failed: {0}".CheckedFormat(ec));
+
+                PortRecording.NoteE005MessageSent(this, mesg, ec);
+            }
 
             return ec;
         }
@@ -446,8 +482,7 @@ namespace MosaicLib.Semi.E005.Port
         {
             pendingSendOpsDictionary.Remove(smo.SystemBytes);
 
-            if (PortRecording != null)
-                PortRecording.NoteE005MessageSent(this, smo.Mesg, resultCode);
+            PortRecording.NoteE005MessageSent(this, smo.Mesg, resultCode);
 
             smo.CompleteRequest(resultCode);
         }
@@ -489,24 +524,21 @@ namespace MosaicLib.Semi.E005.Port
             var traceMesgEmitter = GetMesgTraceEmitter(mesg);
             traceMesgEmitter.Emit("Received Mesg {0}", mesg);
 
-            if (PortRecording != null)
-                PortRecording.NoteE005MessageReceived(this, mesg);
-
             StreamFunction sf = mesg.SF;
-            UInt32 systemBytes = mesg.TenByteHeader.SystemBytes;
+            uint systemBytes = mesg.TenByteHeader.SystemBytes;
 
             if (sf.StreamByte == 9 || sf.FunctionByte == 0)
             {
-                // error cases
+                // cases where we have received an error in response to a message we sent to the other end.
 
                 string faultDescription = null;
                 string mesgBodyStr = mesg.GetDecodedContents(throwOnException: false).ToStringSML();
-                UInt32 faultSystemBytes = systemBytes;
+                uint faultSystemBytes = systemBytes;
 
                 if (sf.StreamByte == 9)
                 {
                     var mheadVC = mesg.GetDecodedContents(throwOnException: false);
-                    var mheadByteArray = (mheadVC.GetValue<BiArray>(rethrow: false) ?? BiArray.Empty).SafeToArray();
+                    var mheadByteArray = (mheadVC.GetValueBiArray(rethrow: false) ?? BiArray.Empty).SafeToArray();
 
                     var mheadTBH = new E037.E037TenByteHeader();
                     if (mheadTBH.Decode(mheadByteArray, 0))
@@ -543,16 +575,16 @@ namespace MosaicLib.Semi.E005.Port
                 if (smo != null)
                     NoteReplyReceived(smo, mesg, ec);
                 else
-                    Log.Debug.Emit("Unexpected or late fault reply message received: tbh:{0}, ec:{1}", mesg.TenByteHeader, ec);
+                    IssueEmitter.Emit("Unexpected or late fault reply message received: tbh:{0}, ec:{1}", mesg.TenByteHeader, ec);
             }
             else if (sf.IsPrimary)
             {
-                ManagerPortFacet.PrimaryMesgReceivedFromPort(mesg);
+                var reply = ManagerPortFacet.PrimaryMesgReceivedFromPort(mesg);
 
-                if (mesg.Reply != null)
+                if (reply != null)
                 {
                     traceMesgEmitter.Emit("Sending message handler generated reply to Mesg {0}: {1}", mesg.TenByteHeader, mesg.Reply);
-                    PerformSendMessageAction(mesg.Reply, null);
+                    PerformSendMessageAction(reply, null);
                 }
                 else if (mesg.SF.ReplyExpected)
                 {
@@ -566,7 +598,7 @@ namespace MosaicLib.Semi.E005.Port
                 if (smo != null)
                     NoteReplyReceived(smo, mesg);
                 else
-                    Log.Debug.Emit("Unexpected or late reply message received: tbh:{0}", mesg.TenByteHeader);
+                    IssueEmitter.Emit("Unexpected or late reply message received: tbh:{0}", mesg.TenByteHeader);
             }
 
             return String.Empty;
@@ -617,20 +649,21 @@ namespace MosaicLib.Semi.E005.Port
 
             string mesgStr = "Connection state changed to:'{0}' [from:'{1}' reason:'{2}']".CheckedFormat(state, entryState, reason);
 
-            Log.Info.Emit(mesgStr);
+            StateChangeEmitter.Emit(mesgStr);
 
-            if (PortRecording != null)
             {
-                PortRecording.NoteInfoMesg(this, mesgStr);
+                PortRecording.NoteStateChange(this, new NamedValueSet() { { "ConnectionState", PortConnectionState }, { "PrevConnectionState", entryState } }.MakeReadOnly());
 
                 if (PortConnectionState == PortConnectionState.Failed)
                     reportIssue = true;
 
                 if (reportIssue)
                     PortRecording.NoteIssueMesg(this, mesgStr); 
+                else
+                    PortRecording.NoteInfoMesg(this, mesgStr);
             }
 
-			if (!PortConnectionState.IsSelected())
+            if (!PortConnectionState.IsSelected())
 			{
 				string cancelReason = "PortConnectionState set to non-selected state: " + state.ToString();
 

@@ -25,6 +25,7 @@ using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular.Common;
 using System.Runtime.Serialization;
+using MosaicLib.Modular.Part;
 
 namespace MosaicLib.Modular.Action
 {
@@ -1026,8 +1027,7 @@ namespace MosaicLib.Modular.Action
 
 
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "To preserve backward compatability")]
-        protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
+        protected static EventNotifierPool EventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
 
         /// <summary>Private static SingletonHelper used to create and manage the standard Action's SharedWaitEventNotifierSet</summary>
         private static readonly Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
@@ -1100,7 +1100,10 @@ namespace MosaicLib.Modular.Action
 			if (!actionState.IsPendingCompletion)
 				return actionState.IsComplete;
 
-			IEventNotifier ien = eventNotifierPool.GetInstanceFromPool();
+            IEventNotifier ien = SimpleActivePartBase._threadStaticWakeupNotifier;
+            bool ienIsFromPart = ien != null;
+            if (!ienIsFromPart)
+			    ien = EventNotifierPool.GetInstanceFromPool();
 
             try
             {
@@ -1132,7 +1135,9 @@ namespace MosaicLib.Modular.Action
                     try
                     {
                         NotifyOnComplete.RemoveItem(ien);
-                        eventNotifierPool.ReturnInstanceToPool(ref ien);
+
+                        if (!ienIsFromPart)
+                            EventNotifierPool.ReturnInstanceToPool(ref ien);
                     }
                     catch
                     { 

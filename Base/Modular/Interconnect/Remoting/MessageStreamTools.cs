@@ -27,7 +27,6 @@ using System.Text;
 
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Remoting.Buffers;
 using MosaicLib.Modular.Part;
@@ -1948,7 +1947,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             UInt32 ivaMetaDataSeqNum = iva.MetaDataSeqNum;
 
             ValueContainer vc = iva.VC;
-            bool useInlineVC = UseInlineVC(vc.cvt);
+            bool useInlineVC = UseInlineVC(ref vc);
 
             pushItem.itemFlags = PushItemFlags.None;
 
@@ -2023,7 +2022,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 ValueContainer vc = iva.VC;
                 NamedValueSet mdNVS = iva.MetaData.ConvertToReadOnly().MapEmptyToNull();
 
-                bool useInlineVC = UseInlineVC(vc.cvt);
+                bool useInlineVC = UseInlineVC(ref vc);
                 int idPlusOne = id + 1;
                 IVATracker ivaTracker = new IVATracker()
                 {
@@ -2073,7 +2072,30 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             UpdateTrackerArrays();
         }
 
-        private static bool UseInlineVC(ContainerStorageType cst) { return (cst.IsValueType() || cst.IsNone()); }
+        private static bool UseInlineVC(ref ValueContainer vc) 
+        {
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.None: return true;
+                case ContainerStorageType.Object: return (vc.o == null); // we only use an inlineVC with this type of o is null.
+                case ContainerStorageType.A: return true;
+                case ContainerStorageType.Bi: return (vc.o == null);    // only use inlineVC for the u.bi version of this storage type.
+                case ContainerStorageType.Bo: return true;
+                case ContainerStorageType.I1: return true;
+                case ContainerStorageType.I2: return true;
+                case ContainerStorageType.I4: return true;
+                case ContainerStorageType.I8: return true;
+                case ContainerStorageType.U1: return true;
+                case ContainerStorageType.U2: return true;
+                case ContainerStorageType.U4: return true;
+                case ContainerStorageType.U8: return true;
+                case ContainerStorageType.F4: return true;
+                case ContainerStorageType.F8: return true;
+                case ContainerStorageType.DT: return true;
+                case ContainerStorageType.TS: return true;
+                default: return false;
+            }
+        }
 
         int filterApplicationCount = 0;
 
@@ -2190,6 +2212,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     switch (inlineVC.cvt)
                     {
                         case ContainerStorageType.None: break;
+                        case ContainerStorageType.Object: break;        // this is only used for writing object null
                         case ContainerStorageType.Bo: bw.Write(inlineVC.u.b); break;
                         case ContainerStorageType.Bi: bw.Write(inlineVC.u.bi); break;
                         case ContainerStorageType.I1: bw.Write(inlineVC.u.i8); break;
@@ -2204,6 +2227,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                         case ContainerStorageType.F8: bw.Write(inlineVC.u.f64); break;
                         case ContainerStorageType.TimeSpan: bw.Write(inlineVC.u.i64); break;        // TimeSpan values are stored internally as i64 values
                         case ContainerStorageType.DateTime: bw.Write(inlineVC.u.i64); break;        // DateTime values are stored internally as i64 values
+                        case ContainerStorageType.A:
+                            {
+                                string s = inlineVC.o as string;
+                                if (s != null)
+                                {
+                                    bw.Write(true);
+                                    bw.Write(s);
+                                }
+                                else
+                                {
+                                    bw.Write(false);
+                                }
+                            }
+                            break;
                         default: break;
                     }
                 }
@@ -2229,21 +2266,29 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 {
                     switch (inlineVC.cvt = unchecked((ContainerStorageType)br.ReadByte()))
                     {
-                        case ContainerStorageType.None: break;
-                        case ContainerStorageType.Bo: inlineVC.u.b = br.ReadBoolean(); break;
-                        case ContainerStorageType.Bi: inlineVC.u.bi = br.ReadByte(); break;
-                        case ContainerStorageType.I1: inlineVC.u.i8 = br.ReadSByte(); break;
-                        case ContainerStorageType.I2: inlineVC.u.i16 = br.ReadInt16(); break;
-                        case ContainerStorageType.I4: inlineVC.u.i32 = br.ReadInt32(); break;
-                        case ContainerStorageType.I8: inlineVC.u.i64 = br.ReadInt64(); break;
-                        case ContainerStorageType.U1: inlineVC.u.u8 = br.ReadByte(); break;
-                        case ContainerStorageType.U2: inlineVC.u.u16 = br.ReadUInt16(); break;
-                        case ContainerStorageType.U4: inlineVC.u.u32 = br.ReadUInt32(); break;
-                        case ContainerStorageType.U8: inlineVC.u.u64 = br.ReadUInt64(); break;
-                        case ContainerStorageType.F4: inlineVC.u.f32 = br.ReadSingle(); break;
-                        case ContainerStorageType.F8: inlineVC.u.f64 = br.ReadDouble(); break;
-                        case ContainerStorageType.TimeSpan: inlineVC.u.i64 = br.ReadInt64(); break;        // TimeSpan values are stored internally as i64 values
-                        case ContainerStorageType.DateTime: inlineVC.u.i64 = br.ReadInt64(); break;        // DateTime values are stored internally as i64 values
+                        case ContainerStorageType.None: inlineVC.u.u64 = 0; inlineVC.o = null; break;
+                        case ContainerStorageType.Object: inlineVC.u.u64 = 0; inlineVC.o = null; break;
+                        case ContainerStorageType.Bo: inlineVC.u.b = br.ReadBoolean(); inlineVC.o = null; break;
+                        case ContainerStorageType.Bi: inlineVC.u.bi = br.ReadByte(); inlineVC.o = null; break;
+                        case ContainerStorageType.I1: inlineVC.u.i8 = br.ReadSByte(); inlineVC.o = null; break;
+                        case ContainerStorageType.I2: inlineVC.u.i16 = br.ReadInt16(); inlineVC.o = null; break;
+                        case ContainerStorageType.I4: inlineVC.u.i32 = br.ReadInt32(); inlineVC.o = null; break;
+                        case ContainerStorageType.I8: inlineVC.u.i64 = br.ReadInt64(); inlineVC.o = null; break;
+                        case ContainerStorageType.U1: inlineVC.u.u8 = br.ReadByte(); inlineVC.o = null; break;
+                        case ContainerStorageType.U2: inlineVC.u.u16 = br.ReadUInt16(); inlineVC.o = null; break;
+                        case ContainerStorageType.U4: inlineVC.u.u32 = br.ReadUInt32(); inlineVC.o = null; break;
+                        case ContainerStorageType.U8: inlineVC.u.u64 = br.ReadUInt64(); inlineVC.o = null; break;
+                        case ContainerStorageType.F4: inlineVC.u.f32 = br.ReadSingle(); inlineVC.o = null; break;
+                        case ContainerStorageType.F8: inlineVC.u.f64 = br.ReadDouble(); inlineVC.o = null; break;
+                        case ContainerStorageType.TimeSpan: inlineVC.u.i64 = br.ReadInt64(); inlineVC.o = null; break;        // TimeSpan values are stored internally as i64 values
+                        case ContainerStorageType.DateTime: inlineVC.u.i64 = br.ReadInt64(); inlineVC.o = null; break;        // DateTime values are stored internally as i64 values
+                        case ContainerStorageType.A:
+                            inlineVC.u.u64 = 0;
+                            if (br.ReadBoolean())
+                                inlineVC.o = br.ReadString();
+                            else
+                                inlineVC.o = null;
+                            break;
                     }
                 }
                 else if (!inlineVC.IsEmpty)

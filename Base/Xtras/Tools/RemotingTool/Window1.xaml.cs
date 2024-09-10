@@ -22,17 +22,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Windows.Threading;
 
 using MosaicLib;
 using MosaicLib.Modular.Action;
@@ -42,11 +34,9 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Remoting;
 using MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools;
-using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
-using MosaicLib.Utils.StringMatching;
 using MosaicLib.WPF.Interconnect;
 
 using Modular = MosaicLib.Modular;

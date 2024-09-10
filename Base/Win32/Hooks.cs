@@ -20,16 +20,12 @@
  */
 
 using System;
-using System.Security.AccessControl;
 using System.Runtime.InteropServices;
 
-using MosaicLib;
 using MosaicLib.Utils;
 
 namespace MosaicLib.Win32.Hooks
 {
-    using Microsoft.Win32;      // this using is located here to address namespace and symbol definition overlap issues in this source.
-
     #region Fcns static class
 
     /// <summary>

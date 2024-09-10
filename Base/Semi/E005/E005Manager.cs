@@ -37,14 +37,14 @@ namespace MosaicLib.Semi.E005.Manager
     /// <summary>
     /// This delegate type is used by Stream/Function handling entities when registering their interest in processing or observing receieved messages in a specific stream function or set thereof.
     /// Only one such processing delegate may be registered for any given stream/function, but many observing delegates may do so.
-    /// <para/>The delegate is passed the <paramref name="mesg"/> instance that has been received and which is to be processed/observed.
-    /// For processing cases where the <paramref name="mesg"/> expects a reply, the delegate may assign the reply to send to the given <paramref name="mesg"/> instance and the caller will send the reply for it, 
+    /// <para/>The delegate is passed the <paramref name="rxMesg"/> instance that has been received and which is to be processed/observed.
+    /// For processing cases where the <paramref name="rxMesg"/> expects a reply, the delegate may assign the reply to send to the given <paramref name="rxMesg"/> instance and the caller will send the reply for it, 
     /// however the delegate cannot make use of internally blocking or time consumptive paths in this case as doing so would significantly decrease the performance of the host interface and
     /// could lead to deadlock conditions.
-    /// <para/>For processing cases where the <paramref name="mesg"/> expects a reply but where the delegate cannot immediately generate the reply, the delegate shall arrange for the reply to be sent at a
-    /// later time and shall return instead of assigning the reply message to the given <paramref name="mesg"/> directly.
+    /// <para/>For processing cases where the <paramref name="rxMesg"/> expects a reply but where the delegate cannot immediately generate the reply, the delegate shall arrange for the reply to be sent at a
+    /// later time and shall return instead of assigning the reply message to the given <paramref name="rxMesg"/> directly.
     /// </summary>
-    public delegate void ReceivedMessageProcessingDelegate(IMessage mesg);
+    public delegate void ReceivedMessageProcessingDelegate(IMessage rxMesg);
 
     //-------------------------------------------------------------------
 
@@ -61,7 +61,7 @@ namespace MosaicLib.Semi.E005.Manager
         /// Method that is used by IPort objects to tell the manager about primary messages that have been received.  
         /// Manager is reponsible for implementing all handler logic for this message including error checking, and distribution to the Stream/Function and port appropriate handler
         /// </summary>
-		void PrimaryMesgReceivedFromPort(IMessage mesg);
+		IMessage PrimaryMesgReceivedFromPort(IMessage mesg);
 
         /// <summary>Returns a sequence number to use as DATAID values in client code.  Will be unique accross all of the ports that make use of this manager instance.</summary>
         UInt32 GetNextDATAID();
@@ -99,12 +99,16 @@ namespace MosaicLib.Semi.E005.Manager
         IPort CreatePort(string portName = null, PortType portType = default(PortType), bool makeDefault = false, INamedValueSet portConfigNVS = null, bool goOnline = false);
 
         /// <summary>
-        /// Starts all of the created ports, as needed, and optionally initializes them.
-        /// <para/>Note: ports must be explicitly started before messages can be sent using them.
+        /// Starts all of the created ports, as needed, 
+        /// and optionally initializes them using a CreateGoOnlineAction(true) action.
+        /// <para/>Note: ports must be explicitly started and connected before messages can be sent using them.
         /// </summary>
         string StartPortsIfNeeded(bool initializePorts = true);
 
-        /// <summary>Stops all of the created ports as needed.  If <paramref name="goOffline"/> is true then a GoOffline action will be run first.</summary>
+        /// <summary>
+        /// Stops all of the created ports as needed.  
+        /// If <paramref name="goOffline"/> is true then a GoOffline action will be run first.
+        /// </summary>
         void StopPortsIfNeeded(bool goOffline = true);
 
         /// <summary>Returns the default port for this manager.  The first call to this property getter will either return the first explicitly defined default port or it will assign the default port to be the first one (PortNum 1).  Throws ManagerException if no ports have been added when this property getter is first used.</summary>
@@ -119,11 +123,22 @@ namespace MosaicLib.Semi.E005.Manager
         /// <summary>
         /// Attempts to register the given <paramref name="handler"/> to handle the given <paramref name="streamFunctionParamsArray"/> set of streams/functions/Wbits to Process messages for.
         /// <para/>Note that both bytes of the stream/function in the header are indexed on so that the caller can use a different handler for a stream/function with and without the W bit set.
-        /// <para/>Note that to register a hanlder for an entire stream use function 0 in the registration call.  Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
+        /// <para/>Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
         /// </summary>
         void RegisterSFProcessingHandler(ReceivedMessageProcessingDelegate handler, params StreamFunction[] streamFunctionParamsArray);
 
-        /// <summary>Flags that the given set of stream/function values are considered high rate.</summary>
+        /// <summary>
+        /// Attempts to register the given <paramref name="handler"/> to handle the given <paramref name="streamParamsArray"/> set of streams/Wbits to Process messages for.
+        /// This method is used to register "stream/wbit" wide handlers.  Please note that the function values provided here are ignored by this method.
+        /// <para/>Note that the sbyte of the stream in the header are indexed on so that the caller can use a different handler for a stream with and without the W bit set.
+        /// <para/>Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
+        /// </summary>
+        void RegisterWholeStreamProcessingHandler(ReceivedMessageProcessingDelegate handler, params StreamFunction[] streamParamsArray);
+
+        /// <summary>
+        /// Flags that the given set of stream/function values are considered high rate.
+        /// High rate stream/functions are generally logged using different log levels than normal stream functions.
+        /// </summary>
         void SetSFSetAsHighRate(params StreamFunction[] streamFunctionParamsArray);
 
         /// <summary>Returns a sequence number to use as DATAID values in client code.  Will be unique accross all of the ports that make use of this manager instance.</summary>
@@ -144,8 +159,57 @@ namespace MosaicLib.Semi.E005.Manager
     }
 
     /// <summary>
+    /// This exception may be thrown by message decoding and handler logic to trigger standard message decoding and handling response patterns.
+    /// </summary>
+    public class MessageHandlingException : System.Exception
+    {
+        /// <summary>
+        /// Constructor.  Client code must provide the <paramref name="errorSF"/> which is used to identify the specific failure
+        /// and must provided the <paramref name="rxMesg"/> against which the error condition was detected.
+        /// </summary>
+        public MessageHandlingException(StreamFunction errorSF, IMessage rxMesg, string message = null, Exception innerException = null)
+            : base(message, innerException)
+        {
+            ErrorSF = errorSF;
+            MessageFaultReplyType = errorSF.GetMessageFaultReplyTypeForErrorSF();
+            RxMesg = rxMesg;
+        }
+
+        /// <summary>
+        /// Gives the Error condition that was detected
+        /// </summary>
+        public StreamFunction ErrorSF { get; private set; }
+
+        /// <summary>
+        /// Gives the <see cref="MessageFaultReplyType"/> that is to be used when reporting this fault.
+        /// </summary>
+        public MessageFaultReplyType MessageFaultReplyType { get; private set; }
+
+        /// <summary>
+        /// Gives the <see cref="E005.IMessage"/> instance that on which the <see cref="ErrorSF"/> was detected.
+        /// </summary>
+        public IMessage RxMesg { get; private set; }
+
+        public override string ToString()
+        {
+            string mesgHeaderStr = ((RxMesg != null) ? RxMesg.TenByteHeader : null).SafeToString(mapNullTo: "null");
+
+            return "{0}: Error Response SF:{1} for message header '{2}' ['{3}', {4}]".CheckedFormat(Fcns.CurrentClassLeafName, ErrorSF, mesgHeaderStr, Message, MessageFaultReplyType);
+        }
+    }
+
+    /// <summary>
     /// This interface is used to report various Port communication related events for recording and/or reporting through alternate means.
     /// </summary>
+    /// <remarks>
+    /// This interface is implemented by the following classes (in this library set):
+    /// <list type="bullet">
+    /// <item>the Mosaic.ToolsLib.Semi.E005.PortRecording.MDRF2PortRecording class</item>
+    /// <item><see cref="NullPortRecording"/></item>
+    /// </list>
+    /// <para/>
+    /// In the case of the MDRF2PortRecording, each method uses a seperate keyID set
+    /// </remarks>
     public interface IPortRecording
     {
         /// <summary>The port uses this method to report state changes and other informational messages</summary>
@@ -153,6 +217,12 @@ namespace MosaicLib.Semi.E005.Manager
 
         /// <summary>The port uses this method to report messages about issues it detects/encounters including communication related issues and decoding/delivery related issues.</summary>
         void NoteIssueMesg(IPort port, string issueMesg);
+
+        /// <summary>The port uses this method to report informational objects such as state changes messages, etc.</summary>
+        void NoteInfoObject(IPort port, object infoItem);
+
+        /// <summary>The port uses this method to report issues such as error messages or exception contents</summary>
+        void NoteIssueObject(IPort port, object issueObject);
 
         /// <summary>
         /// The port calls this method to report just before it starts to write a header to the communication layer.
@@ -179,6 +249,63 @@ namespace MosaicLib.Semi.E005.Manager
         /// This takes place before it passes the messages to any registered SF handlers.
         /// </summary>
         void NoteE005MessageReceived(IPort port, IMessage mesg);
+
+        /// <summary>
+        /// This method is used to record state change information for the given <paramref name="port"/>.
+        /// The details about the state change (state names and new values) are passed in the given <paramref name="nvs"/> instance.
+        /// </summary>
+        void NoteStateChange(IPort port, INamedValueSet nvs);
+
+        /// <summary>
+        /// This method is used to record externally provided state change information that may usefully be associated with other related information that is recorded here.
+        /// Generally the caller is expected to pass the <paramref name="informationIDTokenStr"/> as a string like "PortName.ContextName".
+        /// The implementation class will generally prefix this given <paramref name="informationIDTokenStr"/> with the same key prefix that is uses
+        /// for the other methods in this interface such as "PortRecording.".
+        /// The <paramref name="o"/> may be any object type that the recording target (such as MDRF2) knows how to serialize.
+        /// </summary>
+        void NoteRecordAssociatedInformationObject(string informationIDTokenStr, object o);
+    }
+
+    public class NullPortRecording : IPortRecording
+    {
+        /// <summary>
+        /// Returns a singleton (immutable) instance of this <see cref="NullPortRecording"/> object.
+        /// </summary>
+        public static IPortRecording Instance { get { return _Instance; } }
+        private static IPortRecording _Instance = new NullPortRecording();
+
+        /// <inheritdoc/>
+        public void NoteInfoMesg(IPort port, string infoMesg) { }
+
+        /// <inheritdoc/>
+        public void NoteIssueMesg(IPort port, string issueMesg) { }
+
+        /// <inheritdoc/>
+        public void NoteInfoObject(IPort port, object o) { }
+
+        /// <inheritdoc/>
+        public void NoteIssueObject(IPort port, object o) { }
+
+        /// <inheritdoc/>
+        public void NoteE005HeaderReceived(IPort port, ITenByteHeader tbh) { }
+
+        /// <inheritdoc/>
+        public void NoteE005MessageReceived(IPort port, IMessage mesg) { }
+
+        /// <inheritdoc/>
+        public void NoteE005MessageSent(IPort port, IMessage mesg, string resultCode) { }
+
+        /// <inheritdoc/>
+        public void NoteSendingE005Header(IPort port, ITenByteHeader tbh) { }
+
+        /// <inheritdoc/>
+        public void NoteSendingE005Message(IPort port, IMessage mesg) { }
+
+        /// <inheritdoc/>
+        public void NoteStateChange(IPort port, INamedValueSet nvs) { }
+
+        /// <inheritdoc/>
+        public void NoteRecordAssociatedInformationObject(string informationIDTokenStr, object o) { }
     }
 
     /// <summary>
@@ -187,16 +314,30 @@ namespace MosaicLib.Semi.E005.Manager
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Attempts to register the given <paramref name="handler"/> to handle the parsed results from the given <paramref name="streamFunctionStrParamsArray"/> set of StreamFunction strings to Process messages for.
+        /// Attempts to register the given <paramref name="handler"/> to handle the given <paramref name="streamFunctionStrParamsArray"/> set of StreamFunction strings to Process messages for.
         /// <para/>Note that both bytes of the stream/function in the header are indexed on so that the caller can use a different handler for a stream/function with and without the W bit set.
-        /// <para/>Note that to register a hanlder for an entire stream use function 0 in the registration call.  Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
+        /// <para/>Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
         /// </summary>
         public static void RegisterSFProcessingHandler(this IManager manager, ReceivedMessageProcessingDelegate handler, params string[] streamFunctionStrParamsArray)
         {
             manager.RegisterSFProcessingHandler(handler, streamFunctionStrParamsArray.Select(sfStr => sfStr.ParseAsStreamFunction()).ToArray());
         }
 
-        /// <summary>Flags that the given set of stream/function values are considered high rate.</summary>
+        /// <summary>
+        /// Attempts to register the given <paramref name="handler"/> to handle the given <paramref name="streamStrParamsArray"/> set of StreamFunction strings to Process messages for.
+        /// This method is used to register "stream/wbit" wide handlers.  Please note that the function values provided here are ignored by this method.
+        /// <para/>Note that the sbyte of the stream in the header are indexed on so that the caller can use a different handler for a stream with and without the W bit set.
+        /// <para/>Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
+        /// </summary>
+        public static void RegisterWholeStreamProcessingHandler(this IManager manager, ReceivedMessageProcessingDelegate handler, params string[] streamStrParamsArray)
+        {
+            manager.RegisterWholeStreamProcessingHandler(handler, streamStrParamsArray.Select(sfStr => sfStr.ParseAsStreamFunction()).ToArray());
+        }
+
+        /// <summary>
+        /// Flags that the given set of stream/function values are considered high rate.
+        /// High rate stream/functions are generally logged using different log levels than normal stream functions.
+        /// </summary>
         public static void SetSFSetAsHighRate(this IManager manager, params string[] streamFunctionStrParamsArray)
         {
             manager.SetSFSetAsHighRate(streamFunctionStrParamsArray.Select(sfStr => sfStr.ParseAsStreamFunction()).ToArray());
@@ -332,8 +473,6 @@ namespace MosaicLib.Semi.E005.Manager
                 IPort[] relevantPortArray = EmptyArrayFactory<IPort>.Instance;
                 if (initializePorts)
                     relevantPortArray = portArray.Where(port => { var baseState = port.BaseState; return !baseState.IsOnlineAndConnected(); }).ToArray();
-                //else
-                //    relevantPortArray = portArray.Where(port => { var baseState = port.BaseState; return (baseState.IsOffline() || baseState.IsUninitialized() || baseState.UseState == UseState.AttemptOnlineFailed); }).ToArray();
 
                 IClientFacet[] icfArray = relevantPortArray.Select(port => port.CreateGoOnlineAction(initializePorts).StartInline()).ToArray();
 
@@ -362,6 +501,7 @@ namespace MosaicLib.Semi.E005.Manager
             }
         }
 
+        /// <inheritdoc/>
         public IPort DefaultPort
         {
             get
@@ -379,7 +519,7 @@ namespace MosaicLib.Semi.E005.Manager
             }
         }
 
-        /// <summary>Returns the set of ports that currently belong to this manager instance.</summary>
+        /// <inheritdoc/>
         public ReadOnlyIList<IPort> PortSet
         {
             get
@@ -409,18 +549,26 @@ namespace MosaicLib.Semi.E005.Manager
             return port;
         }
 
-        /// <summary>
-        /// Attempts to register the given <paramref name="handler"/> to handle the given <paramref name="streamFunctionParamsArray"/> set of streams/functions/Wbits to Process messages for.
-        /// <para/>Note that both bytes of the stream/function in the header are indexed on so that the caller can use a different handler for a stream/function with and without the W bit set.
-        /// <para/>Note that to register a hanlder for an entire stream use function 0 in the registration call.  Function specific registrations take priority over whole stream handlers so the use of the two types can be mixed.
-        /// </summary>
         void IManager.RegisterSFProcessingHandler(ReceivedMessageProcessingDelegate handler, params StreamFunction[] streamFunctionParamsArray)
         {
             lock (mainAPIMutex)
             {
                 foreach (var sf in streamFunctionParamsArray.MapNullToEmpty())
                 {
-                    string ec = InnerAddHandler(handler, sf);
+                    string ec = InnerAddSFHandler(handler, sf, forEntireStream: false);
+                    if (ec.IsNeitherNullNorEmpty())
+                        new ManagerException(ec).Throw();
+                }
+            }
+        }
+
+        void IManager.RegisterWholeStreamProcessingHandler(MosaicLib.Semi.E005.Manager.ReceivedMessageProcessingDelegate handler, params MosaicLib.Semi.E005.StreamFunction[] streamParamsArray)
+        {
+            lock (mainAPIMutex)
+            {
+                foreach (var sf in streamParamsArray.MapNullToEmpty())
+                {
+                    string ec = InnerAddSFHandler(handler, sf, forEntireStream: true);
                     if (ec.IsNeitherNullNorEmpty())
                         new ManagerException(ec).Throw();
                 }
@@ -478,54 +626,39 @@ namespace MosaicLib.Semi.E005.Manager
 
         #region IManagerPortFacet explicit implementation
 
-        private Utils.AtomicUInt32 mesgSeqNumGenerator = new MosaicLib.Utils.AtomicUInt32(0);
+        private AtomicUInt32 mesgSeqNumGenerator = new AtomicUInt32(0);
 
         UInt32 IManagerPortFacet.GetNextMessageSequenceNum()
         {
             return mesgSeqNumGenerator.IncrementSkipZero();
         }
 
-        void IManagerPortFacet.PrimaryMesgReceivedFromPort(IMessage mesg)
+        IMessage IManagerPortFacet.PrimaryMesgReceivedFromPort(IMessage rxMesg)
         {
-            ReceivedMessageProcessingDelegate handler = AsyncGetProcessHandler(mesg.SF);
-
-            bool sendFaultReply = false;
-            if (handler != null)
+            try
             {
-                try
-                {
-                    handler(mesg);
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Debug.Emit("Handler failed on Mesg {0} generated unexpected exception: {1}", mesg, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                ReceivedMessageProcessingDelegate handler = InnerGetSFHandler(rxMesg.SF);
 
-                    sendFaultReply = mesg.SF.ReplyExpected;
-                }
+                handler(rxMesg);
 
-                // the calling port will send the reply
+                return rxMesg.Reply;
             }
-            else
+            catch (MessageHandlingException)
             {
-                if (mesg.SF.ReplyExpected)
-                {
-                    // send an S<n>/F0 reply (header only) to indicate that the message was rejected
-                    Log.Trace.Emit("No handler found for Mesg {0} received from port:{1}.  Sending reject notice to F0", mesg.TenByteHeader, mesg.Port.PortNum);
-
-                    sendFaultReply = true;
-                }
-                else
-                {
-                    Log.Debug.Emit("No handler found for Mesg {0} received from port:{1}.  Ignoring", mesg.TenByteHeader, mesg.Port.PortNum);
-                }
+                throw;      // this exception will be noted and recorded elsewhere
             }
-
-            if (sendFaultReply)
+            catch (System.Exception ex)
             {
-                var faultReplyMesg = mesg.Port.CreateMessage(mesg.SF.TransactionAbortReplySF);
-                faultReplyMesg.SeqNum = mesg.SeqNum;
+                PortRecording.NoteIssueObject(rxMesg.Port, new NamedValueSet()
+                {
+                    { "mesgStr", "Handler generated unexpected exception" },
+                    { "rxMesgHeader", new BiArray(rxMesg.TenByteHeader.ByteArray).CreateVC()},
+                    { "ex", ex }
+                });
 
-                mesg.SetReply(faultReplyMesg, replaceReply: true);
+                var message = "Handler generated unexpected exception: " + ex.ToString(ExceptionFormat.TypeAndMessage);
+
+                throw new MessageHandlingException(rxMesg.SF.TransactionAbortReplySF, rxMesg, message, ex);
             }
         }
 
@@ -536,7 +669,7 @@ namespace MosaicLib.Semi.E005.Manager
 
         #endregion
 
-        #region StreamFunction Handler lookup table and related logic (InnerAddHandler, AsyncGetProcessHandler)
+        #region StreamFunction Handler lookup table and related logic (InnerAddHandler, InnerGetSFHandler, InvalidStreamHandler, InvalidFunctionHandler)
 
         private readonly PerStreamHandlerLookupTableItem[] perStreamHandlerLookupTableArray = new PerStreamHandlerLookupTableItem[256];
 
@@ -546,14 +679,13 @@ namespace MosaicLib.Semi.E005.Manager
             public volatile ReceivedMessageProcessingDelegate fallbackStreamHandler;
         }
 
-        private string InnerAddHandler(ReceivedMessageProcessingDelegate handler, StreamFunction sf)
+        private string InnerAddSFHandler(ReceivedMessageProcessingDelegate handler, StreamFunction sf, bool forEntireStream)
         {
             if (handler == null)
                 return "handler is null";
 
             byte streamAndWByte = sf.Byte2;
             byte functionByte = sf.FunctionByte;
-            bool forEntireStream = (functionByte == 0);
 
             if (streamAndWByte == 0 || !perStreamHandlerLookupTableArray.IsSafeIndex(streamAndWByte))
                 return "{0} is not valid".CheckedFormat(sf);
@@ -584,14 +716,31 @@ namespace MosaicLib.Semi.E005.Manager
             return string.Empty;
         }
 
-        private ReceivedMessageProcessingDelegate AsyncGetProcessHandler(StreamFunction sf)
+        /// <summary>
+        /// Attempts to find the registered handler to use with the given <paramref name="sf"/> <see cref="StreamFunction"/>.
+        /// If no appropriate handler can be found then this method either returns the <see cref="InvalidStreamHandler(IMessage, string)"/>
+        /// or the <see cref="InvalidFunctionHandler(IMessage, string)"/>.  This method does not return null.
+        /// </summary>
+        private ReceivedMessageProcessingDelegate InnerGetSFHandler(StreamFunction sf)
         {
             PerStreamHandlerLookupTableItem asyncLevel1Item = perStreamHandlerLookupTableArray.SafeAccess(sf.Byte2);
 
             if (asyncLevel1Item == null)
-                return null;
+                return (rxMesg => InvalidStreamHandler(rxMesg, "{0} has no registered Stream handler".CheckedFormat(sf)));
 
-            return asyncLevel1Item.perFunctionHandlerArray.SafeAccess(sf.FunctionByte) ?? asyncLevel1Item.fallbackStreamHandler;
+            return asyncLevel1Item.perFunctionHandlerArray.SafeAccess(sf.FunctionByte) 
+                ?? asyncLevel1Item.fallbackStreamHandler 
+                ?? (rxMesg => InvalidFunctionHandler(rxMesg, "{0} has no registered Function handler handler".CheckedFormat(sf)));
+        }
+
+        protected void InvalidStreamHandler(IMessage rxMesg, string message)
+        {
+            throw new MessageHandlingException(StreamFunction.S9F3_USN, rxMesg, message);
+        }
+
+        protected void InvalidFunctionHandler(IMessage rxMesg, string message)
+        {
+            throw new MessageHandlingException(StreamFunction.S9F5_UFN, rxMesg, message);
         }
 
         #endregion

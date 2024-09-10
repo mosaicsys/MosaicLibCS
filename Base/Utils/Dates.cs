@@ -20,8 +20,7 @@
  */
 
 using System;
-using System.Text;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Utils
 {
@@ -48,6 +47,7 @@ namespace MosaicLib.Utils
         /// This method converts the given <paramref name="dt"/> DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
         /// <para/>This is based on the existing DateTime.ToFileTimeUtc() method which automatically converts the given <paramref name="dt"/> to UTC before converting the date to a FTIME value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double GetUTCTimeSince1601(this DateTime dt, bool mapZero = true)
         {
             if (dt.IsZero() && mapZero)
@@ -62,6 +62,7 @@ namespace MosaicLib.Utils
         /// <para/>If the given <paramref name="utcTimeSince1601"/> is either infinity and <paramref name="mapInfinities"/> is given as true (the default)
         /// Then this method returns DateTime.MaxValue for PositiveInfinity and DateTime.MinValue for NegativeInfinity.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601, bool mapInfinities = true, bool mapZero = true)
         {
             if (utcTimeSince1601 == 0.0 && mapZero)

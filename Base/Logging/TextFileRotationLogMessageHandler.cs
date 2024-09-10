@@ -22,7 +22,6 @@
 
 using System;
 
-using MosaicLib;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 

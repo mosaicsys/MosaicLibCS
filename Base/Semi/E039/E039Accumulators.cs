@@ -20,26 +20,12 @@
  */
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Text;
 
-using MosaicLib;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Interconnect;
-using MosaicLib.Modular.Interconnect.Sets;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Part;
-using MosaicLib.Modular.Persist;
-using MosaicLib.Modular.Reflection.Attributes;
-using MosaicLib.Semi;
-using MosaicLib.Semi.E039.Details;
 using MosaicLib.Time;
 using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Semi.E039.Accumulators
 {

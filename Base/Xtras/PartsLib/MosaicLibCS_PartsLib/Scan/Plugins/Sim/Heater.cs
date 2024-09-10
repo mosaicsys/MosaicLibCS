@@ -21,7 +21,6 @@
 
 using System;
 
-using MosaicLib;
 using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.PartsLib.Scan.ScanEngine;

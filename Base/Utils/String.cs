@@ -23,6 +23,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Text;
 
@@ -45,6 +46,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of String.IsNullOrEmpty(s).  Returns true if, and only if, the given string <paramref name="s"/> is null or is String.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty(this string s)
         {
             return string.IsNullOrEmpty(s);
@@ -53,6 +55,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if, and only if, the given string <paramref name="s"/> is neither null nor empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNeitherNullNorEmpty(this string s)
         {
             return !string.IsNullOrEmpty(s);
@@ -63,18 +66,20 @@ namespace MosaicLib.Utils
         #region static String value mapping functions (MapNullToEmpty, MabNullOrEmptyTo, MapEmptyTo, MapNullTo, MapEmptyToNull)
 
         /// <summary>Maps the given string value to the empty string if it is null</summary>
-		/// <param name="s">The string to test for null and optionally map</param>
-		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
-		public static string MapNullToEmpty(this string s) 
+        /// <param name="s">The string to test for null and optionally map</param>
+        /// <returns>The given string s if it was not null or the empty string if it was.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string MapNullToEmpty(this string s) 
         { 
             return (s ?? string.Empty); 
         }
 
-		/// <summary>Maps the given string s value to the given mappedS value if the given s is null or empty</summary>
-		/// <param name="s">The string to test for null or empty and to optionally map</param>
-		/// <param name="mappedS">The string value to return when the reference string s is null or empty</param>
-		/// <returns>The given string s if it was not null and not empty or the given string mappedS.</returns>
-		public static string MapNullOrEmptyTo(this string s, string mappedS) 
+        /// <summary>Maps the given string s value to the given mappedS value if the given s is null or empty</summary>
+        /// <param name="s">The string to test for null or empty and to optionally map</param>
+        /// <param name="mappedS">The string value to return when the reference string s is null or empty</param>
+        /// <returns>The given string s if it was not null and not empty or the given string mappedS.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string MapNullOrEmptyTo(this string s, string mappedS) 
         { 
             return (string.IsNullOrEmpty(s) ? mappedS : s); 
         }
@@ -83,6 +88,7 @@ namespace MosaicLib.Utils
         /// When the given string <paramref name="s"/> is the empty string then this method returns the given <paramref name="mapEmptyTo"/> value,
         /// otherwise this method returns the given <paramref name="s"/> value without change.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string MapEmptyTo(this string s, string mapEmptyTo = null)
         {
             return ((s == string.Empty) ? mapEmptyTo : s);
@@ -92,6 +98,7 @@ namespace MosaicLib.Utils
         /// When the given string <paramref name="s"/> is null then this method returns the given <paramref name="mapNullTo"/> value,
         /// otherwise this method returns the given <paramref name="s"/> value without change.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string MapNullTo(this string s, string mapNullTo)
         {
             return (s ?? mapNullTo);
@@ -101,6 +108,7 @@ namespace MosaicLib.Utils
         /// When the given string <paramref name="s"/> is the empty string then this method returns null,
         /// otherwise this method returns the given <paramref name="s"/> value without change.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string MapEmptyToNull(this string s)
         {
             return ((s == string.Empty) ? null : s);
@@ -128,13 +136,13 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
-        /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
-        /// valueForNull is returned if the given string is null.
+        /// Returns true if all of the characters in the given string <paramref name="s"/> have char values from 32 to 127, or is empty.
+        /// If <paramref name="otherExcludeCharsSet"/> is not null then the method returns false if any character in <paramref name="s"/> is also included in the given <paramref name="otherExcludeCharsSet"/> set.
+        /// <paramref name="valueForNull"/> is returned if the given string <paramref name="s"/> is <see langword="null"/>.
         /// </summary>
-        public static bool IsBasicAscii(this string s, IList<char> otherExcludeCharsList, bool valueForNull = true, char ? escapeChar = null)
+        public static bool IsBasicAscii(this string s, ISet<char> otherExcludeCharsSet, bool valueForNull = true, char? escapeChar = null)
         {
-            if (otherExcludeCharsList == null)
+            if (otherExcludeCharsSet == null)
                 return s.IsBasicAscii(valueForNull: valueForNull, escapeChar: escapeChar);
 
             if (s == null)
@@ -142,16 +150,29 @@ namespace MosaicLib.Utils
 
             foreach (char c in s)
             {
-                if (!c.IsBasicAscii() || otherExcludeCharsList.Contains(c) || c == escapeChar)
+                if (!c.IsBasicAscii() || otherExcludeCharsSet.Contains(c) || c == escapeChar)
                     return false;
             }
 
             return true;
         }
 
+
+        /// <summary>
+        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
+        /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
+        /// valueForNull is returned if the given string is null.
+        /// </summary>
+        [Obsolete("This method is currently not used and will likely be removed in the future (2024-07-23)")]
+        public static bool IsBasicAscii(this string s, IList<char> otherExcludeCharsList, bool valueForNull = true, char ? escapeChar = null)
+        {
+            return s.IsBasicAscii(otherExcludeCharsSet: otherExcludeCharsList.ConvertToHashSet(), valueForNull: valueForNull, escapeChar: escapeChar);
+        }
+
         /// <summary>
         /// Returns true if the given char c's value is between 32 and 127.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsBasicAscii(this char c, char? escapeChar = null)
         {
             if (c < 32 || c > 127 || c == escapeChar)
@@ -163,6 +184,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given char c's value is between 32 and 127.  If otherExcludeCharsList is not null then the method returns false if the given char c is included in the given otherExcludeCharsList.
         /// </summary>
+        [Obsolete("This method is currently not used and will likely be removed in the future (2024-07-23)")]
         public static bool IsBasicAscii(this char c, IList<char> otherExcludeCharsList, char? escapeChar = null)
         {
             if (!c.IsBasicAscii(escapeChar: escapeChar))
@@ -173,6 +195,58 @@ namespace MosaicLib.Utils
 
             return true;
         }
+
+        #endregion
+
+        #region static String whitespace predicate method(s) (HasWhitespace, SplitOnWhiteSpace)
+
+        /// <summary>
+        /// Returns true if the given <paramref name="s"/> contains at least one white space character (defined below)
+        /// </summary>
+        /// <remarks>
+        /// White space is defined as: new[] { ' ', '\t', '\r', '\n', '\f', '\v', '\u0085', '\u00a0' }
+        /// </remarks>
+        public static bool HasWhiteSpace(this string s)
+        {
+            if (s.IsNeitherNullNorEmpty())
+            {
+                var sLen = s.Length;
+                for (int index = 0; index < sLen; index++)
+                {
+                    var c = s[index];
+                    switch (c)
+                    {
+                        case ' ': return true;      // space
+                        case '\t': return true;     // tab
+                        case '\r': return true;     // carriage return
+                        case '\n': return true;     // newline
+                        case '\f': return true;     // page feed
+                        case '\v': return true;     // vertical tab
+                        case '\u0085': return true; // next line
+                        case '\u00a0': return true; // non-breaking space
+                        default: break;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Splits the given <see langword="string"/> <paramref name="s"/> on white space using 
+        /// <see cref="String.Split(char[], int, StringSplitOptions)"/> with the given
+        /// <paramref name="maxCount"/> and <paramref name="stringSplitOptions"/> values.
+        /// </summary>
+        /// <remarks>
+        /// White space is defined as: new[] { ' ', '\t', '\r', '\n', '\f', '\v', '\u0085', '\u00a0' }
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string[] SplitOnWhiteSpace(this string s, int maxCount = int.MaxValue, StringSplitOptions stringSplitOptions = StringSplitOptions.RemoveEmptyEntries)
+        {
+            return s.MapNullToEmpty().Split(standardWhiteSpaceCharSet, maxCount, options: stringSplitOptions);
+        }
+
+        private static readonly char[] standardWhiteSpaceCharSet = new[] { ' ', '\t', '\r', '\n', '\f', '\v', '\u0085', '\u00a0' };
 
         #endregion
 
@@ -225,13 +299,13 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string GenerateJSONVersion(this string s, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(jsonForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
+            if (s.IsBasicAscii(jsonForceEscapeCharSet, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(jsonForceEscapeCharList, escapeChar: escapeChar);
+            return s.GenerateEscapedVersion(jsonForceEscapeCharSet, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> jsonForceEscapeCharList = new ReadOnlyIList<char>(new [] { '\"' });
+        private static readonly ISet<char> jsonForceEscapeCharSet = new ReadOnlyHashSet<char>(new [] { '\"' });
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for logging.
@@ -251,13 +325,13 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string GenerateQuotableVersion(this string s, bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(quotesForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
+            if (s.IsBasicAscii(quotesForceEscapeCharSet, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(quotesForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
+            return s.GenerateEscapedVersion(quotesForceEscapeCharSet, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> quotesForceEscapeCharList = new ReadOnlyIList<char>(new [] { '\'', '\"' });
+        private static readonly ISet<char> quotesForceEscapeCharSet = new ReadOnlyHashSet<char>(new [] { '\'', '\"' });
 
         /// <summary>
         /// Generate and return a Square Bracket escaped version of given string s.
@@ -265,33 +339,32 @@ namespace MosaicLib.Utils
         /// </summary>
         public static string GenerateSquareBracketEscapedVersion(this string s, bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(squareBracketForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
+            if (s.IsBasicAscii(squareBracketForceEscapeCharSet, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(squareBracketForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
+            return s.GenerateEscapedVersion(squareBracketForceEscapeCharSet, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> squareBracketForceEscapeCharList = new ReadOnlyIList<char>(new [] { '[', ']' });
-
+        private static readonly ISet<char> squareBracketForceEscapeCharSet = new ReadOnlyHashSet<char>(new [] { '[', ']' });
 
         /// <summary>
         /// Generate and return "escaped" version of given string <paramref name="s"/>.
-        /// When <paramref name="extraEscapeCharList"/> is non-empty then this method also generates escaped version of any other characters that are explicitly included in it.
+        /// When <paramref name="extraEscapeCharSet"/> is non-empty then this method also generates escaped version of any other characters that are explicitly included in it.
         /// <para/>Supports use for general JSON style escapeing.
         /// </summary>
-        public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList = null, string fallbackValue = "", bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
+        public static string GenerateEscapedVersion(this string s, ISet<char> extraEscapeCharSet = null, string fallbackNullValue = "", bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
             if (s == null)
-                return fallbackValue;
+                return fallbackNullValue;
 
-            bool hasEscapeList = !extraEscapeCharList.IsNullOrEmpty();
+            bool hasEscapeSet = !extraEscapeCharSet.IsNullOrEmpty();
 
             StringBuilder sb = new StringBuilder();
 
             foreach (char c in s)
             {
                 bool isBasicAscii = c.IsBasicAscii();
-                bool isInExtraExcapeList = hasEscapeList && extraEscapeCharList.Contains(c);
+                bool isInExtraExcapeList = hasEscapeSet && extraEscapeCharSet.Contains(c);
                 bool isEscapeChar = (c == escapeChar);
 
                 bool directlyIncludeChar = (!isEscapeChar && !isInExtraExcapeList && (isBasicAscii || !applyBasicAsciiBasedEscaping));
@@ -327,6 +400,18 @@ namespace MosaicLib.Utils
             }
 
             return sb.ToString();
+        }
+
+
+        /// <summary>
+        /// Generate and return "escaped" version of given string <paramref name="s"/>.
+        /// When <paramref name="extraEscapeCharList"/> is non-empty then this method also generates escaped version of any other characters that are explicitly included in it.
+        /// <para/>Supports use for general JSON style escapeing.
+        /// </summary>
+        [Obsolete("This method is currently not used and will likely be removed in the future (2024-07-23)")]
+        public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList, string fallbackValue = "", bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
+        {
+            return s.GenerateEscapedVersion(extraEscapeCharSet: extraEscapeCharList.ConvertToHashSet(), fallbackNullValue: fallbackValue, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
         /// <summary>
@@ -387,6 +472,199 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region static string Ascii unescape methods (UnescapeString, GetEscapedDelimitedStringLength, UnescapeDelimitedString, UnescapeOptionallyDelimitedString)
+
+        public static string UnescapeString(this string s, string fallbackNullValue = "")
+        {
+            if (s == null)
+                return fallbackNullValue;
+
+            if (!s.Contains('\\'))
+                return s;
+
+            int numUsedChars;
+
+            var sb = new StringBuilder();
+
+            UnescapeOptionallyDelimitedString(s, out numUsedChars, unescapedCharAccumulator: sb);
+
+            return sb.ToString();
+        }
+
+        public static int GetEscapedDelimitedStringLength(this string s, int startIndexIn = 0, int? endIndexIn = null, char startDelimiter = '"', char endDelimiter = '"')
+        {
+            int numUsedChars;
+
+            s.UnescapeOptionallyDelimitedString(out numUsedChars, null, startIndexIn: startIndexIn, endIndexIn: endIndexIn, startDelimiter: startDelimiter, endDelimiter: endDelimiter);
+
+            return numUsedChars;
+        }
+
+        public static string UnescapeDelimitedString(this string s, char ? startDelimiter = null, char ? endDelimiter = null)
+        {
+            var sLen = (s != null) ? s.Length : 0;
+            var sb = new StringBuilder();
+            int numUsedChars;
+
+            var cq = '"';
+            if (sLen > 0 && s[0] == '\'')
+                cq = '\'';
+
+            startDelimiter = startDelimiter ?? cq;
+            endDelimiter = endDelimiter ?? cq;
+
+            s.UnescapeOptionallyDelimitedString(out numUsedChars, sb, startDelimiter: startDelimiter, endDelimiter: endDelimiter);
+
+            if (numUsedChars != sLen)
+                throw new UnescapeStringException("{0} failed for '{1}': not all characters were consumed [{2} < {3}]".CheckedFormat(Fcns.CurrentMethodName, s, numUsedChars, sLen));
+
+            return sb.ToString();
+        }
+
+        public static string UnescapeDelimitedString(this string s, out int numUsedChars, int startIndexIn = 0, int? endIndexIn = null, char startDelimiter = '"', char endDelimiter = '"')
+        {
+            var sb = new StringBuilder();
+
+            s.UnescapeOptionallyDelimitedString(out numUsedChars, sb, startIndexIn: startIndexIn, endIndexIn: endIndexIn, startDelimiter: startDelimiter, endDelimiter: endDelimiter);
+
+            return sb.ToString();
+        }
+
+        public static void UnescapeOptionallyDelimitedString(this string s, out int numUsedChars, StringBuilder unescapedCharAccumulator, int startIndexIn = 0, int? endIndexIn = null, char ? startDelimiter = null, char ? endDelimiter = null)
+        {
+            numUsedChars = 0;
+
+            try
+            {
+                var sLen = (s != null) ? s.Length : 0;
+                int startIndex = startIndexIn.Clip(0, sLen);
+                int endIndex = (endIndexIn ?? sLen).Clip(0, sLen);
+                var haveAccumulator = unescapedCharAccumulator != null;
+
+                int scanIndex = startIndex;
+                int numRemainingChars = endIndex - scanIndex;
+
+                if (startDelimiter != null)
+                {
+                    if (numRemainingChars < 1 || s[scanIndex] != startDelimiter)
+                        throw new UnescapeStringException("Given string '{0}' @index:{1} did not start with expected delimiter '{2}'".CheckedFormat(s, scanIndex, startDelimiter));
+
+                    scanIndex += 1;
+                }
+
+                for (;;)
+                {
+                    numRemainingChars = endIndex - scanIndex;
+                    if (numRemainingChars <= 0)
+                        break;
+
+                    var c = s[scanIndex];
+
+                    if (c == endDelimiter)
+                        break;
+
+                    string faultReason = null;
+
+                    if (c != '\\')
+                    {
+                        scanIndex += 1;
+                        if (haveAccumulator)
+                            unescapedCharAccumulator.Append(c);
+                    }
+                    else if (numRemainingChars < 2)
+                    {
+                        faultReason = "has invalid escape sequence: '{0}' is last charcter".CheckedFormat(c);
+                    }
+                    else
+                    {
+                        var c2 = s[scanIndex + 1];
+                        char ? appendChar = null;
+                        int usedChars = 0;
+
+                        switch (c2)
+                        {
+                            case '\\':
+                            case '\'':
+                            case '"': appendChar = c2; usedChars = 2; break;
+                            case 'r': appendChar = '\r'; usedChars = 2; break; // carrage return
+                            case 'n': appendChar = '\n'; usedChars = 2; break; // line feed
+                            case 't': appendChar = '\t'; usedChars = 2; break; // (horizontal) tab
+                            case 'b': appendChar = '\b'; usedChars = 2; break; // backspace
+                            case 'f': appendChar = '\f'; usedChars = 2; break; // form feed
+                            case 'v': appendChar = '\v'; usedChars = 2; break; // vertical tab
+                            case 'x':
+                                {
+                                    var c3 = s[scanIndex + 2];
+                                    var c4 = s[scanIndex + 3];
+                                    if (numRemainingChars >= 4 && c3.IsHexDigit() && c4.IsHexDigit())
+                                    {
+                                        appendChar = unchecked((char) ((c3.HexDigitValue() << 4) + (c4.HexDigitValue() << 0)));
+                                        usedChars = 4;
+                                    }
+                                    else
+                                    {
+                                        faultReason = "has invalid escape sequence: [{0}]".CheckedFormat(s.Substring(scanIndex, Math.Min(4, numRemainingChars)));
+                                    }
+                                    break;
+                                }
+
+                            case 'u':
+                                {
+                                    var c3 = s[scanIndex + 2];
+                                    var c4 = s[scanIndex + 3];
+                                    var c5 = s[scanIndex + 4];
+                                    var c6 = s[scanIndex + 5];
+                                    if (numRemainingChars >= 4 && c3.IsHexDigit() && c4.IsHexDigit() && c5.IsHexDigit() && c6.IsHexDigit())
+                                    {
+                                        appendChar = unchecked((char)((c3.HexDigitValue() << 12) + (c4.HexDigitValue() << 8) + (c5.HexDigitValue() << 4) + (c6.HexDigitValue() << 0)));
+                                        usedChars = 6;
+                                    }
+                                    else
+                                    {
+                                        faultReason = "has invalid escape sequence: [{0}]".CheckedFormat(s.Substring(scanIndex, Math.Min(4, numRemainingChars)));
+                                    }
+                                    break;
+                                }
+
+                            default:
+                                faultReason = "escape sequence selector character is not valid: '{0}{1}'".CheckedFormat(c, c2);
+                                break;
+                        }
+
+                        if (appendChar != null && haveAccumulator)
+                            unescapedCharAccumulator.Append(appendChar ?? default(char));
+
+                        if (usedChars != 0)
+                            scanIndex += usedChars;
+                        else if (faultReason == null)
+                            faultReason = "Internal - no characters consumed and no fault reason";
+                    }
+
+                    if (faultReason.IsNeitherNullNorEmpty())
+                        throw new UnescapeStringException("Given string '{0}' @index:{1} {2}".CheckedFormat(s, scanIndex, faultReason));
+                }
+
+                if (endDelimiter != null)
+                {
+                    if (numRemainingChars < 1 || s[scanIndex] != endDelimiter)
+                        new UnescapeStringException("Given string '{0}' @index:{1} did not end with expected delimiter '{2}'".CheckedFormat(s, scanIndex, endDelimiter)).Throw();
+
+                    scanIndex += 1;
+                }
+
+                numUsedChars = scanIndex - startIndex;
+            }
+            catch (System.Exception ex)
+            {
+                if (ex is UnescapeStringException)
+                    throw;
+
+                throw new UnescapeStringException("{0} failed (see inner exception for more details)".CheckedFormat(Fcns.CurrentMethodName), ex);
+            }
+        }
+
+        #endregion
+
         #region static CheckedFormat methods
 
         /// <summary>
@@ -399,6 +677,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the first format item has been replaced by the
         ///     System.String equivalent of arg0.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string CheckedFormat(this string fmt, object arg0)
 		{
             try
@@ -411,7 +690,7 @@ namespace MosaicLib.Utils
             }
 		}
 
-		/// <summary>
+        /// <summary>
         /// Invokes System.String.Format with the given args within a try/catch pattern.
         /// System.String.Format replaces the format item in a specified System.String with the text equivalent
         ///     of the value of two specified System.Object instances.
@@ -423,6 +702,7 @@ namespace MosaicLib.Utils
         ///     A copy of format in which the first and second format items have
         ///     been replaced by the System.String equivalents of arg0 and arg1.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string CheckedFormat(this string fmt, object arg0, object arg1)
 		{
 			try
@@ -435,7 +715,7 @@ namespace MosaicLib.Utils
             }
         }
 
-		/// <summary>
+        /// <summary>
         /// Invokes System.String.Format with the given args within a try/catch pattern.
         /// System.String.Format replaces the format item in a specified System.String with the text equivalent
         ///     of the value of three specified System.Object instances.
@@ -448,6 +728,7 @@ namespace MosaicLib.Utils
         ///     A copy of format in which the first, second, and third format items have
         ///     been replaced by the System.String equivalents of arg0, arg1, and arg2.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string CheckedFormat(this string fmt, object arg0, object arg1, object arg2)
 		{
 			try
@@ -460,7 +741,7 @@ namespace MosaicLib.Utils
             }
         }
 
-		/// <summary>
+        /// <summary>
         /// Invokes System.String.Format with the given args within a try/catch pattern.
         /// System.String.Format replaces the format item in a specified System.String with the text equivalent
         ///     of the value of a corresponding System.Object instance in a specified array.
@@ -471,6 +752,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the format items have been replaced by the System.String
         ///     equivalent of the corresponding instances of System.Object in args.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string CheckedFormat(this string fmt, params object[] args)
 		{
 			try
@@ -497,6 +779,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the format items have been replaced by the System.String
         ///     equivalent of the corresponding instances of System.Object in args.
         /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string CheckedFormat(this IFormatProvider provider, string fmt, params object[] args)
         {
             try
@@ -555,6 +838,21 @@ namespace MosaicLib.Utils
 
         #endregion
     }
+
+    #endregion
+
+    #region 
+
+    /// <summary>
+    /// This exception is thrown when the given string cannot be interpreted and/or unescaped as a delimited escaped string.
+    /// </summary>
+    public class UnescapeStringException : System.Exception
+    {
+        public UnescapeStringException(string message, Exception innerException = null) 
+            : base(message, innerException) 
+        { }
+    }
+
 
     #endregion
 
@@ -982,10 +1280,11 @@ namespace MosaicLib.Utils
         #region string prefix add/remote tools (AddPrefixIfNeeded, RemovePrefixIfNeeded, AddSuffixIfNeeded, RemoveSuffixIfNeeded, AddPrefixToErrorCode, AddSuffixToErrorCode)
 
         /// <summary>
-        /// This takes the given from string value and adds the given prefix string value if the from string does not already start with the prefix string.
-        /// If from is null or empty then this method simply returns prefix.  
-        /// If prefix is null or empty or from already starts with prefix then this method returns from.
-        /// Otherwise this method returns prefix + from.
+        /// This takes the given <paramref name="from"/> string value and adds the given <paramref name="prefix"/> 
+        /// string value if the <paramref name="from"/> string does not already start with the <paramref name="prefix"/> string.
+        /// If <paramref name="from"/> is null or empty then this method simply returns <paramref name="prefix"/>.  
+        /// If <paramref name="prefix"/> is null or empty or <paramref name="from"/> already starts with <paramref name="prefix"/> then this method returns <paramref name="from"/>.
+        /// Otherwise this method returns <paramref name="prefix"/> + <paramref name="from"/>.
         /// </summary>
         public static string AddPrefixIfNeeded(this string from, string prefix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
@@ -999,10 +1298,13 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// This takes the given from string value and removes the given prefix string value if the from string starts with the prefix string.
-        /// If from is null or empty or prefix is null or empty then this method simply returns from. 
-        /// If from does not start with prefix then this method returns from.
-        /// Otherwise this method returns from.SubString(prefix.Length).
+        /// This takes the given <paramref name="from"/> string value and removes the given <paramref name="prefix"/> 
+        /// string value if the <paramref name="from"/> string starts with the <paramref name="prefix"/> string.
+        /// If <paramref name="from"/> is null or empty or <paramref name="prefix"/> is null or empty then this method 
+        /// simply returns <paramref name="from"/>. 
+        /// If <paramref name="from"/> does not start with <paramref name="prefix"/> then this method returns 
+        /// <paramref name="from"/>.
+        /// Otherwise this method returns <paramref name="from"/>.SubString(<paramref name="prefix"/>.Length).
         /// </summary>
         public static string RemovePrefixIfNeeded(this string from, string prefix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
@@ -1016,10 +1318,12 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// This takes the given from string value and adds the given suffix string value if the from string does not already end with the suffix string.
-        /// If from is null or empty then this method simply returns suffix.  
-        /// If suffix is null or empty or from already ends with suffix then this method returns from.
-        /// Otherwise this method returns from + suffix.
+        /// This takes the given <paramref name="from"/> string value and adds the given <paramref name="suffix"/> 
+        /// string value if the <paramref name="from"/> string does not already end with the <paramref name="suffix"/> string.
+        /// If <paramref name="from"/> is null or empty then this method simply returns <paramref name="suffix"/>.  
+        /// If <paramref name="suffix"/> is null or empty or <paramref name="from"/> already ends with <paramref name="suffix"/> 
+        /// then this method returns <paramref name="from"/>.
+        /// Otherwise this method returns <paramref name="from"/> + <paramref name="suffix"/>.
         /// </summary>
         public static string AddSuffixIfNeeded(this string from, string suffix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
@@ -1033,10 +1337,13 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// This takes the given from string value and removes the given suffix string value if the from string starts with the suffix string.
-        /// If from is null or empty or suffix is null or empty then this method simply returns from. 
-        /// If from does not start with suffix then this method returns from.
-        /// Otherwise this method returns from.Substring(0, from.Length - suffix.Length).
+        /// This takes the given <paramref name="from"/> string value and removes the given <paramref name="suffix"/> 
+        /// string value if the <paramref name="from"/> string starts with the <paramref name="suffix"/> string.
+        /// If <paramref name="from"/> is null or empty or <paramref name="suffix"/> is null or empty then this method 
+        /// simply returns <paramref name="from"/>. 
+        /// If <paramref name="from"/> does not start with <paramref name="suffix"/> then this method returns 
+        /// <paramref name="from"/>.
+        /// Otherwise this method returns <paramref name="from"/>.Substring(0, <paramref name="from"/>.Length - <paramref name="suffix"/>.Length).
         /// </summary>
         public static string RemoveSuffixIfNeeded(this string from, string suffix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
@@ -1653,6 +1960,40 @@ namespace MosaicLib.Utils
                 return basicToStringResultFactoryDelegate();
 
             return null;
+        }
+    }
+
+    #endregion
+
+    #region TextWriter helper classes (StringBuilderTextWriter)
+
+    public class StringBuilderTextWriter : System.IO.TextWriter
+    {
+        public StringBuilderTextWriter(StringBuilder sb = null, Encoding encoding = null, IFormatProvider formatProvider = null)
+            : base(formatProvider)
+        {
+            StringBuilder = sb ?? new StringBuilder();
+            _Encoding = encoding ?? Encoding.UTF8;
+        }
+
+        public StringBuilder StringBuilder { get; private set; }
+
+        public override Encoding Encoding { get { return _Encoding; } }
+        private readonly Encoding _Encoding;
+
+        public override void Write(char value)
+        {
+            StringBuilder.Append(value);
+        }
+
+        public override void Write(char[] buffer, int index, int count)
+        {
+            StringBuilder.Append(buffer, index, count);
+        }
+
+        public override string ToString()
+        {
+            return StringBuilder.ToString();
         }
     }
 

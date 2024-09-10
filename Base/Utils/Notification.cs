@@ -880,6 +880,9 @@ namespace MosaicLib.Utils
 
         /// <summary>Remvoes the first instance of the given <paramref name="action"/> from the list.  Has no effect if no such instance is found in the list.</summary>
         void RemoveItem(Action action);
+
+        /// <summary>Gives the number of items that are currently in the list.</summary>
+        int Count { get; }
 	}
 
     /// <summary>
@@ -937,49 +940,58 @@ namespace MosaicLib.Utils
 
         #region IBasicNotificationList Members
 
-        /// <summary>
-        /// <see cref="BasicNotificationDelegate"/> event interface.  Allows such delegates to be added/removed from the list.
-        /// </summary>
+        /// <inheritdoc/>
         public event BasicNotificationDelegate OnNotify
 		{
             add { AddListItem(new ListItem() { ListItemType = ListItemType.BasicNotificationDelegate, Item = value }); }
             remove { RemoveListItem(new ListItem() { ListItemType = ListItemType.BasicNotificationDelegate, Item = value }); }
 		}
 
-        /// <summary>Adds the given <see cref="INotifyable"/> target object to the list</summary>
+        /// <inheritdoc/>
         public void AddItem(INotifyable notifyableTarget)
 		{
             AddListItem(new ListItem() { ListItemType = ListItemType.INotifyable, Item = notifyableTarget });
 		}
 
-        /// <summary>Removes the first instance of the given <see cref="INotifyable"/> target object from the list</summary>
+        /// <inheritdoc/>
         public void RemoveItem(INotifyable notifyableTarget)
 		{
             RemoveListItem(new ListItem() { ListItemType = ListItemType.INotifyable, Item = notifyableTarget });
 		}
 
-        /// <summary>Adds the given <see cref="System.Threading.EventWaitHandle"/> object to the list</summary>
+        /// <inheritdoc/>
         public void AddItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
             AddListItem(new ListItem() { ListItemType = ListItemType.EventWaitHandle, Item = eventWaitHandle });
         }
 
-        /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
+        /// <inheritdoc/>
         public void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
             RemoveListItem(new ListItem() { ListItemType = ListItemType.EventWaitHandle, Item = eventWaitHandle });
         }
 
-        /// <summary>Adds the given <paramref name="action"/> to the list</summary>
+        /// <inheritdoc/>
         public void AddItem(Action action)
         {
             AddListItem(new ListItem() { ListItemType = ListItemType.Action, Item = action });
         }
 
-        /// <summary>Remvoes the first instance of the given <paramref name="action"/> from the list.  Has no effect if no such instance is found in the list.</summary>
+        /// <inheritdoc/>
         public void RemoveItem(Action action)
         {
             RemoveListItem(new ListItem() { ListItemType = ListItemType.Action, Item = action });
+        }
+
+        /// <inheritdoc/>
+        public virtual int Count
+        {
+            get 
+            {
+                var itemArray = GetListItemArrayAndRebuildIfNeeded();
+
+                return itemArray.Length;
+            }
         }
 
 		#endregion
@@ -1119,9 +1131,24 @@ namespace MosaicLib.Utils
             Source = eventSourceObject; 
         }
 
-		#endregion
+        #endregion
 
-		#region IEventHandlerNotificationList<EventArgsType> Members
+        #region IBasicNotificationList override
+
+        /// <inheritdoc/>
+        public override int Count
+        {
+            get 
+            {
+                EventHandlerDelegate<EventArgsType>[] eventHandlerArray = GetEventHandlerArrayAndRebuildIfNeeded();
+
+                return eventHandlerArray.Length + base.Count;
+            }
+        }
+
+        #endregion
+
+        #region IEventHandlerNotificationList<EventArgsType> Members
 
         /// <summary>
         /// <see cref="EventHandlerDelegate{EventArgsType}"/> event interface.  Allows such delegates to be added/removed from the list.
@@ -1480,44 +1507,94 @@ namespace MosaicLib.Utils
         }
     }
 
-	#endregion
+    #endregion
 
     //-------------------------------------------------
     #region EventNotifierPool
+
+    public enum EventNotifierPoolUsesPoolType
+    {
+        /// <summary>
+        /// <see cref="EventNotifierPool"/> uses <see cref="Pooling.BasicObjectPool{ObjectType}"/>
+        /// </summary>
+        Basic = 0,
+
+        /// <summary>
+        /// <see cref="EventNotifierPool"/> uses <see cref="Pooling.ConcurrentQueueObjectPool{ObjectType}"/>
+        /// </summary>
+        ConcurrentQueue,
+
+        /// <summary>
+        /// <see cref="EventNotifierPool"/> uses <see cref="Pooling.ConcurrentStackObjectPool{ObjectType}"/>
+        /// </summary>
+        ConcurrentStack,
+    }
 
     /// <summary>This class is used to provide a pool of reusable <see cref="IEventNotifier"/> objects.</summary>
     public class EventNotifierPool : DisposableBase
     {
         /// <summary>
         /// Defines the default initial pool size for a WaitEventNotifiderPool when using the default constructor.
+        /// <para/>Defaults to 16.
         /// </summary>
-        public const int defaultInitialPoolSize = 16;
+        public static int DefaultInitialPoolSize { get { return _DefaultInitialPoolSize; } set { _DefaultInitialPoolSize = value; } }
+        private static int _DefaultInitialPoolSize = 16;
 
         /// <summary>
         /// Defines the default maximum pool size for a WaitEventNotifiderPool when using the default constructor.
+        /// <para/>Defaults to 256.
         /// </summary>
-        public const int defaultMaximumPoolSize = 256;
+        public static int DefaultMaximumPoolSize { get { return _DefaultMaximumPoolSize; } set { _DefaultMaximumPoolSize = value; } }
+        private static int _DefaultMaximumPoolSize = 256;
 
         /// <summary>
         /// Constructs a set of defaultInitialPoolSize (16) WaitEventNotifier.Behavior.WakeOne WaitEventNotifiers and sets the maxumum pool size to defaultMaximumPoolSize (256).
         /// </summary>
         public EventNotifierPool() 
-            : this(defaultInitialPoolSize, defaultMaximumPoolSize, WaitEventNotifier.Behavior.WakeOne) 
-        { 
+            : this(DefaultInitialPoolSize, DefaultMaximumPoolSize, WaitEventNotifier.Behavior.WakeOne) 
+        {
         }
+
+        /// <summary>
+        /// This static property defines the default pool type that a new <see cref="EventNotifierPool"/> instance will use if its constructor
+        /// does not explicitly select which type to use.
+        /// <para/>Default value is now <see cref="EventNotifierPoolUsesPoolType.Basic"/>
+        /// </summary>
+        public static EventNotifierPoolUsesPoolType DefaultPoolTypeToUse { get { return _DefaultPoolTypeToUse; } set { _DefaultPoolTypeToUse = value; } }
+        private static EventNotifierPoolUsesPoolType _DefaultPoolTypeToUse = EventNotifierPoolUsesPoolType.Basic;
 
         /// <summary>
         /// Constructs pool with the given initial, and maximum pool size and defines the behavior of the pooled objects using the given behavior
         /// </summary>
-        public EventNotifierPool(int initialPoolSize, int maximumPoolSize, WaitEventNotifier.Behavior behavior) 
+        public EventNotifierPool(int initialPoolSize, int maximumPoolSize, WaitEventNotifier.Behavior behavior, EventNotifierPoolUsesPoolType ? usePoolType = null) 
         {
             Behavior = behavior;
 
-            eventNotifierPool = new MosaicLib.Utils.Pooling.BasicObjectPool<WaitEventNotifier>()
+            switch (usePoolType ?? DefaultPoolTypeToUse)
             {
-                Capacity = maximumPoolSize,
-                ObjectFactoryDelegate = () => new WaitEventNotifier(behavior) { CreatedInPool = this }
-            };
+                default:
+                case EventNotifierPoolUsesPoolType.Basic:
+                    eventNotifierPool = new Pooling.BasicObjectPool<WaitEventNotifier>()
+                    {
+                        Capacity = maximumPoolSize,
+                        ObjectFactoryDelegate = () => new WaitEventNotifier(behavior) { CreatedInPool = this }
+                    };
+                    break;
+                case EventNotifierPoolUsesPoolType.ConcurrentQueue:
+                    eventNotifierPool = new Pooling.ConcurrentQueueObjectPool<WaitEventNotifier>()
+                    {
+                        Capacity = maximumPoolSize,
+                        ObjectFactoryDelegate = () => new WaitEventNotifier(behavior) { CreatedInPool = this }
+                    };
+                    break;
+                case EventNotifierPoolUsesPoolType.ConcurrentStack:
+                    eventNotifierPool = new Pooling.ConcurrentStackObjectPool<WaitEventNotifier>()
+                    {
+                        Capacity = maximumPoolSize,
+                        ObjectFactoryDelegate = () => new WaitEventNotifier(behavior) { CreatedInPool = this }
+                    };
+                    break;
+            }
 
             foreach (var wen in Enumerable.Range(0, initialPoolSize).Select((idx) => eventNotifierPool.GetFreeObjectFromPool()))
             {
@@ -1532,7 +1609,7 @@ namespace MosaicLib.Utils
         /// Allows the caller to determine the WaitEventNotifier.Behavior that is used to construct new WaitEventNotifiers in this pool.
         /// </summary>
         public WaitEventNotifier.Behavior Behavior { get; private set; }
-        private Pooling.BasicObjectPool<WaitEventNotifier> eventNotifierPool;
+        private Pooling.IBasicObjectPool<WaitEventNotifier> eventNotifierPool;
 
         /// <summary>
         /// Returns the a WaitEventNotifier object from the pool casted as an IEventNotifier.  

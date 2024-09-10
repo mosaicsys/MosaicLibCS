@@ -20,25 +20,17 @@
 //-------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
+using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
-using System.ComponentModel;
 
 namespace MosaicLib.WPF.Controls
 {

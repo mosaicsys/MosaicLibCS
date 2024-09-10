@@ -21,13 +21,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-
-using MosaicLib;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Reflection.Attributes;
-using MosaicLib.Utils;
 
 namespace MosaicLib.Utils.Interlocks
 {
@@ -78,7 +71,6 @@ namespace MosaicLib.Utils.Interlocks
         }
 
         #endregion
-
     }
 }
 

@@ -21,11 +21,9 @@
 
 using System;
 using System.Text;
-using System.Windows;
 using System.Windows.Data;
 using System.Globalization;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 

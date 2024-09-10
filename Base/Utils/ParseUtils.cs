@@ -21,7 +21,6 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -74,16 +73,23 @@ namespace MosaicLib.Utils
         /// <summary>Stores the current scan index.</summary>
         private int idx;
 
+        /// <summary>Stores the length of the string.</summary>
+        private int length;
+
         #endregion
 
         #region Constructors
 
         /// <summary>Standard Constructor.  Gives a new scanner at a specified position (defaults to 0 - the first character) in the given string (null is mapped to empty automatically).</summary>
-        public StringScanner(string str, int idx = 0) 
+        public StringScanner(string str, int idx = 0, int? lengthIn = null) 
             : this() 
         {
-            Str = str; 
-            Idx = idx;
+            this.str = str;
+            this.idx = idx;
+
+            var strLen = str.MapNullToEmpty().Length;
+
+            length = (lengthIn ?? strLen).Clip(0, strLen);
         }
 
         /// <summary>Copy constructor.  Gives a scanner with the same string and position as the given <paramref name="other"/> scanner.</summary>
@@ -92,6 +98,7 @@ namespace MosaicLib.Utils
         {
             str = other.str;
             idx = other.idx;
+            length = other.length;
         }
 
         #endregion
@@ -106,26 +113,28 @@ namespace MosaicLib.Utils
         public string Str 
         { 
             get { return str.MapNullToEmpty(); } 
-            set { str = value; idx = 0; } 
+            set { str = value; idx = 0; length = value.MapNullToEmpty().Length; } 
         }
 
         /// <summary>Get/Set: gives the current index location in the contained string.</summary>
         public int Idx { get { return idx; } set { idx = value; } }
 
+        public int Length { get { return length; } }
+
         /// <summary>Returns true if there are no more remaining characters in the string at the current position or if the current position is otherwise invalid.</summary>
         public bool IsAtEnd { get { return (!IsIdxValid); } }
 
         /// <summary>Returns true if the current index position referes to a legal character in the contained string, and the string is not null</summary>
-        public bool IsIdxValid { get { return (str != null && (idx >= 0 && idx < str.Length)); } }
+        public bool IsIdxValid { get { return (str != null && (idx >= 0 && idx < Length)); } }
 
         /// <summary>Returns the number of characters that remain in the contained string to its end or 0 if the current index position is not, or is no longer, valid</summary>
-        public int NumChars { get { return (!IsAtEnd ? (str.Length - Idx) : 0); } }
+        public int NumChars { get { return (!IsAtEnd ? (Length - Idx) : 0); } }
 
         /// <summary>Returns the character at the currently indexed scan position or the null character if the current index is not, or is no longer, valid.</summary>
         public char Char { get { return (IsIdxValid ? str[Idx] : (char)0); } }
 
         /// <summary>Returns a new string containing the remaining characters in the contained string from the current position to its end (or the empty string if there are none)</summary>
-        public string Rest { get { return (!IsIdxValid ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx))); } }
+        public string Rest { get { return (!IsIdxValid ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx, Length - Idx))); } }
 
         /// <summary>static Operator that may be used to increment the current position.  Does nothing if the current position is at (or past) the last position in the current string.</summary>
         public static StringScanner operator ++(StringScanner ss) 

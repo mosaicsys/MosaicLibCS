@@ -22,7 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
+using System.Runtime.CompilerServices;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Reflection.Attributes;
@@ -432,10 +432,12 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public bool IsUpdateNeeded
         {
-            get 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             {
                 return (isUpdateNeeded || _ickaArray.IsUpdateNeeded()); 
             }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal set 
             { 
                 isUpdateNeeded = value; 

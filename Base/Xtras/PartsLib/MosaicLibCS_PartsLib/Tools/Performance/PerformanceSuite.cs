@@ -21,17 +21,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
 
-using MosaicLib;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Part;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;

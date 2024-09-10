@@ -22,19 +22,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Text;
 
-using MosaicLib;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Interconnect;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Modular.Persist;
-using MosaicLib.Modular.Reflection.Attributes;
-using MosaicLib.Semi;
 using MosaicLib.Semi.E039.Details;
 using MosaicLib.Time;
 using MosaicLib.Utils;
@@ -3370,7 +3367,9 @@ namespace MosaicLib.Semi.E039
         /// <summary>get/set: equivalent to the IsUpdateNeeded flag for the underlying sequenced object source observer.  returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public virtual bool IsUpdateNeeded 
         {
-            get { return (objObserver != null) && objObserver.IsUpdateNeeded; } 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return (objObserver != null) && objObserver.IsUpdateNeeded; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set { if (objObserver != null) objObserver.IsUpdateNeeded = value; } 
         }
 

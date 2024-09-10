@@ -21,10 +21,7 @@
  */
 
 using System;
-using System.Collections.Generic;
 
-using MosaicLib;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;

@@ -31,7 +31,7 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
-using System.Runtime.InteropServices.WindowsRuntime;
+using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Modular.Config
 {
@@ -328,6 +328,7 @@ namespace MosaicLib.Modular.Config
         /// Conveinience extension method returns true if any non-null IConfigKeyAccess item in the given <paramref name="ickaArray"/> array has its IsUpdateNeeded true.
         /// Returns false otherwise.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUpdateNeeded(this IConfigKeyAccess[] ickaArray)
         {
             foreach (var icka in ickaArray)
@@ -2219,7 +2220,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain None, such as when the key was not found.</summary>
         public ValueContainer VC
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return vc; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 vc = value;
@@ -2246,15 +2249,20 @@ namespace MosaicLib.Modular.Config
         protected INamedValueSet _keyMetaData;
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
-        public bool IsUsable { get { return String.IsNullOrEmpty(ResultCode); } }
+        public bool IsUsable
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return String.IsNullOrEmpty(ResultCode); } 
+        }
 
         /// <summary>True if this KeyAccess object's ValueContainer contents are not null or None.  Generally this is false when the given key was not found.</summary>
         public bool HasValue { get; private set; }
 
         /// <summary>This property returns true if <see cref="ValueIsFixed"/> is false and <see cref="ValueSeqNum"/> is not the same as the <see cref="CurrentSeqNum"/> or <see cref="MetaDataSeqNum"/> is not equal to <see cref="CurrentMetaDataSeqNum"/> or <see cref="IsRootUpdateNeeded"/>.</summary>
         public bool IsUpdateNeeded 
-        { 
-            get 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             { 
                 return (((!ValueIsFixed && (ValueSeqNum != CurrentSeqNum)) 
                         || (MetaDataSeqNum != CurrentMetaDataSeqNum)) 

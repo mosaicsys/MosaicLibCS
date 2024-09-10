@@ -21,20 +21,14 @@
 
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 using MessagePack;
 using Mosaic.ToolsLib.Compression;
 using Mosaic.ToolsLib.MessagePackUtils;
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Reflection.Attributes;
-using MosaicLib.Time;
 using MosaicLib.Utils;
 
 namespace MosaicLib.Tools.ConvertMDRF2toJSON

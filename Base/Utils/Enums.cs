@@ -20,8 +20,7 @@
  */
 
 using System;
-using System.Text;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Utils
 {
@@ -32,13 +31,14 @@ namespace MosaicLib.Utils
     /// </summary>
     public static partial class Enum
 	{
-		#region TryParse variants and Parse
+        #region TryParse variants and Parse
 
         /// <summary>
         /// Helper function to parse a string s as an enum of type EnumT
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static EnumT TryParse<EnumT>(this string s, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
         {
             EnumT result;
@@ -57,6 +57,7 @@ namespace MosaicLib.Utils
         /// <remarks>
         /// NOTE: !!!!! The following code cannot use System.Enum.TryParse as the addition of the required "where" clause would prevent the use of this method in the StringScanner.ParseValue generic methods.
         /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryParse<EnumT>(this string s, out EnumT result, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
         {
             return s.Parse(out result, fallbackValue: parseFailedResult, ignoreCase: ignoreCase, autoTrim: autoTrim, rethrow: false);
@@ -66,6 +67,7 @@ namespace MosaicLib.Utils
         /// Helper function that is used to call System.Enum.Parse with optional catching of any exception that it throws.  
         /// Returns true if the parse succeeded, or false if rethrow is false and the parse did not, or could not, succeed.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool Parse<EnumT>(this string s, out EnumT result, EnumT fallbackValue = default(EnumT), bool ignoreCase = true, bool autoTrim = true, bool rethrow = true)
 		{
 			Type enumT = typeof(EnumT);
@@ -100,6 +102,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Trial alternative version of TryParse.  This one is based directly on System.Enum.TryParse and suppports that same set of optional parameters as the current TryParse local variant does.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool TryParse2<EnumT>(this string s, out EnumT result, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
             where EnumT : struct
         {

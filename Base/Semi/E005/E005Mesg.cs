@@ -22,7 +22,6 @@
 using System;
 using System.Collections.Generic;
 
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Utils;
@@ -63,10 +62,26 @@ namespace MosaicLib.Semi.E005
         /// <summary>Returns the reply message that is associated with this message, or null if there is currently no such message.</summary>
         IMessage Reply { get; }
 
-        /// <summary>When called on a request message that expects a reply, this method generates a reply message for it.  Throws when called on an occurrance or reply message.</summary>
+        /// <summary>
+        /// When called on a request message that expects a reply, this method generates, and returns, a reply message for it.
+        /// Throws when called on an <see cref="IMessage"/> that does not expect a reply (aka W bit is not set), or one that already has an assigned <see cref="Reply"/> message.
+        /// </summary>
+        /// <remarks>
+        /// This method may be used with the corresponding <see cref="SetReply(IMessage, bool, bool)"/> for quick response handler cases.
+        /// </remarks>
         IMessage CreateReply();
 
-        /// <summary>Sets the reply message that is to be associated with this message.  Throws if this message does not expect a reply or if one has already been given.  Supports call chaining</summary>
+        /// <summary>
+        /// When called on any message, this method generates and returns a reply or fault message for it which contains the same
+        /// <see cref="SeqNum"/> value as this <see cref="IMessage"/> instance carries, but with the given <paramref name="replySF"/>.
+        /// </summary>
+        IMessage CreateReply(StreamFunction replySF);
+
+        /// <summary>
+        /// Sets the reply message that is to be associated with this message.  
+        /// Throws if this message does not expect a reply or if one has already been given.  
+        /// Supports call chaining
+        /// </summary>
         IMessage SetReply(IMessage reply, bool replaceReply = false, bool isHighRateReply = false);
 
         /// <summary>Action factory method.  Calls the associated port's (or the default Manager's DefaultPort if null)'s SendMessage action factory method and returns the resulting action.  When this action is run it will ask the port to send this message.</summary>
@@ -215,15 +230,19 @@ namespace MosaicLib.Semi.E005
             if (Reply != null)
                 new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this).Throw();
 
-            var replySF = SF.ReplySF;
+            return CreateReply(SF.ReplySF);
+        }
 
-            var reply = new Message(replySF, Port) 
-                    { 
-                        SF = replySF, 
-                        SeqNum = SeqNum,
-                        IsHighRate = IsHighRate,
-                    }
-                    .SetTenByteHeader(TenByteHeader.MakeCopyOfThis(), keepMessageSF: true, keepMessageSeqNum: true);
+        /// <inheritdoc/>
+        public IMessage CreateReply(StreamFunction replySF)
+        {
+            var reply = new Message(replySF, Port)
+            {
+                SF = replySF,
+                SeqNum = SeqNum,
+                IsHighRate = IsHighRate,
+            }
+            .SetTenByteHeader(TenByteHeader.MakeCopyOfThis(), keepMessageSF: true, keepMessageSeqNum: true);
 
             return reply;
         }
@@ -379,7 +398,9 @@ namespace MosaicLib.Semi.E005
         /// <summary>Returns a new StreamFunction that is set to the Stream/Function for a reply to this StreamFunction.  If this SF IsPrimary and expects a reply then the return value has the same stream with the function incremented by 1 and the W bit clear.  Otherwise the returned object is the default object (S0/F0)</summary>
         public StreamFunction ReplySF { get { return ((IsPrimary && ReplyExpected) ? new StreamFunction(StreamByte, (Byte)(FunctionByte + 1), false) : new StreamFunction()); } }
 
-        /// <summary>Returns a new StreamFunction that is set to the same Stream as the source StreamFunction but with FunctionByte set to zero and ReplyExpected set to false.</summary>
+        /// <summary>
+        /// Returns a new StreamFunction that is set to the same Stream as the source StreamFunction but with FunctionByte set to zero and ReplyExpected set to false.
+        /// </summary>
         public StreamFunction TransactionAbortReplySF { get { return ((IsPrimary && ReplyExpected) ? new StreamFunction(StreamByte, 0, false) : new StreamFunction()); } }
 
         /// <summary>Returns text version of the decoded contents of byte2/byte3</summary>
@@ -390,7 +411,7 @@ namespace MosaicLib.Semi.E005
 
         /// <summary>
         /// Returns true for S/F combinations that use a pure binary payload.
-        /// <para/>Surrently S2F25, and S2F26
+        /// <para/>Currently S2F25, and S2F26
         /// </summary>
         public bool PayloadIsABS
         {
@@ -399,7 +420,28 @@ namespace MosaicLib.Semi.E005
                 return (StreamByte == 2 && (FunctionByte == 25 || FunctionByte == 26));
             }
         }
-	}
+
+        /// <summary>S9/F1 UDN - Unrecognized Device ID</summary>
+        public static StreamFunction S9F1_UDN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 1 }; } }
+
+        /// <summary>S9/F3 USN - Unrecognized Stream Type/Number</summary>
+        public static StreamFunction S9F3_USN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 3 }; } }
+
+        /// <summary>S9/F5 UFN - Unrecognized Function Type/Number</summary>
+        public static StreamFunction S9F5_UFN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 5 }; } }
+
+        /// <summary>S9/F7 IDN - Illegal Data</summary>
+        public static StreamFunction S9F7_IDN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 7 }; } }
+
+        /// <summary>S9/F7 TTN - Transaction Timer Timeout</summary>
+        public static StreamFunction S9F9_TTN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 9 }; } }
+
+        /// <summary>S9/F11 DLN - Data Too Long</summary>
+        public static StreamFunction S9F11_DLN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 11 }; } }
+
+        /// <summary>S9/F13 CTN - Conversation Timeout</summary>
+        public static StreamFunction S9F13_CTN { get { return new StreamFunction() { StreamByte = 9, FunctionByte = 13 }; } }
+    }
 
     /// <summary>
     /// Extension Methods
@@ -439,6 +481,56 @@ namespace MosaicLib.Semi.E005
 
             return new StreamFunction((byte)stream, (byte)function, expectReply);
         }
+
+        /// <summary>
+        /// Converts the given <paramref name="errorSF"/> into the corresponding <see cref="MessageFaultReplyType"/>.
+        /// </summary>
+        public static MessageFaultReplyType GetMessageFaultReplyTypeForErrorSF(this StreamFunction errorSF)
+        {
+            if (errorSF.ReplyExpected)
+            {
+                return MessageFaultReplyType.Unknown;
+            }
+            else if (errorSF.FunctionByte == 0)
+            {
+                return MessageFaultReplyType.Abort_BodyIsEmpty;
+            }
+            else if (errorSF.StreamByte == 9)
+            {
+                if (errorSF.FunctionByte == StreamFunction.S9F1_UDN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F3_USN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F5_UFN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F7_IDN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F9_TTN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F11_DLN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+                else if (errorSF.FunctionByte == StreamFunction.S9F13_CTN.FunctionByte)
+                    return MessageFaultReplyType.Fault_BodyIsByteArrayWithBadTenByteHeader;
+            }
+
+            return MessageFaultReplyType.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// This enum defines the set of known/standard fault "reply" types.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="None"/>, <see cref="Unknown"/>, <see cref="Fault_BodyIsByteArrayWithBadTenByteHeader"/>
+    /// <see cref="Fault_BodyIsEmpty"/>, <see cref="Abort_BodyIsEmpty"/>
+    /// </remarks>
+    public enum MessageFaultReplyType : int
+    {
+        Unknown = -1,
+        None = 0,
+        Fault_BodyIsByteArrayWithBadTenByteHeader,
+        Fault_BodyIsEmpty,
+        Abort_BodyIsEmpty,
     }
 
 

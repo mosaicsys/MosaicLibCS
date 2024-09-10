@@ -21,7 +21,6 @@
 
 using System;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
 using MosaicLib.PartsLib.Scan.ScanEngine;
@@ -29,8 +28,6 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 
 using Units = MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure;
-using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 {

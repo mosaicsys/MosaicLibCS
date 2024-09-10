@@ -28,7 +28,6 @@ using System.Linq;
 using System.Windows.Data;
 using System.Windows.Media;
 
-using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;

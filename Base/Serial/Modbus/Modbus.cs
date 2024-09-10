@@ -21,14 +21,7 @@
  */
 
 using System;
-using System.Collections.Generic;
 
-using System.Net;
-using System.Net.Sockets;
-
-using MosaicLib.Modular.Action;
-using MosaicLib.Modular.Part;
-using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 

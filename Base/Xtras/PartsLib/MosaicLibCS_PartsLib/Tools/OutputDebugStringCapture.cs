@@ -21,11 +21,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
-using MosaicLib;
-using MosaicLib.Modular;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
 

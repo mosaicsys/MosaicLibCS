@@ -20,19 +20,12 @@
  */
 
 using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Runtime.Serialization;
 using MosaicLib.Utils;
 using MosaicLib.Time;
-using MosaicLib.Modular;
 using MosaicLib.Modular.Part;
-using MosaicLib.PartsLib.Helpers;
 using MosaicLib.Semi.E084;
 
 using MosaicLib.PartsLib.Common.LPM;
-using LPM = MosaicLib.PartsLib.Common.LPM;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
@@ -398,7 +391,7 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             if (instantActionQ != null)
             {
-                instantActionQ.QueueEnable = false;
+                instantActionQ.QueueDisableReason = "PreStopPart";
                 instantActionQ.NotifyOnEnqueue.OnNotify -= this.Notify;
             }
 

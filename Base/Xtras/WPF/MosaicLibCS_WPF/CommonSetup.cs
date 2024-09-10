@@ -21,14 +21,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
 using System.Text;
 
-using MosaicLib;
 using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-using System.Windows.Threading;
 using System.Windows;
 
 using MosaicLib.Modular.Common;
@@ -429,7 +424,12 @@ namespace MosaicLib.WPF.Common
             bool addDiagTraceLMH = diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
             addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
 
-            Logging.ILogMessageHandler diagTraceLMH = addDiagTraceLMH ? Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.Debug) : null;
+            Logging.ILogMessageHandler diagTraceLMH = null;
+            if (addDiagTraceLMH)
+            {
+                var diagTraceLogGate = nvs["diagTraceLogGate"].VC.GetValue<Logging.LogGate?>(rethrow: false) ?? Logging.LogGate.Debug;
+                diagTraceLMH = Logging.CreateDiagnosticTraceLogMessageHandler(logGate: diagTraceLogGate);
+            }
 
             Logging.ILogMessageHandler setLMH = null;
             if (addSetLMH)

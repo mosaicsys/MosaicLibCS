@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Utils
 {
@@ -40,6 +41,7 @@ namespace MosaicLib.Utils
         /// Finally if the captured version is non-null (aka the given <paramref name="oRef"/> was non-null and implements the <see cref="IDisposable"/> interface)
         /// then this method calls the Dispose method on it.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void DisposeOfObject<ObjType>(ref ObjType oRef)
         {
             IDisposable asIDisposable = oRef as IDisposable;
@@ -56,6 +58,7 @@ namespace MosaicLib.Utils
         /// <paramref name="obj"/>.Dispose.  Otherwise this method has no effect.
         /// <para/>If the given <paramref name="obj"/> is null then this method will have no effect as null is not castable to the <see cref="IDisposable"/> interface.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void DisposeOfGivenObject<ObjType>(this ObjType obj)
         {
             IDisposable asIDisposable = obj as IDisposable;
@@ -68,6 +71,7 @@ namespace MosaicLib.Utils
         /// Helper function used to remove, and dispose of each IDisposable item, in the given <paramref name="objList"/> (using DisposeOfGivenObject).
         /// <para/>Removes all items from the given <paramref name="objList"/> including ones that do not implement the <see cref="IDisposable"/> interface.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void TakeAndDisposeOfGivenObjects<ObjType>(this IList<ObjType> objList)
         {
             while (!objList.IsNullOrEmpty())

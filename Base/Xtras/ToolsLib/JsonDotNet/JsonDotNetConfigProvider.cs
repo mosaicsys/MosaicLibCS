@@ -23,8 +23,6 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Persist;
 
-using Json = Newtonsoft.Json;
-
 namespace Mosaic.ToolsLib.JsonDotNet
 {
     /// <summary>

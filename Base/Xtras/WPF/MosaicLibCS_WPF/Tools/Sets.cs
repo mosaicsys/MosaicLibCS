@@ -21,29 +21,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Windows.Threading;
-using System.Xml;
 
-using System.Xml.Serialization;
-using System.Configuration;
-using System.ComponentModel;
-using System.Reflection;
-
-using MosaicLib;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Semi.E039;
 using MosaicLib.Time;

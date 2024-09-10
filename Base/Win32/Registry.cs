@@ -20,7 +20,6 @@
  */
 
 using System;
-using System.Security.AccessControl;
 using System.Runtime.InteropServices;
 
 namespace MosaicLib.Win32.Registry

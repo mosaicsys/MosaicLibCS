@@ -19,12 +19,6 @@
  * limitations under the License.
  */
 
-using System;
-using System.Collections.Generic;
-
-using System.ServiceModel;
-using System.Runtime.Serialization;
-
 namespace MosaicLib
 {
     /// <summary>
@@ -64,6 +58,9 @@ namespace MosaicLib
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E005</summary>
         public const string E005NameSpace = SemiNameSpace + ".E005";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E030</summary>
+        public const string E030NameSpace = SemiNameSpace + ".E030";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E039</summary>
         public const string E039NameSpace = SemiNameSpace + ".E039";

@@ -21,6 +21,7 @@
  */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace MosaicLib.Utils.Pooling
@@ -167,13 +168,16 @@ namespace MosaicLib.Utils.Pooling
 
     #endregion
 
-    #region Basic Pool Interface and implementation
+    #region Basic Pool Interface [IBasicObjectPool<ObjectType>]
 
     /// <summary>This interface defines the public interface for Basic Object Pools.</summary>
     public interface IBasicObjectPool<ObjectType>
         where ObjectType : class
     {
-        /// <summary>Method allows caller to obtain a free object from the pool.  Returned object will either be newly created for will have been returned to the pool when its reference count was decremented to zero.</summary>
+        /// <summary>
+        /// Method allows caller to obtain a free object from the pool.  
+        /// Returned object will either be newly created or will have been returned to the pool after its prior use was complete.
+        /// </summary>
         ObjectType GetFreeObjectFromPool();
 
         /// <summary>
@@ -199,8 +203,12 @@ namespace MosaicLib.Utils.Pooling
         bool IsPoolEnabled { get; }
     }
 
+    #endregion
+
+    #region BasicObjectPool<ObjectType>, ConcurrentQueueObjectPool<ObjectType>, ConcurrentStackObjectPool<ObjectType>
+
     /// <summary>
-    /// This class implements a basic Object Pool where objects of a given type may be acquired from the pool (which creates them as needed) and may 
+    /// This class implements a basic object pool where objects of a given type may be acquired from the pool (which creates them as needed) and may 
     /// be returned to the pool (which may dispose them if the pool is already full).  The client is responsible for all object lifetime managment
     /// </summary>
     public class BasicObjectPool<ObjectType>
@@ -237,11 +245,9 @@ namespace MosaicLib.Utils.Pooling
 
         #endregion
 
-        #region IObjectPool<ObjectType> Members
+        #region IBasicObjectPool<ObjectType> Members
 
-        /// <summary>
-        /// Attempts to obtain a free object from the pool.  If there are none or if the pool is not enabled, then explicitly Constructs a new object and returns it.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual ObjectType GetFreeObjectFromPool()
         {
             ObjectType obj = null;
@@ -258,11 +264,7 @@ namespace MosaicLib.Utils.Pooling
             return obj;
         }
 
-        /// <summary>
-        /// Returns the given object to the pool.  Has no effect if given the null value.  Generally the object should have been acquired from the pool.  
-        /// <para/>The caller is required to pass the last variable/handle to theObject to this method by reference and this method will set the referenced variable/handle to null to complete the return of the object.
-        /// If the pool is already full then the object will be dropped or disposed (as appropriate) using Fcns.DisposeOfObject
-        /// </summary>
+        /// <inheritdoc/>
         public virtual void ReturnObjectToPool(ref ObjectType objRef)
         {
             ObjectType objRefCopy = objRef;
@@ -287,17 +289,13 @@ namespace MosaicLib.Utils.Pooling
             Fcns.DisposeOfObject(ref objRefCopy);
         }
 
-        /// <summary>
-        /// Returns the maximum number of free objects that can be contained in the pool.
-        /// <para/>Note: this value is only used when returning objects to the pool.  
-        /// Changing this capacity will not change the current count.
-        /// </summary>
+        /// <inheritdoc/>
         public int Capacity { get { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } set { freeObjectStackCapacity = value; } }
 
-        /// <summary>Returns the number of free objects in the pool.</summary>
+        /// <inheritdoc/>
         public int Count { get { lock (freeObjectStackMutex) { return ((freeObjectStack != null) ? freeObjectStack.Count : 0); } } }
 
-        /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
+        /// <inheritdoc/>
         public void Shutdown()
         {
             lock (freeObjectStackMutex)
@@ -319,7 +317,7 @@ namespace MosaicLib.Utils.Pooling
             }
         }
 
-        /// <summary>Restarts the pool if it has been Shutdown since it was constructed or since the last time it was Started.</summary>
+        /// <inheritdoc/>
         public IBasicObjectPool<ObjectType> StartIfNeeded()
         {
             lock (freeObjectStackMutex)
@@ -336,7 +334,7 @@ namespace MosaicLib.Utils.Pooling
             return this;
         }
 
-        /// <summary>Returns true if the pool is enabled</summary>
+        /// <inheritdoc/>
         public bool IsPoolEnabled { get { return poolIsEnabled;  } }
 
         #endregion
@@ -351,6 +349,335 @@ namespace MosaicLib.Utils.Pooling
 
         /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
         private Stack<ObjectType> freeObjectStack = null;
+
+        /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
+        private volatile int freeObjectStackCapacity = 0;
+
+        #endregion
+    }
+
+
+    /// <summary>
+    /// This class implements an object pool based on the <see cref="ConcurrentQueue{ObjectType}"/>.  
+    /// This removes the need for an internal hot mutex on access to the pool.  
+    /// Choice to use a queue in place of a stack is intended to heuristically decrease total contention as parallel Add and Remove operation pairs can be performed without contention.
+    /// </summary>
+    /// <remarks>
+    /// Please note that in this version the <see cref="Capacity"/> properties value is only heuristic as comparison of the pool's <see cref="Count"/> to its <see cref="Capacity"/>
+    /// if performed asynchronously to actual content changes.  Operations that return to the pool may retain or discard objects unexpectedly in relation to the actual <see cref="Count"/>.
+    /// </remarks>
+    public class ConcurrentQueueObjectPool<ObjectType>
+        : Utils.DisposableBase
+        , IBasicObjectPool<ObjectType>
+        where ObjectType : class
+    {
+        #region Construction, Setup, Disposal
+
+        /// <summary>
+        /// Default constructor.  Enables the pool and sets the Capacity to the default of 1.  
+        /// Caller must set the ObjectFactoryDelegate property to a valid factory delegate before attempting to Get an object from the pool
+        /// </summary>
+        public ConcurrentQueueObjectPool()
+        {
+            Capacity = 1;
+            AddExplicitDisposeAction(() => Shutdown());
+            StartIfNeeded();
+        }
+
+        /// <summary>
+        /// This propery defines the delegate that is used to construct new objects in the pool.  This property is generally initialized during pool object construction.
+        /// <para/>This property's setter is not thread-safe and must not be changed after the first call to GetFreeObjectFromPool has been made if the GetFreeObjectFromPool method
+        /// is being used by more than one thread at a time.
+        /// </summary>
+        public System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
+
+        /// <summary>
+        /// Optional delegate.  
+        /// When non-null this delegate will be used to "Clear" items that are being returned to the list.  
+        /// Items that are discarded when the list is full may not be "Clear"ed.
+        /// </summary>
+        public Action<ObjectType> ObjectClearDelegate { get; set; }
+
+        #endregion
+
+        #region IBasicObjectPool<ObjectType> Members
+
+        /// <inheritdoc/>
+        public virtual ObjectType GetFreeObjectFromPool()
+        {
+            ObjectType obj = null;
+            bool resetCount = !poolIsEnabled;
+
+            if (poolIsEnabled)
+            {
+                if (freeObjectQueue.TryDequeue(out obj))
+                {
+                    if (volatileCount.Decrement() < 0)
+                        resetCount = true;
+                }
+                else
+                {
+                    volatileCount.VolatileValue = 0;
+                }
+            }
+
+            if (resetCount)
+                volatileCount.VolatileValue = freeObjectQueue.Count;
+
+            if (obj == null && ObjectFactoryDelegate != null)
+                obj = ObjectFactoryDelegate();
+
+            return obj;
+        }
+
+        /// <inheritdoc/>
+        public virtual void ReturnObjectToPool(ref ObjectType objRef)
+        {
+            ObjectType objRefCopy = objRef;
+            bool resetCount = !poolIsEnabled;
+
+            objRef = null;
+
+            if (objRefCopy != null)
+            {
+                if (ObjectClearDelegate != null)
+                    ObjectClearDelegate(objRefCopy);
+
+                if (poolIsEnabled && Count < freeObjectStackCapacity)
+                {
+                    if (volatileCount.Increment() > freeObjectStackCapacity + 1)
+                        resetCount = true;
+
+                    freeObjectQueue.Enqueue(objRefCopy);
+                    objRefCopy = null;
+                }
+            }
+
+            if (resetCount)
+                volatileCount.VolatileValue = freeObjectQueue.Count;
+
+            Fcns.DisposeOfObject(ref objRefCopy);
+        }
+
+        /// <inheritdoc/>
+        public int Capacity { get { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } set { freeObjectStackCapacity = value; } }
+
+        /// <summary>
+        /// <inheritdoc/>
+        /// </summary>
+        /// <remarks>
+        /// For this pool type, this <see cref="Count"/> property only has heuristic value.  
+        /// It generally reflects the number of objects in the pool but parallel access to pool methods and properties and/or usage order may cause this value to (temporarily) differ from the expected range
+        /// including being less than zero and/or greater than <see cref="Capacity"/>.
+        /// </remarks>
+        public int Count { get { return volatileCount.VolatileValue; } }
+
+        private Utils.AtomicInt32 volatileCount = default(AtomicInt32);
+
+        /// <inheritdoc/>
+        public void Shutdown()
+        {
+            // disable the pool
+            poolIsEnabled = false;
+
+            ObjectType obj;
+            while (freeObjectQueue.TryDequeue(out obj))
+            {
+                var disposable = obj as IDisposable;
+                if (disposable != null)
+                    disposable.Dispose();                    
+            }
+
+            volatileCount.VolatileValue = freeObjectQueue.Count;
+        }
+
+        /// <inheritdoc/>
+        public IBasicObjectPool<ObjectType> StartIfNeeded()
+        {
+            poolIsEnabled = true;
+
+            return this;
+        }
+
+        /// <inheritdoc/>
+        public bool IsPoolEnabled { get { return poolIsEnabled; } }
+
+        #endregion
+
+        #region Private instance variables
+
+        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
+        private volatile bool poolIsEnabled = false;
+
+        /// <summary>
+        /// the <see cref="ConcurrentQueue{ObjectType}"/> of free objects.  
+        /// Use of FIFO semantics is chosen to generally decrease contention between simultanious add and remove operations as they occur at different parts of the set of free objects.
+        /// </summary>
+        private ConcurrentQueue<ObjectType> freeObjectQueue = new ConcurrentQueue<ObjectType>();
+
+        /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
+        private volatile int freeObjectStackCapacity = 0;
+
+        #endregion
+    }
+
+    /// <summary>
+    /// This class implements an object pool based on the <see cref="ConcurrentStack{ObjectType}"/>.  
+    /// This removes the need for an internal hot mutex on access to the pool.  
+    /// Choice to use a queue in place of a stack is intended to heuristically decrease total contention as parallel Add and Remove operation pairs can be performed without contention.
+    /// </summary>
+    /// <remarks>
+    /// Please note that in this version the <see cref="Capacity"/> properties value is only heuristic as comparison of the pool's <see cref="Count"/> to its <see cref="Capacity"/>
+    /// if performed asynchronously to actual content changes.  Operations that return to the pool may retain or discard objects unexpectedly in relation to the actual <see cref="Count"/>.
+    /// </remarks>
+    public class ConcurrentStackObjectPool<ObjectType>
+        : Utils.DisposableBase
+        , IBasicObjectPool<ObjectType>
+        where ObjectType : class
+    {
+        #region Construction, Setup, Disposal
+
+        /// <summary>
+        /// Default constructor.  Enables the pool and sets the Capacity to the default of 1.  
+        /// Caller must set the ObjectFactoryDelegate property to a valid factory delegate before attempting to Get an object from the pool
+        /// </summary>
+        public ConcurrentStackObjectPool()
+        {
+            Capacity = 1;
+            AddExplicitDisposeAction(() => Shutdown());
+            StartIfNeeded();
+        }
+
+        /// <summary>
+        /// This propery defines the delegate that is used to construct new objects in the pool.  This property is generally initialized during pool object construction.
+        /// <para/>This property's setter is not thread-safe and must not be changed after the first call to GetFreeObjectFromPool has been made if the GetFreeObjectFromPool method
+        /// is being used by more than one thread at a time.
+        /// </summary>
+        public System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
+
+        /// <summary>
+        /// Optional delegate.  
+        /// When non-null this delegate will be used to "Clear" items that are being returned to the list.  
+        /// Items that are discarded when the list is full may not be "Clear"ed.
+        /// </summary>
+        public Action<ObjectType> ObjectClearDelegate { get; set; }
+
+        #endregion
+
+        #region IBasicObjectPool<ObjectType> Members
+
+        /// <inheritdoc/>
+        public virtual ObjectType GetFreeObjectFromPool()
+        {
+            ObjectType obj = null;
+            bool resetCount = !poolIsEnabled;
+
+            if (poolIsEnabled)
+            {
+                if (freeObjectQueue.TryPop(out obj))
+                {
+                    if (volatileCount.Decrement() < 0)
+                        resetCount = true;
+                }
+                else
+                {
+                    volatileCount.VolatileValue = 0;
+                }
+            }
+
+            if (resetCount)
+                volatileCount.VolatileValue = freeObjectQueue.Count;
+
+            if (obj == null && ObjectFactoryDelegate != null)
+                obj = ObjectFactoryDelegate();
+
+            return obj;
+        }
+
+        /// <inheritdoc/>
+        public virtual void ReturnObjectToPool(ref ObjectType objRef)
+        {
+            ObjectType objRefCopy = objRef;
+            bool resetCount = !poolIsEnabled;
+
+            objRef = null;
+
+            if (objRefCopy != null)
+            {
+                if (ObjectClearDelegate != null)
+                    ObjectClearDelegate(objRefCopy);
+
+                if (poolIsEnabled && Count < freeObjectStackCapacity)
+                {
+                    if (volatileCount.Increment() > freeObjectStackCapacity + 1)
+                        resetCount = true;
+
+                    freeObjectQueue.Push(objRefCopy);
+                    objRefCopy = null;
+                }
+            }
+
+            if (resetCount)
+                volatileCount.VolatileValue = freeObjectQueue.Count;
+
+            Fcns.DisposeOfObject(ref objRefCopy);
+        }
+
+        /// <inheritdoc/>
+        public int Capacity { get { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } set { freeObjectStackCapacity = value; } }
+
+        /// <summary>
+        /// <inheritdoc/>
+        /// </summary>
+        /// <remarks>
+        /// For this pool type, this <see cref="Count"/> property only has heuristic value.  
+        /// It generally reflects the number of objects in the pool but parallel access to pool methods and properties and/or usage order may cause this value to (temporarily) differ from the expected range
+        /// including being less than zero and/or greater than <see cref="Capacity"/>.
+        /// </remarks>
+        public int Count { get { return volatileCount.VolatileValue; } }
+
+        private Utils.AtomicInt32 volatileCount = default(AtomicInt32);
+
+        /// <inheritdoc/>
+        public void Shutdown()
+        {
+            // disable the pool
+            poolIsEnabled = false;
+
+            ObjectType obj;
+            while (freeObjectQueue.TryPop(out obj))
+            {
+                var disposable = obj as IDisposable;
+                if (disposable != null)
+                    disposable.Dispose();
+            }
+
+            volatileCount.VolatileValue = freeObjectQueue.Count;
+        }
+
+        /// <inheritdoc/>
+        public IBasicObjectPool<ObjectType> StartIfNeeded()
+        {
+            poolIsEnabled = true;
+
+            return this;
+        }
+
+        /// <inheritdoc/>
+        public bool IsPoolEnabled { get { return poolIsEnabled; } }
+
+        #endregion
+
+        #region Private instance variables
+
+        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
+        private volatile bool poolIsEnabled = false;
+
+        /// <summary>
+        /// the <see cref="ConcurrentStack{ObjectType}"/> of free objects.  
+        /// Use of LIFO semantics is chosen to generally decrease contention between simultanious add and remove operations as they occur at different parts of the set of free objects.
+        /// </summary>
+        private ConcurrentStack<ObjectType> freeObjectQueue = new ConcurrentStack<ObjectType>();
 
         /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
         private volatile int freeObjectStackCapacity = 0;

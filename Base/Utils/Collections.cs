@@ -23,11 +23,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
-
-using MosaicLib;
-using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
@@ -46,11 +45,6 @@ namespace MosaicLib.Utils
         /// <typeparam name="ItemType">Defines the type of item that the client will store in this queue.  May be a reference or a value type.</typeparam>
         public class SimpleLockedQueue<ItemType>
         {
-            /// <summary>
-            /// Default constructor
-            /// </summary>
-            public SimpleLockedQueue() { }
-
             /// <summary>
             /// Enqueues the given <paramref name="item"/>.
             /// </summary>
@@ -112,6 +106,7 @@ namespace MosaicLib.Utils
             /// Attempts to return the next object in the queue (without removing it).  throws if the queue is currently empty.
             /// </summary>
             /// <exception cref="System.InvalidOperationException">This exception is thrown if the queue is empty when attempting to peek at its first element.</exception>:
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType Peek()
             {
                 lock (mutex)
@@ -123,6 +118,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Attempts to return the next object in the queue (without removing it) if the queue is not currently empty, or returns the given emptyValue value if the queue is already empty.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType Peek(ItemType emptyValue)
             {
                 lock (mutex)
@@ -138,6 +134,7 @@ namespace MosaicLib.Utils
             /// Attempts to dequeue and return the next object in the queue.  throws if the queue is currently empty.
             /// </summary>
             /// <exception cref="System.InvalidOperationException">This exception is thrown if the queue is empty when attempting to dequeue its first element.</exception>:
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType Dequeue()
             {
                 lock (mutex)
@@ -157,6 +154,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Attempts to dequeue and return the next object in the queue if the queue is not currently empty, or returns the given emptyValue value if the queue is already empty.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType Dequeue(ItemType emptyValue)
             {
                 lock (mutex)
@@ -182,6 +180,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Dequeues and removes all of the items in the queue and returns them in an array.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType[] DequeueAll()
             {
                 ItemType[] array;
@@ -212,11 +211,16 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns the synchronized count from the backing queue object.  Locks the corresponding mutex as the backing queue object's Count property is non-reenterant.
             /// </summary>
-            public int Count { get { lock (mutex) { return backingQueue.Count; } } }
+            public int Count
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { lock (mutex) { return backingQueue.Count; } } 
+            }
 
             /// <summary>
             /// Returns the current contents of the queue converted to an array
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public ItemType[] ToArray()
             {
                 lock (mutex)
@@ -228,13 +232,18 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns the last queue count observed after Enqueueing or Dequeing the last item.
             /// </summary>
-            public int VolatileCount { get { return volatileCount; } }
+            public int VolatileCount
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return volatileCount; } 
+            }
 
             /// <summary>
             /// Returns true if the VolatileCount is zero.
             /// </summary>
             public bool IsEmpty
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return (VolatileCount == 0);
@@ -264,7 +273,11 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns an instance of an empty array of the selected <typeparamref name="TItemType"/> type.  This is a singleton, immutable, instance.
             /// </summary>
-            public static TItemType[] Instance { get { return instance; } }
+            public static TItemType[] Instance 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return instance; } 
+            }
 
             private static readonly TItemType[] instance = new TItemType[0];
         }
@@ -325,16 +338,33 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Helper static getter - returns a singleton (static) empty ReadOnlyIList{TItemType}.
             /// </summary>
-            public static ReadOnlyIList<TItemType> Empty { get { return _empty; } }
+            public static ReadOnlyIList<TItemType> Empty 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return _empty; } 
+            }
             private static readonly ReadOnlyIList<TItemType> _empty = new ReadOnlyIList<TItemType>();
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private TItemType[] itemsArray;
             private static readonly TItemType[] emptyArray = EmptyArrayFactory<TItemType>.Instance;
 
             [NonSerialized]
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private ReadOnlyCollection<TItemType> _rocOfItems = null;
 
-            private ReadOnlyCollection<TItemType> ROCOfItems { get { return _rocOfItems ?? (_rocOfItems = new ReadOnlyCollection<TItemType>(itemsArray)); } }
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+            private ReadOnlyCollection<TItemType> ROCOfItems 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return _rocOfItems ?? (_rocOfItems = new ReadOnlyCollection<TItemType>(itemsArray)); }
+            }
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"ReadOnlyIList<{typeof(TItemType).GetTypeLeafName()}> Count = {Count}";
+            }
 
             /// <summary>Returns the count of the number of items that are in this set</summary>
             public int Count
@@ -369,6 +399,7 @@ namespace MosaicLib.Utils
             /// <exception cref="System.NotSupportedException">if the client attempts to use the indexed setter.</exception>
             public TItemType this[int index]
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return itemsArray[index];
@@ -392,6 +423,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns true if the collection contains an element that is EqualityComparer{TItemType}.Default.Equals to the given <paramref name="item"/> value, or false otherwise.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Contains(TItemType item)
             {
                 return ROCOfItems.Contains(item);
@@ -413,6 +445,7 @@ namespace MosaicLib.Utils
             /// </summary>
             public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return true; }
             }
 
@@ -525,6 +558,9 @@ namespace MosaicLib.Utils
 
         #region ReadOnlyIDictionary
 
+        /// <summary>
+        /// This class is a used to support usage cases where immutable dictionary functionality is desired.
+        /// </summary>
         public class ReadOnlyIDictionary<TKey, TValue> : IDictionary<TKey, TValue>
         {
             /// <summary>
@@ -574,22 +610,38 @@ namespace MosaicLib.Utils
             public static ReadOnlyIDictionary<TKey, TValue> Empty { get { return _empty; } }
             private static readonly ReadOnlyIDictionary<TKey, TValue> _empty = new ReadOnlyIDictionary<TKey, TValue>();
 
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"ReadOnlyIDictionary<{typeof(TKey).GetTypeLeafName()},{typeof(TValue).GetTypeLeafName()}> Count = {Count}";
+            }
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private readonly KeyValuePair<TKey, TValue>[] itemsArray;
             private static readonly KeyValuePair<TKey, TValue>[] emptyArray = EmptyArrayFactory<KeyValuePair<TKey, TValue>>.Instance;
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private IDictionary<TKey, TValue> _dOfItems = null;
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private ReadOnlyIList<TKey> _rolOfKeys = null;
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private ReadOnlyIList<TValue> _rolOfValues = null;
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray, onlyTakeFirst: false)); } }
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private ReadOnlyIList<TKey> ROLOfKeys { get { return _rolOfKeys ?? (_rolOfKeys = new ReadOnlyIList<TKey>(itemsArray.Select(item => item.Key))); } }
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private ReadOnlyIList<TValue> ROLOfValues { get { return _rolOfValues ?? (_rolOfValues = new ReadOnlyIList<TValue>(itemsArray.Select(item => item.Value))); } }
 
             /// <summary>Returns the count of the number of items that are in this set</summary>
             public int Count
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return itemsArray.Length; }
             }
 
@@ -600,12 +652,14 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            bool IDictionary<TKey, TValue>.ContainsKey(TKey key)
+            /// <inheritdoc/>
+            public bool ContainsKey(TKey key)
             {
                 return DOfItems.ContainsKey(key);
             }
 
-            ICollection<TKey> IDictionary<TKey, TValue>.Keys
+            /// <inheritdoc/>
+            public ICollection<TKey> Keys
             {
                 get { return ROLOfKeys; }
             }
@@ -615,18 +669,24 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            bool IDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value)
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public bool TryGetValue(TKey key, out TValue value)
             {
                 return DOfItems.TryGetValue(key, out value);
             }
 
-            ICollection<TValue> IDictionary<TKey, TValue>.Values
+            /// <inheritdoc/>
+            public ICollection<TValue> Values
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return ROLOfValues; }
             }
 
-            TValue IDictionary<TKey, TValue>.this[TKey key]
+            /// <inheritdoc/>
+            public TValue this[TKey key]
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return DOfItems[key];
@@ -647,18 +707,22 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
+            /// <inheritdoc/>
+            public bool Contains(KeyValuePair<TKey, TValue> item)
             {
                 return DOfItems.Contains(item);
             }
 
-            void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+            /// <inheritdoc/>
+            public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
             {
                 itemsArray.CopyTo(array, arrayIndex);
             }
 
-            bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly
+            /// <inheritdoc/>
+            public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return true; }
             }
 
@@ -684,6 +748,9 @@ namespace MosaicLib.Utils
 
         #region ReadOnlyHashSet
 
+        /// <summary>
+        /// This class is used to support usage cases where immutable hash set functionality is desired.
+        /// </summary>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0044:Add readonly modifier", Justification = "This class contains private properties and/or fields that are only used for serialization and deserialization")]
         [Serializable]
         public class ReadOnlyHashSet<TItemType> : ISet<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IEnumerable
@@ -700,16 +767,30 @@ namespace MosaicLib.Utils
             public static ReadOnlyHashSet<TItemType> Empty { get { return _Empty; } }
             private static readonly ReadOnlyHashSet<TItemType> _Empty = new ReadOnlyHashSet<TItemType>();
 
-            private TItemType[] itemsArray;
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"ReadOnlyHashSet<{typeof(TItemType).GetTypeLeafName()}> Count = {Count}";
+            }
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
+            private TItemType[] itemsArray = null;
 
             [NonSerialized]
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private ISet<TItemType> _setOfItems = null;
 
-            private ISet<TItemType> SetOfItems { get { return _setOfItems ?? (_setOfItems = new HashSet<TItemType>().SafeAddRange(itemsArray)); } }
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+            private ISet<TItemType> SetOfItems 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return _setOfItems ?? (_setOfItems = new HashSet<TItemType>().SafeAddRange(itemsArray)); } 
+            }
 
             /// <summary>Returns the count of the number of items that are in this set</summary>
             public int Count
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return itemsArray.Length; }
             }
 
@@ -793,6 +874,7 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             bool ICollection<TItemType>.Contains(TItemType item)
             {
                 return SetOfItems.Contains(item);
@@ -805,6 +887,7 @@ namespace MosaicLib.Utils
 
             bool ICollection<TItemType>.IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return true; }
             }
 
@@ -948,6 +1031,12 @@ namespace MosaicLib.Utils
             #endregion
 
             #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange, Contains, this[int index], Count, IsEmpty, Array)
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"LockedObjectListWithCachedArray<{typeof(ObjectType).GetTypeLeafName()}> Count = {Count}";
+            }
 
             /// <summary>
             /// Searches for the specified <paramref name="item"/> in the list and returns the zero-based index of the first occurrence, or -1 if the <paramref name="item"/> was not found.
@@ -1133,8 +1222,10 @@ namespace MosaicLib.Utils
             /// generate the array version of it and then retain the Array version for later requests until the list contents have been changed again.
             /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
             /// </remarks>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public ObjectType[] Array
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     ObjectType[] array = volatileObjectArray;
@@ -1167,8 +1258,10 @@ namespace MosaicLib.Utils
             /// generate the new read only list version of it and then retain the generated read only list version for later requests until the main list contents have been changed again.
             /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
             /// </remarks>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public ReadOnlyIList<ObjectType> ReadOnlyIList
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     ReadOnlyIList<ObjectType> readOnlyIList = volatileReadOnlyIList;
@@ -1194,14 +1287,18 @@ namespace MosaicLib.Utils
             #region Private fields
 
             /// <summary>mutex used to guard/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             private readonly object listMutex = new object();
 
             /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private readonly List<ObjectType> objectList = new List<ObjectType>();
 
             /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private volatile ReadOnlyIList<ObjectType> volatileReadOnlyIList = ReadOnlyIList<ObjectType>.Empty;
 
             /// <summary>
@@ -1260,6 +1357,7 @@ namespace MosaicLib.Utils
                 }
             }
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             bool ICollection<ObjectType>.IsReadOnly
             {
                 get { return false; }
@@ -1314,11 +1412,13 @@ namespace MosaicLib.Utils
                 }
             }
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             bool IList.IsFixedSize
             {
                 get { lock (listMutex) { return (objectList as IList).IsFixedSize; } }
             }
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             bool IList.IsReadOnly
             {
                 get { return false; }
@@ -1366,11 +1466,13 @@ namespace MosaicLib.Utils
                 }
             }
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             bool ICollection.IsSynchronized
             {
                 get { return true; }
             }
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             object ICollection.SyncRoot
             {
                 get { return listMutex; }
@@ -1391,11 +1493,17 @@ namespace MosaicLib.Utils
         {
             #region Private fields and related private methods
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private readonly List<TItemType> list;
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private TItemType[] _array = null;
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private ReadOnlyIList<TItemType> _readOnlyIList = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _array and _readOnlyIList to null)</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void NoteContentsChanged()
             {
                 _array = null;
@@ -1422,6 +1530,12 @@ namespace MosaicLib.Utils
 
             #region Custom public properties (Array, ReadOnlyIList)
 
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"IListWithCachedArray<{typeof(TItemType).GetTypeLeafName()}> Count = {Count}";
+            }
+
             /// <summary>
             /// If necessary generates an array from the current list contents and returns it, retaining the resulting array instance until the
             /// list contents are next changed.
@@ -1429,8 +1543,10 @@ namespace MosaicLib.Utils
             /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
             /// (as it uses the resulting array in some cases).
             /// </summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public TItemType[] Array
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return _array ?? (_array = list.ToArray());
@@ -1441,8 +1557,10 @@ namespace MosaicLib.Utils
             /// If necessary generates a ReadOnlyIList instance fromthe current list contents and returns it, retainging the resulting read only list until this
             /// list's contents are next changed.
             /// </summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public ReadOnlyIList<TItemType> ReadOnlyIList
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return _readOnlyIList ?? (_readOnlyIList = new ReadOnlyIList<TItemType>(list));
@@ -1454,6 +1572,7 @@ namespace MosaicLib.Utils
             #region List like methods (AddRange)
 
             /// <summary>Adds the given <paramref name="collection"/> of objects to this list.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void AddRange(IEnumerable<TItemType> collection)
             {
                 list.AddRange(collection);
@@ -1464,6 +1583,7 @@ namespace MosaicLib.Utils
             /// sweeps through the contents evaluating the given <paramref name="match"/> predicate.  Removes all items from the list for which match returns true.
             /// </summary>
             /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="match"/> is null.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public int RemoveAll(Predicate<TItemType> match)
             {
                 if (match == null)
@@ -1495,6 +1615,7 @@ namespace MosaicLib.Utils
             #region IList<TItemType>
 
             /// <summary>Attempt to find the given item in this collection and returns its index, or -1 if it was not found.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public int IndexOf(TItemType item)
             {
                 return list.IndexOf(item);
@@ -1502,6 +1623,7 @@ namespace MosaicLib.Utils
 
             /// <summary>Attempts to insert the given <paramref name="item"/> at the given <paramref name="index"/></summary>
             /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Insert(int index, TItemType item)
             {
                 list.Insert(index, item);
@@ -1510,6 +1632,7 @@ namespace MosaicLib.Utils
 
             /// <summary>Attempts to remove the item at the given <paramref name="index"/></summary>
             /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void RemoveAt(int index)
             {
                 list.RemoveAt(index);
@@ -1520,10 +1643,12 @@ namespace MosaicLib.Utils
             /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
             public TItemType this[int index]
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return list[index];
                 }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set
                 {
                     list[index] = value;
@@ -1532,6 +1657,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Appends the given <paramref name="item"/> to the current collection</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Add(TItemType item)
             {
                 list.Add(item);
@@ -1539,6 +1665,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Removes all of the items from this collection.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Clear()
             {
                 list.Clear();
@@ -1546,6 +1673,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Returns true if this collection currently contains the given <paramref name="item"/>.  Exact behavior is implemented using the underlying List{TItemType}'s Contains method.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Contains(TItemType item)
             {
                 return list.Contains(item);
@@ -1563,16 +1691,19 @@ namespace MosaicLib.Utils
             /// <summary>Returns the current collection's item count.</summary>
             public int Count
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return list.Count; }
             }
 
             /// <summary>Returns false</summary>
             public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return false; }
             }
 
             /// <summary>Attempts to remove the first occurrence of the given <paramref name="item"/> from this collection.  Returns true if an occurrence of the given <paramref name="item"/> was found and removed, or false otherwise.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Remove(TItemType item)
             {
                 bool wasRemoved = list.Remove(item);
@@ -1613,12 +1744,20 @@ namespace MosaicLib.Utils
         {
             #region Private fields and related private methods
 
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private readonly Dictionary<TKeyType, TValueType> dictionary;
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private TKeyType[] _keyArray = null;
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private TValueType[] _valueArray = null;
+
+            [DebuggerBrowsable(DebuggerBrowsableState.Collapsed)]
             private KeyValuePair<TKeyType, TValueType>[] _keyValuePairArray = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _keyArray, _valueArray, and _keyValuePairArray to null)</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void NoteContentsChanged()
             {
                 _keyArray = null;
@@ -1643,6 +1782,12 @@ namespace MosaicLib.Utils
                     dictionary = new Dictionary<TKeyType, TValueType>();
             }
 
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return $"IDictionaryWithCachedArray<{typeof(TKeyType).GetTypeLeafName()},{typeof(TValueType).GetTypeLeafName()}> Count = {Count}";
+            }
+
             #endregion
 
             #region Custom public properties (KeyArray, ValueArray, KeyValuePairArray)
@@ -1654,8 +1799,10 @@ namespace MosaicLib.Utils
             /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
             /// (as it uses the resulting array in some cases).
             /// </summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public TKeyType[] KeyArray
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return _keyArray ?? (_keyArray = dictionary.Keys.ToArray());
@@ -1669,8 +1816,10 @@ namespace MosaicLib.Utils
             /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
             /// (as it uses the resulting array in some cases).
             /// </summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public TValueType[] ValueArray
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return _valueArray ?? (_valueArray = dictionary.Values.ToArray());
@@ -1684,8 +1833,10 @@ namespace MosaicLib.Utils
             /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
             /// (as it uses the resulting array in some cases).
             /// </summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public KeyValuePair<TKeyType, TValueType>[] KeyValuePairArray
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return _keyValuePairArray ?? (_keyValuePairArray = dictionary.ToArray());
@@ -1699,6 +1850,7 @@ namespace MosaicLib.Utils
             /// <summary>Attempts to add the given <paramref name="value"/> indexed in the collection under the given <paramref name="key"/></summary>
             /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
             /// <exception cref="System.ArgumentException">thrown if the colletion already contains a value for the given <paramref name="key"/>.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Add(TKeyType key, TValueType value)
             {
                 dictionary.Add(key, value);
@@ -1707,19 +1859,23 @@ namespace MosaicLib.Utils
 
             /// <summary>Returns true if the colletion currently contains a value for the given <paramref name="key"/></summary>
             /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool ContainsKey(TKeyType key)
             {
                 return dictionary.ContainsKey(key);
             }
 
             /// <summary>Returns a ICollection{TKeyType} for the keys that are currently in this collection</summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public ICollection<TKeyType> Keys
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return dictionary.Keys; }
             }
 
             /// <summary>Attempts to remove the given <paramref name="key"/> from this collection.  Returns true if the <paramref name="key"/> was found was removed, or false otherwise</summary>
             /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Remove(TKeyType key)
             {
                 bool wasRemoved = dictionary.Remove(key);
@@ -1732,14 +1888,17 @@ namespace MosaicLib.Utils
 
             /// <summary>Attempts to find and produce (out) the <paramref name="value"/> for the given <paramref name="key"/>.  Returns true if the <paramref name="key"/> was found.  Returns false if the <paramref name="key"/> was not found, in which case the <paramref name="value"/> will have been set to the default value for <typeparamref name="TValueType"/></summary>
             /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool TryGetValue(TKeyType key, out TValueType value)
             {
                 return dictionary.TryGetValue(key, out value);
             }
 
             /// <summary>Returns a ICollection{TValueType} for the values that are currently in this collection</summary>
+            [DebuggerBrowsable(DebuggerBrowsableState.Never)]
             public ICollection<TValueType> Values
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return dictionary.Values; }
             }
 
@@ -1748,10 +1907,12 @@ namespace MosaicLib.Utils
             /// <exception cref="System.Collections.Generic.KeyNotFoundException">thrown by the getter if the collection does not currently contains a value for the given <paramref name="key"/>.</exception>
             public TValueType this[TKeyType key]
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return dictionary[key];
                 }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set
                 {
                     dictionary[key] = value;
@@ -1760,6 +1921,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Removes all of the items from this collection.</summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Clear()
             {
                 dictionary.Clear();
@@ -1769,12 +1931,14 @@ namespace MosaicLib.Utils
             /// <summary>Returns the number of key/value pairs currently in this collection</summary>
             public int Count
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return dictionary.Count; }
             }
 
             /// <summary>Returns false</summary>
             public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return false; }
             }
 
@@ -1922,16 +2086,25 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns true if the set contains no tokens
             /// </summary>
-            public bool IsEmpty { get { return Count == 0; } }
+            public bool IsEmpty 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return Count == 0; } 
+            }
 
             /// <summary>
             /// Returns true if the set contains at least one token
             /// </summary>
-            public bool IsNotEmpty { get { return Count >= 1; } }
+            public bool IsNotEmpty 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return Count >= 1; } 
+            }
 
             /// <summary>Returns the count of the number of tokens in the set</summary>
             public int Count
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get
                 {
                     return ((!IsDefault(token1)).MapToInt()
@@ -1945,7 +2118,9 @@ namespace MosaicLib.Utils
             /// <summary>Getter returns true if the list is read only.  Setter may be used to set the list to be read-only, but may not be used to set a read/only set to be read/write</summary>
             public bool IsReadOnly
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return isReadOnly; }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set
                 {
                     if (value && !isReadOnly)
@@ -1957,6 +2132,7 @@ namespace MosaicLib.Utils
 
             /// <summary>Adds the given <paramref name="item"/> to this set.  This value is added into the first available local token location or it is added to the backing list if the local token locations are all non-default.</summary>
             /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Add(TItemType item)
             {
                 ThrowIfIsReadOnly("Add");
@@ -1978,6 +2154,7 @@ namespace MosaicLib.Utils
 
             /// <summary>Removes all of the added tokens from the set</summary>
             /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Clear()
             {
                 ThrowIfIsReadOnly("Clear");
@@ -1991,6 +2168,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns true if the set currently contains the given item (using object.Equals based equality comparison)
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Contains(TItemType item)
             {
                 if (IsDefault(item))
@@ -2026,6 +2204,7 @@ namespace MosaicLib.Utils
             /// Returns true if an occurrence was found and removed, or false if no such occurrence was found.
             /// </summary>
             /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool Remove(TItemType item)
             {
                 ThrowIfIsReadOnly("Remove");
@@ -2185,7 +2364,9 @@ namespace MosaicLib.Utils
             /// </summary>
             public int MaxHistoryCount
             {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get { return _MaxHistoryCount; }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set
                 {
                     _MaxHistoryCount = value;
@@ -2200,17 +2381,18 @@ namespace MosaicLib.Utils
             /// </summary>
             public override string ToString()
             {
-                return "Deduplicator<{0}> {1} Matches:{2} NonMatches:{3} hit rate:{4:f2}".CheckedFormat(typeof(TItemType).GetTypeLeafName(), MaxHistoryCount, MatchCount, NonMatchCount, MatchCount * ((double)MatchCount + NonMatchCount).SafeOneOver());
+                return $"Deduplicator<{typeof(TItemType).GetTypeLeafName()}> {MaxHistoryCount} Matches:{MatchCount} NonMatches:{NonMatchCount} hit rate:{MatchCount * ((double)MatchCount + NonMatchCount).SafeOneOver():f2}";
             }
 
             private struct ValueHashPair
             {
                 public int HashCode { get; set; }
+
                 public TItemType Value { get; set; }
 
                 public override string ToString()
                 {
-                    return "hash:{0} value:{1}".CheckedFormat(HashCode, Value.SafeToString(mapNullTo: "[Null]"));
+                    return $"hash:{HashCode} value:{Value.SafeToString(mapNullTo: "[Null]")}";
                 }
             }
 
@@ -2242,6 +2424,7 @@ namespace MosaicLib.Utils
             /// Processes the given <paramref name="itemIn"/> instance and either returns it unmodified or returns a recently given previous item instance
             /// that has equal content.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public TItemType Process(TItemType itemIn)
             {
                 if (MaxHistoryCount <= 0)
@@ -2312,13 +2495,21 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns the size of the set of mutex objects that are in the set.
             /// </summary>
-            public int SetSize { get { return mutexArray.Length; } }
+            public int SetSize 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return mutexArray.Length; } 
+            }
 
             /// <summary>
             /// Returns the current counter value.
             /// WARNING: this value is volatile and may be incremented and/or wrapped asynchronously to the use of this property so no guarantees or other assertions are made about the values it returns.
             /// </summary>
-            public int VolatileCounter { get { return counter; } }
+            public int VolatileCounter 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return counter; } 
+            }
 
             /// <summary>
             /// Gets and returns the (heuristically) next mutex object from the sequence which will (generally) iterate repeatedly through the fixed set of such objects.
@@ -2331,6 +2522,7 @@ namespace MosaicLib.Utils
             /// This is viewed has having a very low propability and given that heuristic re-issuing of the same set of objects is the intended behavior here,
             /// the optimization is reasonable and does not decrease the utility of this class.
             /// </remarks>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public object GetNextSharedMutexObject()
             {
                 int index = counter++;
@@ -2357,7 +2549,11 @@ namespace MosaicLib.Utils
     public static class KVP
     {
         /// <summary>Typed KeyValuePair construction helper method</summary>
-        public static KeyValuePair<TKey, TValue> Create<TKey, TValue>(TKey key, TValue value) { return new KeyValuePair<TKey, TValue>(key, value); }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static KeyValuePair<TKey, TValue> Create<TKey, TValue>(TKey key, TValue value) 
+        { 
+            return new KeyValuePair<TKey, TValue>(key, value); 
+        }
     }
 
     public static partial class ExtensionMethods
@@ -2367,6 +2563,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iSetIn"/> (if it is already a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} of the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIList<TItemType> ConvertToReadOnly<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
         {
             ReadOnlyIList<TItemType> roIList = iSetIn as ReadOnlyIList<TItemType>;
@@ -2381,13 +2578,40 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method generates and returns a new <see cref="ReadOnlyHashSet{TItemType}"/> from the given <paramref name="setIn"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ReadOnlyHashSet<TItemType> ConvertToReadOnlyHashSet<TItemType>(this IEnumerable<TItemType> setIn, bool mapNullToEmpty = true)
+        {
+            if (mapNullToEmpty)
+                setIn = setIn ?? EmptyArrayFactory<TItemType>.Instance;
+
+            return new ReadOnlyHashSet<TItemType>(setIn);
+        }
+
+        /// <summary>
+        /// Extension method generates and returns a new set that is the union of the given <paramref name="setIn"/> with the given <paramref name="other"/> elements.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ReadOnlyHashSet<TItemType> ReadOnlyUnionWith<TItemType>(this IEnumerable<TItemType> setIn, IEnumerable<TItemType> other)
+        {
+            var newSet = new HashSet<TItemType>(setIn ?? EmptyArrayFactory<TItemType>.Instance);
+
+            if (other != null)
+                newSet.UnionWith(other);
+
+            return newSet.ConvertToReadOnlyHashSet();
+        }
+
+        /// <summary>
         /// Extension method generates a new <see cref="HashSet{TItemType}"/> from the given <paramref name="iSetIn"/>.
         /// If <paramref name="iSetIn"/> is null then this method either returns a new empty <see cref="HashSet{TItemType}"/> or returns null depending on the value of the <paramref name="mapNullToEmpty"/> parameter.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static HashSet<TItemType> ConvertToHashSet<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
         {
             if (iSetIn != null || mapNullToEmpty)
-                return new HashSet<TItemType>(iSetIn ?? ReadOnlyIList<TItemType>.Empty);
+                return new HashSet<TItemType>(iSetIn ?? EmptyArrayFactory<TItemType>.Instance);
 
             return null;
         }
@@ -2397,6 +2621,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iListIn"/> (if it is already a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} of the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIList<TItemType> ConvertToReadOnly<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
         {
             ReadOnlyIList<TItemType> roIList = iListIn as ReadOnlyIList<TItemType>;
@@ -2416,6 +2641,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iListIn"/> (if it is not IsReadOnly) or returns a new List{TItemType} of the given <paramref name="iListIn"/> is non-empty, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IList<TItemType> ConvertToWritable<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
         {
             if (iListIn != null)
@@ -2431,6 +2657,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="readOnlyIListIn"/> (if it is not null) or returns an empty ReadOnlyIList{TItemType} if the given <paramref name="readOnlyIListIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIList<TItemType> MapNullToEmpty<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
         {
             return readOnlyIListIn ?? ReadOnlyIList<TItemType>.Empty;
@@ -2439,6 +2666,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="readOnlyIListIn"/> is non-empty otherwise this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIList<TItemType> MapEmptyToNull<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
         {
             return (readOnlyIListIn.SafeCount() != 0) ? readOnlyIListIn : null;
@@ -2451,6 +2679,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iDictionaryIn"/> (if it is already a ReadOnlyIDictionary instance) or returns a new ReadOnlyIDictionary{TKey, TValue} of the given <paramref name="iDictionaryIn"/>, or null if the given <paramref name="iDictionaryIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIDictionary<TKey, TValue> ConvertToReadOnly<TKey, TValue>(this IDictionary<TKey, TValue> iDictionaryIn, bool mapNullToEmpty = true)
         {
             ReadOnlyIDictionary<TKey, TValue> roIDictionary = iDictionaryIn as ReadOnlyIDictionary<TKey, TValue>;
@@ -2470,6 +2699,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iDictionaryIn"/> (if it is not IsReadOnly) or returns a new Dictionary{TKey, TValue} of the given <paramref name="iDictionaryIn"/> is non-empty, or null if the given <paramref name="iDictionaryIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IDictionary<TKey, TValue> ConvertToWritable<TKey, TValue>(this IDictionary<TKey, TValue> iDictionaryIn, bool mapNullToEmpty = true)
         {
             if (iDictionaryIn != null)
@@ -2485,6 +2715,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="readOnlyIDictionaryIn"/> (if it is not null) or returns an empty ReadOnlyIDictionary{TKey, TValue} if the given <paramref name="readOnlyIDictionaryIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIDictionary<TKey, TValue> MapNullToEmpty<TKey, TValue>(this ReadOnlyIDictionary<TKey, TValue> readOnlyIDictionaryIn)
         {
             return readOnlyIDictionaryIn ?? ReadOnlyIDictionary<TKey, TValue>.Empty;
@@ -2493,6 +2724,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="readOnlyIDictionaryIn"/> is non-empty otherwise this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReadOnlyIDictionary<TKey, TValue> MapEmptyToNull<TKey, TValue>(this ReadOnlyIDictionary<TKey, TValue> readOnlyIDictionaryIn)
         {
             return (readOnlyIDictionaryIn.SafeCount() != 0) ? readOnlyIDictionaryIn : null;
@@ -2503,6 +2735,7 @@ namespace MosaicLib.Utils
         #region IDictionary<TKey, TValue> (SafeAddItems, SafeAddRange, SafeSetValueForKey)
 
         /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstKVP"/> and any following <paramref name="moreKVPItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TDictionary SafeAddItems<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> firstKVP, params KeyValuePair<TKey, TValue>[] moreKVPItemsArray)
             where TDictionary : IDictionary<TKey, TValue>
         {
@@ -2518,6 +2751,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet, bool onlyTakeFirst = false)
             where TDictionary : IDictionary<TKey, TValue>
         {
@@ -2531,6 +2765,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="kvp"/>'s Key is non-null then uses the TKey indexed setter to set the key's value in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> kvp, bool onlyTakeFirst = false)
             where TDictionary : IDictionary<TKey, TValue>
         {
@@ -2540,7 +2775,11 @@ namespace MosaicLib.Utils
             return dictionary;
         }
 
-        /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="key"/> is non-null then uses the TKey indexed setter to set the <paramref name="key"/>'s <paramref name="value"/> in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
+        /// <summary>
+        /// If the given <paramref name="dictionary"/> is non-null and the given <paramref name="key"/> is non-null then uses the TKey indexed setter to set the <paramref name="key"/>'s <paramref name="value"/> in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.
+        /// If <paramref name="onlyTakeFirst"/> is true and the given <paramref name="dictionary"/> already contains the given <paramref name="key"/> then the <paramref name="dictionary"/> will not be chnaged.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, TKey key, TValue value, bool onlyTakeFirst = false)
             where TDictionary : IDictionary<TKey, TValue>
         {
@@ -2557,6 +2796,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="setIn"/> (if it is not null) or returns an empty <see cref="ITokenSet{TItemType}"/> if the given <paramref name="setIn"/> is null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ITokenSet<TItemType> MapNullToEmpty<TItemType>(this ITokenSet<TItemType> setIn)
         {
             return setIn ?? TokenSet<TItemType>.Empty;
@@ -2565,6 +2805,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method returns the given <paramref name="setIn"/> is non-empty otherwise this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ITokenSet<TItemType> MapEmptyToNull<TItemType>(this ITokenSet<TItemType> setIn)
         {
             return (setIn.SafeCount() != 0) ? setIn : null;
@@ -2573,6 +2814,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iSetIn"/> (if it is already a TokenSet instance) or returns a new TokenSet{TItemType} of the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TokenSet<TItemType> ConvertToReadOnly<TItemType>(this ITokenSet<TItemType> iSetIn, bool mapNullToEmpty = true)
         {
             TokenSet<TItemType> set = iSetIn as TokenSet<TItemType>;
@@ -2592,6 +2834,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method either returns the given <paramref name="iSetIn"/> (if it is not IsReadOnly) or returns a new TokenSet{TItemType} of the given <paramref name="iSetIn"/> is non-empty, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TokenSet<TItemType> ConvertToWritable<TItemType>(this ITokenSet<TItemType> iSetIn, bool mapNullToEmpty = true)
         {
             TokenSet<TItemType> set = iSetIn as TokenSet<TItemType>;

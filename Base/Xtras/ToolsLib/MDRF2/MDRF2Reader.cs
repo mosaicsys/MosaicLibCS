@@ -1,5 +1,5 @@
 //-------------------------------------------------------------------
-/*! @file MDRF2REader.cs
+/*! @file MDRF2Reader.cs
  *  @brief classes that are used to support reading MDRF2 (Mosaic Data Recording Format 2) files.
  * 
  * Copyright (c) Mosaic Systems Inc.
@@ -537,6 +537,26 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             MDRF2DecodingIssueHandlingBehavior = other.MDRF2DecodingIssueHandlingBehavior;
         }
 
+        /// <summary>
+        /// Version 2 default values.  
+        /// Selects 
+        /// <list type="bullet">
+        /// <item><see cref="MapNVSRecordsToVCRecords"/> as <see langword="true"/></item>
+        /// <item><see cref="MDRF2FileReaderBehavior"/> as (<see cref="MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile"/> | <see cref="MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile"/> | <see cref="MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile"/>)</item>
+        /// <item><see cref="MDRF1FileReaderBehavior"/> as <see cref="MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS"/></item>
+        /// <item><see cref="MDRF2DecodingIssueHandlingBehavior"/> as <see cref="MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord"/></item>
+        /// </list>
+        /// </summary>
+        public static MDRF2QuerySpec DefaultV2 => new MDRF2QuerySpec()
+        {
+            MapNVSRecordsToVCRecords = true,
+            MDRF2FileReaderBehavior = MDRF2FileReaderBehavior.TreatEndOfStreamExceptionAsEndOfFile 
+                                    | MDRF2FileReaderBehavior.TreatDecompressionEngineExceptionAsEndOfFile 
+                                    | MDRF2FileReaderBehavior.TreatAllErrorsAsEndOfFile,
+            MDRF1FileReaderBehavior = MDRF.Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS,
+            MDRF2DecodingIssueHandlingBehavior = MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord,
+        };
+
         /// <summary>Client usable name for this query (included any related query execution log messages).  Defaults to "MDRF2QuerySpec"</summary>
         public string Name { get; set; } = "MDRF2QuerySpec";
 
@@ -569,16 +589,14 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// <summary>
         /// Gives the set of occurrence names that the client would like records generated for.  
         /// If this is null then all occurrences will be included.  
-        /// Set this to the empty array to disable occurrence reporting.
-        /// Defaults to an empty array.
+        /// Defaults to an empty array which disables occurrence reporting.
         /// </summary>
         public string[] OccurrenceNameArray { get; set; } = EmptyArrayFactory<string>.Instance;
 
         /// <summary>
         /// Gives the set of object type names that the client would like records generated for.  
         /// If this is null then all records will (attempt to) be generated for all object types.  
-        /// Set this to the empty set to disable reporting of objects.
-        /// <para/>Defaults to an empty set.
+        /// <para/>Defaults to an empty set which disables reporting of objects.
         /// </summary>
         /// <remarks>
         /// Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yield object records.
@@ -650,6 +668,99 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         /// <summary>Gives the MDRF2DecodingIssueHandlingBehavior to use when reading MDRF2 files as part of this query.</summary>
         public MDRF2DecodingIssueHandlingBehavior MDRF2DecodingIssueHandlingBehavior { get; set; } = MDRF2DecodingIssueHandlingBehavior.SkipToEndOfRecord;
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        public static MDRF2QuerySpec UpdateItemTypeEnables(this MDRF2QuerySpec specIn, bool? mesgs = default, bool ? errors = default, bool ? decodingIssues = default)
+        {
+            var specOut = new MDRF2QuerySpec(specIn);
+
+            if (mesgs == true)
+                specOut.ItemTypeSelect |= MDRF2QueryItemTypeSelect.Mesg;
+            else if (mesgs == false)
+                specOut.ItemTypeSelect &= ~MDRF2QueryItemTypeSelect.Mesg;
+
+            if (errors == true)
+                specOut.ItemTypeSelect |= MDRF2QueryItemTypeSelect.Error;
+            else if (errors == false)
+                specOut.ItemTypeSelect &= ~MDRF2QueryItemTypeSelect.Error;
+
+            if (decodingIssues == true)
+                specOut.ItemTypeSelect |= MDRF2QueryItemTypeSelect.DecodingIssue;
+            else if (decodingIssues == false)
+                specOut.ItemTypeSelect &= ~MDRF2QueryItemTypeSelect.DecodingIssue;
+
+            return specOut;
+        }
+
+        /// <summary>
+        /// Generates and returns a new <see cref="MDRF2QuerySpec"/> instance, derived from the given <paramref name="specIn"/> one
+        /// and which is modified to support object decoding and reporting based on the additional parameter values that are passed.
+        /// </summary>
+        public static MDRF2QuerySpec AddObjectReporting(this MDRF2QuerySpec specIn
+            , IEnumerable<string> addObjectTypeNames = default
+            , IEnumerable<string> addKeyNames = default
+            , Func<string, bool> addKeyNameFilterPredicate = default
+            , IEnumerable<KeyValuePair<string, IMDRF2TypeNameHandler>> addCustomTypeNameHandlers = default
+            , ulong addObjectSpecificUserRowFlagBits = default
+            )
+        {
+            var specOut = new MDRF2QuerySpec(specIn);
+
+            specOut.ItemTypeSelect |= MDRF2QueryItemTypeSelect.Object;
+
+            if (addObjectTypeNames == null)
+            {
+                if (specOut.ObjectTypeNameSet.IsEmpty())
+                    specOut.ObjectTypeNameSet = null;
+            }
+            else if (specOut.ObjectTypeNameSet == null)
+            {
+                specOut.ObjectTypeNameSet = addObjectTypeNames.ConvertToReadOnlyHashSet();
+            }
+            else
+            {
+                specOut.ObjectTypeNameSet = specOut.ObjectTypeNameSet.ReadOnlyUnionWith(addObjectTypeNames);
+            }
+
+            if (addKeyNames != null)
+            {
+                if (specOut.KeyNameHashSet == null)
+                    specOut.KeyNameHashSet = addKeyNames.ConvertToReadOnlyHashSet();
+                else
+                    specOut.KeyNameHashSet = specOut.KeyNameHashSet.ReadOnlyUnionWith(addKeyNames);
+            }
+
+            if (addKeyNameFilterPredicate != null)
+            {
+                if (specOut.KeyNameFilterPredicate == null)
+                    specOut.KeyNameFilterPredicate = addKeyNameFilterPredicate;
+                else
+                    specOut.KeyNameFilterPredicate = (keyName => specOut.KeyNameFilterPredicate(keyName) || addKeyNameFilterPredicate(keyName));
+            }
+
+            if (addCustomTypeNameHandlers != null)
+            {
+                if (specOut.CustomTypeNameHandlers == null)
+                    specOut.CustomTypeNameHandlers = new ReadOnlyIDictionary<string, IMDRF2TypeNameHandler>(addCustomTypeNameHandlers);
+                else
+                {
+                    specOut.CustomTypeNameHandlers = specOut.CustomTypeNameHandlers
+                        .ConvertToWritable()
+                        .SafeAddKVPSet(addCustomTypeNameHandlers)
+                        .ConvertToReadOnly();
+                }
+            }
+
+            if (addObjectSpecificUserRowFlagBits != default)
+                specOut.ObjectSpecificUserRowFlagBits |= addObjectSpecificUserRowFlagBits;
+
+            return specOut;
+        }
     }
 
     /// <summary>

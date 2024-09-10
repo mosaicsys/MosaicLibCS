@@ -26,7 +26,6 @@ namespace MosaicLib.Modular.Action
 	using System;
 	using System.Collections.Generic;
 	using MosaicLib.Utils;
-	using MosaicLib.Time;
 
 	//-------------------------------------------------
 	/// <summary>
@@ -57,8 +56,6 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Gives the name of this ActionQueue</summary>
         public string Name { get; private set; }
-
-        private volatile bool queueEnabled = false;
 
         private readonly object queueMutex = new object();
 
@@ -95,7 +92,7 @@ namespace MosaicLib.Modular.Action
 		{
 			Name = name;
             this.queueSize = queueSize;
-            queueEnabled = enabled;
+            QueueDisableReason = enabled ? string.Empty : "AtConstruction";
 		}
 
 		/// <summary>
@@ -122,9 +119,10 @@ namespace MosaicLib.Modular.Action
 
 			lock (queueMutex)
 			{
-				if (!queueEnabled)
+                var disableReason = QueueDisableReason;
+				if (!disableReason.IsNullOrEmpty())
 				{
-                    iepf.CompleteRequest("{0}.Enqueue.Failed.QueueIsNotEnabled".CheckedFormat(Name));
+                    iepf.CompleteRequest("{0}.Enqueue.Failed.QueueIsDisabled.{1}".CheckedFormat(Name, disableReason));
 					return "";
 				}
 
@@ -279,31 +277,50 @@ namespace MosaicLib.Modular.Action
 		/// </summary>
 		public bool QueueEnable
 		{
-			get { return queueEnabled; }
-			set 
-			{
-				bool entryValue = false;
+			get { return _QueueDisabledReason.IsNullOrEmpty(); }
+			set { QueueDisableReason = value ? string.Empty : "QueueEnablePropertyWasSetToFalse"; }
+		}
 
-                lock (queueMutex) 
+        /// <summary>
+        /// This property getter may be used to determine if the queue is currently enabled and if not, why it is not enabled.
+        /// This property setter can be used to enable or disable the queue.  When the value is assigned to null or empty then the queue is enabled.
+        /// When the value is assigned to be non-empty then the queue is disabled and any currently queued actions will be removed and cancelled.
+        /// </summary>
+        public string QueueDisableReason
+        {
+            get
+            {
+                return _QueueDisabledReason ?? string.Empty;
+            }
+            set
+            {
+                string entryValue;
+
+                lock (queueMutex)
                 {
-                    entryValue = queueEnabled; 
-                    queueEnabled = value; 
+                    entryValue = _QueueDisabledReason;
+                    _QueueDisabledReason = value;
                 }
 
-				if (!value && entryValue)
-				{
-					// The Queue has just been disabled
-					// Iterate using GetNextAction and complete each operation that it returns until the queue is empty
+                if (!QueueDisableReason.IsNullOrEmpty() && entryValue.IsNullOrEmpty())
+                {
+                    // The Queue has just been disabled
+                    // Iterate using GetNextAction and complete each operation that it returns until the queue is empty
 
-					IProviderFacet ipf;
+                    IProviderFacet ipf;
+
+                    var queueDisabledResultCode = "{0}.Queue.Disabled.{1}".CheckedFormat(Name, QueueDisableReason);
 
                     while ((ipf = GetNextAction()) != null)
                     {
-                        ipf.CompleteRequest("{0}.DisableQueue.ActionHasBeenCanceled".CheckedFormat(Name));
+                        ipf.CompleteRequest(queueDisabledResultCode);
                     }
-				}
-			}
-		}
+                }
+            }
+        }
+
+        private volatile string _QueueDisabledReason = "QueueDisableReasonHasNotBeenSetYet";
+
 
 		/// <summary>
 		/// This asynchronous method is invoked by an action on its owning queue when the action gets canceled while in the Started state.

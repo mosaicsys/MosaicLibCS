@@ -34,7 +34,6 @@ using System.Text;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
-using MosaicLib.Semi.E005.Data;
 using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Modular.Common
@@ -149,10 +148,22 @@ namespace MosaicLib.Modular.Common
             public System.Double f64;
 
             /// <summary>Helper property to read/write a TimeSpan - internally gets/saves the i64 TickCount in the TimeSpan</summary>
-            public TimeSpan TimeSpan { get { return TimeSpan.FromTicks(i64); } set { i64 = value.Ticks; } }
+            public TimeSpan TimeSpan 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return TimeSpan.FromTicks(i64); }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                set { i64 = value.Ticks; } 
+            }
 
             /// <summary>Helper property to read/write a DateTime - internally gets/saves the i64 Binary representation in the DateTime</summary>
-            public DateTime DateTime { get { return DateTime.FromBinary(i64); } set { i64 = value.ToBinary(); } }
+            public DateTime DateTime 
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get { return DateTime.FromBinary(i64); }
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                set { i64 = value.ToBinary(); } 
+            }
 
             /// <summary>IEquatable{Union} implementation method.  Returns true if both unions contain the same binary content value (based on u64 field - large enough and has simple and safe basic equality meaning)</summary>
             public bool Equals(Union other)
@@ -178,6 +189,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsObject
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (cvt == ContainerStorageType.Object);
@@ -189,6 +201,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsNullObject
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (cvt == ContainerStorageType.Object && o == null);
@@ -211,6 +224,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsNull
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (cvt.IsReferenceType() && o == null);
@@ -222,6 +236,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsEmpty
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (cvt.IsNone());
@@ -233,6 +248,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsNullOrNone
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (cvt.IsNone() || IsNull);
@@ -244,6 +260,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public bool IsNullOrEmpty
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return (IsEmpty || IsNull);
@@ -257,13 +274,21 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns an ValueContainer with cvt set to ContainerStorageType.Object and o set to Null
         /// </summary>
-        public static ValueContainer Null { get { return _null; } }
+        public static ValueContainer Null 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return _null; } 
+        }
         private static readonly ValueContainer _null = default(ValueContainer).SetToNullObject();
 
         /// <summary>
         /// Returns an <see cref="ValueContainer"/> with cvt set to <see cref="ContainerStorageType.None"/>.  This is the same as <see langword="default"/>(<see cref="ValueContainer"/>).
         /// </summary>
-        public static ValueContainer Empty { get { return default(ValueContainer); } }
+        public static ValueContainer Empty 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return default(ValueContainer); } 
+        }
 
         #endregion
 
@@ -420,6 +445,7 @@ namespace MosaicLib.Modular.Common
         /// Unrecognized type default as ContainerStorageType.Object.
         /// </summary>
         /// <remarks>This method will be deprecated in the future as its use has been replaced by the use of an appropriate variant of the static GetDecodedTypeInfo method</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void DecodeType(Type type, out ContainerStorageType decodedValueType, out bool isNullable)
         {
             DecodedTypeInfo dti = GetDecodedTypeInfo(type);
@@ -446,6 +472,7 @@ namespace MosaicLib.Modular.Common
         /// Accepts a given <paramref name="type"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
         /// Unrecognized type default as ContainerStorageType.Object.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
         {
             return DecodedTypeInfo.GetDecodedTypeInfo(type);
@@ -554,6 +581,7 @@ namespace MosaicLib.Modular.Common
 
         private struct TypeAndDecodedTypeInfo
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public TypeAndDecodedTypeInfo(Type type, ContainerStorageType cst, bool isNullable = false)
                 : this()
             {
@@ -589,6 +617,7 @@ namespace MosaicLib.Modular.Common
             /// Accepts a given <typeparamref name="TValueType"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
             /// Unrecognized type default as ContainerStorageType.Object.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static DecodedTypeInfo GetDecodedTypeInfo<TValueType>()
             {
                 return GetDecodedTypeInfo(typeof(TValueType));
@@ -725,6 +754,7 @@ namespace MosaicLib.Modular.Common
         /// Internally uses SetFromObject to attempt to extract the type for supported and supported boxed contents and to set the ValueContainers ContainerStorageType cvt accordingly.
         /// <para/>Note use alternate SetValue&lt;System.Object&gt;(value) to force the resulting ValueContainer's cvt to be ContainerStorageType.Object and to contain the unmodified object from <paramref name="value"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateFromObject(System.Object value)
         {
             return default(ValueContainer).SetFromObject(value);
@@ -734,6 +764,7 @@ namespace MosaicLib.Modular.Common
         /// Static ValueContainer creation (factory) method.  Accepts <paramref name="value"/> of given (or implied) <typeparamref name="TValueType"/> and returns a ValueContainer instance with contents derived from both.
         /// Internally uses SetValue&lt;TValueType&gt;(value) which actually decodes the ContainerStorageType from the given TValueType and then sets the corresponding storage field from value.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer Create<TValueType>(TValueType value)
         {
             DecodedTypeInfo dti = StaticTypeDecoder<TValueType>.dti;
@@ -746,6 +777,7 @@ namespace MosaicLib.Modular.Common
         /// This method stores the given value in the desired container storage field.  If the given value does not fit in the indicated
         /// container then this method will attempt to convert the given value to an object and store it as such.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer Create<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable = false)
         {
             return default(ValueContainer).SetValue<TValueType>(value, decodedValueType, isNullable);
@@ -823,6 +855,7 @@ namespace MosaicLib.Modular.Common
         /// <para/>Use SetValue{System.Object}(value) if you want to force the container to store value as an object.
         /// <para/>Supports call chaining
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueContainer SetFromObject(System.Object value)
         {
             if (value != null)
@@ -855,6 +888,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool GetValueBo(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -869,6 +903,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte GetValueBi(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -885,6 +920,34 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public BiArray GetValueBiArray(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            if (o is BiArray)
+                return (BiArray)o;
+
+            if (o is byte[])
+                return new BiArray((byte[])o);
+
+            switch (cvt)
+            {
+                case ContainerStorageType.Bi: 
+                    return new BiArray(u.bi);
+
+                case ContainerStorageType.U1:
+                    return new BiArray(u.u8);
+
+                default: 
+                    return GetValue<BiArray>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public sbyte GetValueI1(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -900,6 +963,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public short GetValueI2(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -918,6 +982,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetValueI4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -938,6 +1003,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetValueI8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -960,6 +1026,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte GetValueU1(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -976,6 +1043,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ushort GetValueU2(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -993,6 +1061,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint GetValueU4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1011,6 +1080,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong GetValueU8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1030,6 +1100,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float GetValueF4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1050,6 +1121,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double GetValueF8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1105,39 +1177,59 @@ namespace MosaicLib.Modular.Common
         public void SetValueF8(double value) { cvt = ContainerStorageType.F8; o = null; u = new Union() { f64 = value }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateBo(bool value) { return new ValueContainer() { cvt = ContainerStorageType.Bo, u = new Union() { b = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateBi(byte value) { return new ValueContainer() { cvt = ContainerStorageType.Bi, u = new Union() { bi = value } }; }
 
+        /// <summary>Sets the contents of this ValueContainer to a copy the given <paramref name="biArray"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueContainer CreateBiArray(BiArray biArray) { return new ValueContainer() { cvt = ContainerStorageType.Object, o = biArray }; }
+
+        /// <summary>Sets the contents of this ValueContainer to a copy the given <paramref name="byteArray"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueContainer CreateBiArray(byte[] byteArray) { return CreateBiArray(new BiArray(byteArray)); }
+
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateI1(sbyte value) { return new ValueContainer() { cvt = ContainerStorageType.I1, u = new Union() { i8 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateI2(short value) { return new ValueContainer() { cvt = ContainerStorageType.I2, u = new Union() { i16 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateI4(int value) { return new ValueContainer() { cvt = ContainerStorageType.I4, u = new Union() { i32 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateI8(long value) { return new ValueContainer() { cvt = ContainerStorageType.I8, u = new Union() { i64 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateU1(byte value) { return new ValueContainer() { cvt = ContainerStorageType.U1, u = new Union() { u8 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateU2(ushort value) { return new ValueContainer() { cvt = ContainerStorageType.U2, u = new Union() { u16 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateU4(uint value) { return new ValueContainer() { cvt = ContainerStorageType.U4, u = new Union() { u32 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateU8(ulong value) { return new ValueContainer() { cvt = ContainerStorageType.U8, u = new Union() { u64 = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateF4(float value) { return new ValueContainer() { cvt = ContainerStorageType.F4, u = new Union() { f32 = value } }; }
 
         /// <summary>Creates and returns a ValueContainer that contains the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateF8(double value) { return new ValueContainer() { cvt = ContainerStorageType.F8, u = new Union() { f64 = value } }; }
 
         #endregion
@@ -1149,6 +1241,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public object GetValueObject(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1163,6 +1256,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public string GetValueA(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1177,6 +1271,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public TimeSpan GetValueTS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1192,6 +1287,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DateTime GetValueDT(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1206,6 +1302,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlyIList<string> GetValueLS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1220,6 +1317,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlyIList<ValueContainer> GetValueL(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1234,6 +1332,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public INamedValueSet GetValueNVS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1248,6 +1347,7 @@ namespace MosaicLib.Modular.Common
         /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
         /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public INamedValue GetValueNV(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             switch (cvt)
@@ -1285,36 +1385,47 @@ namespace MosaicLib.Modular.Common
         public void SetValueNV(INamedValue value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.NV; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateA(string value) { return new ValueContainer() { cvt = ContainerStorageType.A, o = value, u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateLS(IList<string> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateLS(IEnumerable<string> set, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateLS(string [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateLS(string firstItem, params string[] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = new ReadOnlyIList<string>(firstItem, moreItemsArray), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(IList<ValueContainer> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(ValueContainer [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(IEnumerable<ValueContainer> set, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = set.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(ValueContainer firstItem, params ValueContainer[] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.L, o = new ReadOnlyIList<ValueContainer>(firstItem, moreItemsArray), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="firstItem"/> concatinated with the given <paramref name="moreItemsArray"/> set of items using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(object firstItem, params object [] moreItemsArray) { return new ValueContainer() { cvt = ContainerStorageType.L, o = firstItem.Concat(moreItemsArray.MapNullToEmpty()).Select(o => ValueContainer.CreateFromObject(o)).ConvertToReadOnly(), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(IEnumerable<object> set, bool mapNullToEmpty = true)
         {
             var vcROSet = (set != null) ? set.Select(o => ValueContainer.CreateFromObject(o)).ConvertToReadOnly() : (mapNullToEmpty ? ReadOnlyIList<ValueContainer>.Empty : null); ;
@@ -1322,20 +1433,28 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="set"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateL(IEnumerable set, bool mapNullToEmpty = true) { return ValueContainer.CreateL(set.SafeToSet(mapNullToEmpty: mapNullToEmpty), mapNullToEmpty: mapNullToEmpty); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateTS(TimeSpan value) { return new ValueContainer() { cvt = ContainerStorageType.TS, u = new Union() { TimeSpan = value } }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateDT(DateTime value) { return new ValueContainer() { cvt = ContainerStorageType.DT, u = new Union() { DateTime = value } }; }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateNVS(INamedValueSet value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NVS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Creates a ValueContainer to contain a <see cref="NamedValueSet"/> constructed from the given <paramref name="kvpSet"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateNVS(IEnumerable<KeyValuePair<string, ValueContainer>> kvpSet, bool mapNullToEmpty = true) 
-        { 
+        {
+            if (kvpSet == null && mapNullToEmpty)
+                kvpSet = EmptyArrayFactory<KeyValuePair<string, ValueContainer>>.Instance;
+
             return new ValueContainer() 
             { 
                 cvt = ContainerStorageType.NVS, 
@@ -1344,8 +1463,8 @@ namespace MosaicLib.Modular.Common
             }; 
         }
 
-
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateNV(INamedValue value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NV, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         #endregion
@@ -2184,6 +2303,46 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
+        #region EmptyYY variants (Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8)
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyBo { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<bool>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyBi { get { return ValueContainer.CreateFromObject(BiArray.Empty); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyI1 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<sbyte>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyI2 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<short>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyI4 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<int>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyI8 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<long>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyU1 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<byte>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyU2 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<ushort>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyU4 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<uint>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyU8 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<ulong>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyF4 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<float>.Instance); } }
+
+        /// <summary>Returns a <see cref="ValueContainer"/> which contains an empty array of the indicated item type.</summary>
+        public static ValueContainer EmptyF8 { get { return ValueContainer.CreateFromObject(EmptyArrayFactory<double>.Instance); } }
+
+        #endregion
+
         #region Throw helpers (ThrowValueContainerGetValueException, ThrowGivenException - both are now obsolete)
 
         [Obsolete("This method has been depricated.  Please switch to using the new MosaicLib.Utils System.Exception.Throw() extension method (2020-05-26)")]
@@ -2383,7 +2542,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public override string ToString()
         {
-            return ToStringSML();
+            return ToStringSML(useShortNames: false);
         }
 
         /// <summary>
@@ -2392,6 +2551,16 @@ namespace MosaicLib.Modular.Common
         /// greater and less than symbols (which are heavily used in XML and must thus be escaped when placing such strings in XML output).
         /// </summary>
         public string ToStringSML()
+        {
+            return ToStringSML(useShortNames: true);
+        }
+
+        /// <summary>
+        /// ToString variant that support SML like output format.
+        /// This format is generally similar to SML except that it generally uses square brackets as element delimiters rather than
+        /// greater and less than symbols (which are heavily used in XML and must thus be escaped when placing such strings in XML output).
+        /// </summary>
+        public string ToStringSML(bool useShortNames)
         {
             if (cvt.IsNone())
                 return "[None]";
@@ -2413,7 +2582,10 @@ namespace MosaicLib.Modular.Common
             switch (cvt)
             {
                 case ContainerStorageType.Boolean:
-                    return "[Bool {0}]".CheckedFormat(u.b);
+                    if (useShortNames)
+                        return "[Bo {0}]".CheckedFormat(u.b);
+                    else
+                        return "[Bool {0}]".CheckedFormat(u.b);
                 case ContainerStorageType.Binary:
                     return "[Bi {0}]".CheckedFormat(u.bi);
                 case ContainerStorageType.SByte:
@@ -2442,15 +2614,21 @@ namespace MosaicLib.Modular.Common
 
                         if (s.IsNullOrEmpty())
                             return "[A]";
-                        else if (s.IsBasicAscii(basicUnquotedStringExcludeList, false))
+                        else if (s.IsBasicAscii(basicUnquotedStringExcludeSet, false))
                             return "[A {0}]".CheckedFormat(s);
                         else
                             return "[A \"{0}\"]".CheckedFormat(s.GenerateJSONVersion());
                     }
                 case ContainerStorageType.DateTime:
-                    return "[DateTime {0}]".CheckedFormat(u.DateTime.ToString("o"));
+                    if (useShortNames)
+                        return "[DT {0}]".CheckedFormat(u.DateTime.ToString("o"));
+                    else
+                        return "[DateTime {0}]".CheckedFormat(u.DateTime.ToString("o"));
                 case ContainerStorageType.TimeSpan:
-                    return "[TimeSpan {0}]".CheckedFormat(u.TimeSpan.TotalSeconds);
+                    if (useShortNames)
+                        return "[TS {0}]".CheckedFormat(u.TimeSpan.TotalSeconds);
+                    else
+                        return "[TimeSpan {0}]".CheckedFormat(u.TimeSpan.TotalSeconds);
                 case ContainerStorageType.IListOfString:
                     {
                         IList<string> strList = (o as IList<string>) ?? emptyIListOfString;
@@ -2460,9 +2638,9 @@ namespace MosaicLib.Modular.Common
                             return "[LS]";
                     }
                 case ContainerStorageType.INamedValueSet:
-                    return (o as INamedValueSet).MapNullToEmpty().ToStringSML(nvsNodeName: "NVS", nvNodeName: "NV");
+                    return (o as INamedValueSet).MapNullToEmpty().ToStringSML(nvsNodeName: "NVS", nvNodeName: "NV", useShortNames: useShortNames);
                 case ContainerStorageType.INamedValue:
-                    return (o as INamedValue).MapNullToEmpty().ToStringSML(nvNodeName: "NV");
+                    return (o as INamedValue).MapNullToEmpty().ToStringSML(nvNodeName: "NV", useShortNames: useShortNames);
             }
 
             if (o != null)
@@ -2473,27 +2651,46 @@ namespace MosaicLib.Modular.Common
                     vcArray = vcArray ?? (GetValue<IList<ValueContainer>>(false) ?? emptyIListOfVC).ToArray();
 
                     if (vcArray.Length > 0)
-                        return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
+                        return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML(useShortNames)).ToArray()));
                     else
                         return "[L]";
                 }
 
-                if (o is INamedValueSet) { return (o as INamedValueSet).ToStringSML(); }
-                if (o is INamedValue) { return (o as INamedValue).ToStringSML(); }
+                if (o is INamedValueSet) { return (o as INamedValueSet).ToStringSML(nvsNodeName: "NVS", nvNodeName: "NV", useShortNames: useShortNames); }
+                if (o is INamedValue) { return (o as INamedValue).ToStringSML(nvNodeName: "NV", useShortNames: useShortNames); }
 
                 Type oType = o.GetType();
-                if (oType == typeof(bool[])) { return "[Bool_Array{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(sbyte[])) { return "[I1_Array{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
-                if (oType == typeof(short[])) { return "[I2_Array{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(int[])) { return "[I4_Array{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(long[])) { return "[I8_Array{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(byte[])) { return "[U1_Array{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
-                if (oType == typeof(ushort[])) { return "[U2_Array{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(uint[])) { return "[U4_Array{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(ulong[])) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(float[])) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(double[])) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (oType == typeof(BiArray)) { return "[Bi_Array{0}]".CheckedFormat(String.Concat((o as BiArray).Select(v => " {0}".CheckedFormat(v)))); }
+
+                if (useShortNames)
+                {
+                    if (oType == typeof(bool[])) { return "[Bo{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(sbyte[])) { return "[I1{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
+                    if (oType == typeof(short[])) { return "[I2{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(int[])) { return "[I4{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(long[])) { return "[I8{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(byte[])) { return "[U1{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
+                    if (oType == typeof(ushort[])) { return "[U2{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(uint[])) { return "[U4{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(ulong[])) { return "[U8{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(float[])) { return "[F4{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(double[])) { return "[F8{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(BiArray)) { return "[Bi{0}]".CheckedFormat(String.Concat((o as BiArray).Select(v => " {0}".CheckedFormat(v)))); }
+                }
+                else
+                {
+                    if (oType == typeof(bool[])) { return "[Bool_Array{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(sbyte[])) { return "[I1_Array{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
+                    if (oType == typeof(short[])) { return "[I2_Array{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(int[])) { return "[I4_Array{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(long[])) { return "[I8_Array{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(byte[])) { return "[U1_Array{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
+                    if (oType == typeof(ushort[])) { return "[U2_Array{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(uint[])) { return "[U4_Array{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(ulong[])) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(float[])) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(double[])) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
+                    if (oType == typeof(BiArray)) { return "[Bi_Array{0}]".CheckedFormat(String.Concat((o as BiArray).Select(v => " {0}".CheckedFormat(v)))); }
+                }
             }
 
             if (cvt == ContainerStorageType.Object)
@@ -2503,7 +2700,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Constists of ' ', '"', '[' and ']'</summary>
-        private static readonly List<char> basicUnquotedStringExcludeList = new List<char>() { ' ', '\"', '[', ']' };
+        private static readonly HashSet<char> basicUnquotedStringExcludeSet = new HashSet<char>() { ' ', '\"', '[', ']' };
 
         private static readonly IList<String> emptyIListOfString = ReadOnlyIList<String>.Empty;
         private static readonly IList<ValueContainer> emptyIListOfVC = ReadOnlyIList<ValueContainer>.Empty;
@@ -2536,7 +2733,7 @@ namespace MosaicLib.Modular.Common
         INamedValue,
         /// <summary>Use Union.b field</summary>
         Boolean,
-        /// <summary>Use Union.bi field</summary>
+        /// <summary>Use Union.bi field, or o contains a <see cref="BiArray"/> instance</summary>
         Binary,
         /// <summary>Use Union.i8 field (signed)</summary>
         SByte,
@@ -2571,7 +2768,7 @@ namespace MosaicLib.Modular.Common
         L = IListOfVC,
         /// <summary>Alternate version of Boolean.  Use Union.b field</summary>
         Bo = Boolean,
-        /// <summary>Alternate version of Binary.  Use Union.bi field</summary>
+        /// <summary>Alternate version of Binary.  Use Union.bi field, or o contains a <see cref="BiArray"/> instance</summary>
         Bi = Binary,
         /// <summary>Alternate version of SByte.  Use Union.i8 field</summary>
         I1 = SByte,
@@ -2609,6 +2806,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is a reference type.  (Currently Object, String, IListOfString, IListOfVC, INamedValueSet, INamedValue)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsReferenceType(this ContainerStorageType cst)
         {
             switch (cst)
@@ -2628,6 +2826,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is a value type (aka it is not a reference type and it is not None).
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsValueType(this ContainerStorageType cst)
         {
             return !cst.IsReferenceType() && !cst.IsNone();
@@ -2636,6 +2835,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is None.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNone(this ContainerStorageType cst)
         {
             return (cst == ContainerStorageType.None);
@@ -2644,6 +2844,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is String.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsString(this ContainerStorageType cst)
         {
             return (cst == ContainerStorageType.String);
@@ -2677,6 +2878,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is Boolean.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsBoolean(this ContainerStorageType cst)
         {
             return (cst == ContainerStorageType.Boolean);
@@ -2685,6 +2887,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is Double or Single.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsFloatingPoint(this ContainerStorageType cst)
         {
             switch (cst)
@@ -2700,6 +2903,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is L or LS.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsList(this ContainerStorageType cst)
         {
             switch (cst)
@@ -2715,6 +2919,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given <paramref name="vc"/> is neither IsNull nor IsEmpty
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNeitherNullNorEmpty(this ValueContainer vc)
         {
             return !vc.IsNullOrEmpty;
@@ -2903,6 +3108,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given value is IsNull, IsEmpty, or IsZero
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmptyOrZero(this ValueContainer vc)
         {
             return (vc.IsNullOrEmpty || vc.IsZero());
@@ -3216,6 +3422,7 @@ namespace MosaicLib.Modular.Common
         /// Shortcut method that allows the caller to attempt to access an indexed sub-item in a "List" type ValueContainer's contents (L or LS).
         /// If the given vc does not contain a supported type or the given index is not valid then the method will return the given <paramref name="fallbackValue"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer SafeAccess(this ValueContainer vc, int index, ValueContainer fallbackValue = default(ValueContainer))
         {
             switch (vc.cvt)
@@ -3247,208 +3454,688 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.Bo"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this bool value) { return ValueContainer.CreateBo(value); }
 
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.Bi"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueContainer CreateVC(this BiArray value) { return ValueContainer.CreateBiArray(value); }
+
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I1"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this sbyte value) { return ValueContainer.CreateI1(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I2"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this short value) { return ValueContainer.CreateI2(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this int value) { return ValueContainer.CreateI4(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this long value) { return ValueContainer.CreateI8(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U1"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this byte value) { return ValueContainer.CreateU1(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U2"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this ushort value) { return ValueContainer.CreateU2(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this uint value) { return ValueContainer.CreateU4(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this ulong value) { return ValueContainer.CreateU8(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this float value) { return ValueContainer.CreateF4(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this double value) { return ValueContainer.CreateF8(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.DateTime"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this DateTime value) { return ValueContainer.CreateDT(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.TimeSpan"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this TimeSpan value) { return ValueContainer.CreateTS(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.Bo"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this bool ? value) { return (value != null) ? ValueContainer.CreateBo(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I1"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this sbyte ? value) { return (value != null) ? ValueContainer.CreateI1(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I2"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this short ? value) { return (value != null) ? ValueContainer.CreateI2(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this int ? value) { return (value != null) ? ValueContainer.CreateI4(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.I8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this long ? value) { return (value != null) ? ValueContainer.CreateI8(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U1"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this byte ? value) { return (value != null) ? ValueContainer.CreateU1(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U2"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this ushort ? value) { return (value != null) ? ValueContainer.CreateU2(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this uint ? value) { return (value != null) ? ValueContainer.CreateU4(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.U8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this ulong ? value) { return (value != null) ? ValueContainer.CreateU8(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F4"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this float ? value) { return (value != null) ? ValueContainer.CreateF4(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.F8"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this double ? value) { return (value != null) ? ValueContainer.CreateF8(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.DateTime"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this DateTime ? value) { return (value != null) ? ValueContainer.CreateDT(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.TimeSpan"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this TimeSpan ? value) { return (value != null) ? ValueContainer.CreateTS(value.GetValueOrDefault()) : default(ValueContainer); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.A"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this string value) { return ValueContainer.CreateA(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.LS"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this IEnumerable<string> value) { return ValueContainer.CreateLS(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.L"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this IEnumerable<ValueContainer> value) { return ValueContainer.CreateL(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.NVS"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this INamedValueSet value) { return ValueContainer.CreateNVS(value); }
 
         /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using <see cref="ContainerStorageType.NV"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer CreateVC(this INamedValue value) { return ValueContainer.CreateNV(value); }
 
         /// <summary>If the given <paramref name="vc"/> is non-empty then its value is returned, otherwise the value of the <paramref name="mapEmptyToVC"/> is returned.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer MapEmptyTo(this ValueContainer vc, ValueContainer mapEmptyToVC)
         {
             return !vc.IsEmpty ? vc : mapEmptyToVC;
         }
 
         /// <summary>If the given <paramref name="vc"/> is non-null then its value is returned, otherwise <paramref name="mapNullTo"/> is returned in its place.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer MapNullTo(this ValueContainer vc, ValueContainer mapNullTo = default(ValueContainer))
         {
             return !vc.IsNull ? vc : mapNullTo;
         }
 
         /// <summary>If the given <paramref name="vc"/> is non-null and non-empty then its value is returned, otherwise <paramref name="mapNullOrEmptyTo"/> is returned in its place.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueContainer MapNullOrEmptyTo(this ValueContainer vc, ValueContainer mapNullOrEmptyTo)
         {
             return !(vc.IsNullOrEmpty) ? vc : mapNullOrEmptyTo;
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueBi(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte? GetValueNullableBi(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (byte?)null : vc.GetValueBi(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueBo(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool? GetValueNullableBo(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (bool?) null : vc.GetValueBo(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI1(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static sbyte? GetValueNullableI1(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (sbyte?)null : vc.GetValueI1(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI2(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static short? GetValueNullableI2(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (short?)null : vc.GetValueI2(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int? GetValueNullableI4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (int?)null : vc.GetValueI4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueI8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long? GetValueNullableI8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (long?)null : vc.GetValueI8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU1(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte? GetValueNullableU1(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (byte?)null : vc.GetValueU1(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU2(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ushort? GetValueNullableU2(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (ushort?)null : vc.GetValueU2(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static uint? GetValueNullableU4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (uint?)null : vc.GetValueU4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueU8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong? GetValueNullableU8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (ulong?)null : vc.GetValueU8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueF4(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float? GetValueNullableF4(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (float?)null : vc.GetValueF4(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueF8(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double? GetValueNullableF8(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (double?)null : vc.GetValueF8(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueTS(bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TimeSpan? GetValueNullableTS(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (TimeSpan?)null : vc.GetValueTS(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> is null or empty then this method returns <see langword="null"/> otherwise this method returns <see cref="ValueContainer.GetValueDT (bool, bool)"/> (<paramref name="rethrow"/>, <paramref name="allowAllTypeChangeAttempts"/>)</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime? GetValueNullableDT(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true)
         {
             return vc.IsNullOrEmpty ? (DateTime?)null : vc.GetValueDT(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
         }
 
         /// <summary>If the given <paramref name="vc"/> contains an NVS, this method converts it to a kvc set and returns it.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ICollection<KeyValuePair<string, ValueContainer>> ConvertToKVCSet(this ValueContainer vc, bool rethrow = true, bool allowAllTypeChangeAttempts = true, bool mapNullToEmpty = true)
         {
             var nvs = vc.GetValueNVS(rethrow: rethrow, allowAllTypeChangeAttempts: allowAllTypeChangeAttempts);
 
             return nvs.ConvertToKVCSet(mapNullToEmpty: mapNullToEmpty);
         }
+
+        /// <summary>
+        /// This method may be used to attempt parse a given <see langword="string"/> <paramref name="s"/> 
+        /// using a sub-set of the string formats that can be produced by the <see cref="ValueContainer.ToStringSML()"/> method.
+        /// If the parse was successful then the <paramref name="result"/> is assigned to the parsed value and the method returns <see langword="true"/>
+        /// If the parse was not successful then the <paramref name="result"/> is assigned to the given <paramref name="fallbackVC"/> and the method returns <see langword="false"/>
+        /// </summary>
+        /// <remarks>
+        /// Supported set of string examples:
+        /// <para/>
+        /// <para/>[Bi] [Bi 255] [Bi 255 0] [Bi_Array 0 255 0]
+        /// <para/>[Bo] [Bo 1] [Bo true false] [Bo_Array 0 1 true false]
+        /// <para/>[I1] [I1 -128] [I1 127 -128] [I1_Array 127 0 -128]
+        /// <para/>[I2] [I2 -32768] [I2 32767 -32768] [I2_Array 32767 0 -32768]
+        /// <para/>[I4] [I4 -4] [I4 4 -4] [I4_Array 4 0 -4]
+        /// <para/>[I8] [I8 -8] [I8 8 -8] [I8_Array 8 0 -8]
+        /// <para/>[U1] [U1 255] [U1 0 255] [U1_Array 255 0]
+        /// <para/>[U2] [U2 65535] [U2 0 65535] [U2_Array 65535 0]
+        /// <para/>[U4] [U4 4] [U4 0 4] [U4_Array 4 0]
+        /// <para/>[U8] [U8 8] [U8 0 8] [U8_Array 8 0]
+        /// <para/>[F4] [F4 4.5] [F4 4.5 -4.5] [F4_Array 4.5 0 -4.5]
+        /// <para/>[F8] [F8 8.5] [F8 8.5 -8.5] [F8_Array 8.5 0 -8.5]
+        /// <para/>[A] [A happy] [A happy cow] [A "green grass"] [A "line1\r\nline2"]
+        /// <para/>[L] [L [A green] [A grass]] [L [L [green] [I1 -1]] [L [A grass] [L [F8 1.25 2.5]]] [L [A] [F8]]]
+        /// <para/>[L [L [A "\\r\\n\\tgreen\\t\\x00\\x02\\x01\"] [I1 -1]] [L [A] [F8]]]
+        /// <para/>String.Empty, [Empty] -> ValueContainer.Empty
+        /// <para/>String.Null, [Null] -> ValueContainer.Null
+        /// </remarks>
+        public static bool TryParseFromSML(this string s, out ValueContainer result, SMLSettings settings = null, ValueContainer fallbackVC = default(ValueContainer))
+        {
+            try
+            {
+                settings = settings ?? SMLSettings.Default;
+
+                result = default(ValueContainer);
+
+                if (s == null)
+                {
+                    result = ValueContainer.Null;
+                    return true;
+                }
+
+                s = s.Trim();
+
+                if (s.Length == 6 && s[0] == settings.BlockStartChar && s == $"{settings.BlockStartChar}Null{settings.BlockEndChar}")
+                {
+                    result = ValueContainer.Null;
+                    return true;
+                }
+
+                if (s.IsEmpty() || (s.Length == 6 && s[0] == settings.BlockStartChar && s == $"{settings.BlockStartChar}None{settings.BlockEndChar}"))
+                {
+                    result = ValueContainer.Empty;
+                    return true;
+                }
+
+                if (s.Length < 3 || s.FirstOrDefault() != settings.BlockStartChar || s.LastOrDefault() != settings.BlockEndChar)
+                {
+                    result = fallbackVC;
+                    return false;
+                }
+
+                var tokens = s.Substring(1, s.Length - 2).SplitOnWhiteSpace(2);
+                var typeToken = tokens.SafeAccess(0);
+                var rest = tokens.SafeAccess(1).MapNullToEmpty().Trim();
+
+                switch (typeToken.MapNullToEmpty())
+                {
+                    case "Bo":
+                    case "Bool":
+                        if (rest == "")
+                            result = ValueContainer.EmptyBo;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueBo().CreateVC();
+                        else
+                            goto case "Bool_Array";
+                        break;
+                    case "Bool_Array":
+                        Char.IsWhiteSpace(' ');
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueBo()).ToArray());
+                        break;
+
+                    case "Bi":
+                        if (rest == "")
+                            result = ValueContainer.EmptyBi;
+                        else if (!rest.HasWhiteSpace())
+                            result = ValueContainer.CreateBi(rest.CreateVC().GetValueBi());
+                        else
+                            goto case "Bi_Array";
+                        break;
+                    case "Bi_Array":
+                        result = ValueContainer.CreateBiArray(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueBi()).ToArray());
+                        break;
+
+                    case "I1":
+                        if (rest == "")
+                            result = ValueContainer.EmptyI1;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueI1().CreateVC();
+                        else
+                            goto case "I1_Array";
+                        break;
+                    case "I1_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueI1()).ToArray());
+                        break;
+
+                    case "I2":
+                        if (rest == "")
+                            result = ValueContainer.EmptyI2;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueI2().CreateVC();
+                        else
+                            goto case "I2_Array";
+                        break;
+                    case "I2_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueI2()).ToArray());
+                        break;
+
+                    case "I4":
+                        if (rest == "")
+                            result = ValueContainer.EmptyI4;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueI4().CreateVC();
+                        else
+                            goto case "I4_Array";
+                        break;
+                    case "I4_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueI4()).ToArray());
+                        break;
+
+                    case "I8":
+                        if (rest == "")
+                            result = ValueContainer.EmptyI8;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueI8().CreateVC();
+                        else
+                            goto case "I8_Array";
+                        break;
+                    case "I8_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueI8()).ToArray());
+                        break;
+
+                    case "U1":
+                        if (rest == "")
+                            result = ValueContainer.EmptyU1;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueU1().CreateVC();
+                        else
+                            goto case "U1_Array";
+                        break;
+                    case "U1_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueU1()).ToArray());
+                        break;
+
+                    case "U2":
+                        if (rest == "")
+                            result = ValueContainer.EmptyU2;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueU2().CreateVC();
+                        else
+                            goto case "U2_Array";
+                        break;
+                    case "U2_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueU2()).ToArray());
+                        break;
+
+                    case "U4":
+                        if (rest == "")
+                            result = ValueContainer.EmptyU4;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueU4().CreateVC();
+                        else
+                            goto case "U4_Array";
+                        break;
+                    case "U4_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueU4()).ToArray());
+                        break;
+
+                    case "U8":
+                        if (rest == "")
+                            result = ValueContainer.EmptyU8;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueU8().CreateVC();
+                        else
+                            goto case "U8_Array";
+                        break;
+                    case "U8_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueU8()).ToArray());
+                        break;
+
+                    case "F4":
+                        if (rest == "")
+                            result = ValueContainer.EmptyF4;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueF4().CreateVC();
+                        else
+                            goto case "F4_Array";
+                        break;
+                    case "F4_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueF4()).ToArray());
+                        break;
+
+                    case "F8":
+                        if (rest == "")
+                            result = ValueContainer.EmptyF8;
+                        else if (!rest.HasWhiteSpace())
+                            result = rest.CreateVC().GetValueF8().CreateVC();
+                        else
+                            goto case "F8_Array";
+                        break;
+                    case "F8_Array":
+                        result = ValueContainer.CreateFromObject(rest.SplitOnWhiteSpace().Select(token => token.CreateVC().GetValueF8()).ToArray());
+                        break;
+
+                    case "A":
+                        if (rest.Length >= 2 && rest.StartsWith("\"") && rest.EndsWith("\""))
+                            result = rest.Substring(1, rest.Length - 2).UnescapeString().CreateVC();
+                        else if (rest.Length >= 2 && rest.StartsWith("'") && rest.EndsWith("'"))
+                            result = rest.Substring(1, rest.Length - 2).UnescapeString().CreateVC();
+                        else
+                            result = rest.CreateVC();
+                        break;
+
+                    case "L":
+                        if (rest == "")
+                            result = EmptyArrayFactory<ValueContainer>.Instance.CreateVC();
+                        else
+                            result = InnerRecursiveSplitAndParseListBody(rest, settings).CreateVC();
+                        break;
+                    default:
+                        break;
+                }
+
+                if (!result.IsEmpty)
+                    return true;
+            }
+            catch (Exception ex)
+            {
+                _ = ex;
+            }
+
+            result = fallbackVC;
+            return false;
+        }
+
+        private static ValueContainer[] InnerRecursiveSplitAndParseListBody(string lBodyStr, SMLSettings settings, bool rethrow = true)
+        {
+            var lBodyStrLen = lBodyStr.Length;
+
+            var vcListBuilder = new List<ValueContainer>();
+
+            for (int chScanIndex = 0; chScanIndex < lBodyStrLen;)
+            {
+                var c = lBodyStr[chScanIndex];
+                if (c == settings.BlockStartChar)
+                {
+                    int vcSubItemStrLength = lBodyStr.InnerFindCountIncludingMatchingNestedSquareBracket(chScanIndex, settings);
+                    var subVCSubStr = lBodyStr.Substring(chScanIndex, vcSubItemStrLength);
+                    vcListBuilder.Add(subVCSubStr.ParseFromSML(rethrow: rethrow, settings: settings));
+
+                    chScanIndex += vcSubItemStrLength + 1;
+                }
+                else if (Char.IsWhiteSpace(c))
+                {
+                    chScanIndex += 1;
+                }
+                else
+                {
+                    return null;
+                }
+            }
+
+            return vcListBuilder.ToArray();
+        }
+
+        private static int InnerFindCountIncludingMatchingNestedSquareBracket(this string lBodyStr, int startScanIndex, SMLSettings settings)
+        {
+            var lBodyStrLen = lBodyStr.Length;
+
+            int endScanIndex = startScanIndex;
+
+            char c;
+
+            c = lBodyStr[endScanIndex];
+            if (c != settings.BlockStartChar)
+                throw new ValueContainerParseFromSMLException($"No opening '{settings.BlockStartChar}' found in '{lBodyStr}' at index {endScanIndex}");
+
+            endScanIndex += 1;
+
+            // special case handling for [A '...'] and [A "..."]
+            var tryAEndScanIndex = endScanIndex;
+            var ca = (tryAEndScanIndex < lBodyStrLen) ? lBodyStr[endScanIndex] : default(char);
+            if (ca == 'A')
+            {
+                tryAEndScanIndex += 1;
+                var cws = (tryAEndScanIndex < lBodyStrLen) ? lBodyStr[tryAEndScanIndex] : default(char);
+
+                if (char.IsWhiteSpace(cws))
+                {
+                    tryAEndScanIndex += 1;
+
+                    while (tryAEndScanIndex < lBodyStrLen && char.IsWhiteSpace(lBodyStr[tryAEndScanIndex]))
+                        tryAEndScanIndex += 1;
+
+                    var cq = (tryAEndScanIndex < lBodyStrLen) ? lBodyStr[tryAEndScanIndex] : default(char);
+
+                    if (cq == '"' || cq == '\'')
+                    {
+                        var quotedStrLen = lBodyStr.GetEscapedDelimitedStringLength(tryAEndScanIndex, lBodyStrLen, startDelimiter: cq, endDelimiter: cq);
+
+                        tryAEndScanIndex += quotedStrLen;
+
+                        var ccsqb = (tryAEndScanIndex < lBodyStrLen) ? lBodyStr[tryAEndScanIndex] : default(char);
+
+                        if (ccsqb == settings.BlockEndChar)
+                        {
+                            tryAEndScanIndex += 1;
+                            var aTermLength = tryAEndScanIndex - startScanIndex;
+                            return aTermLength;
+                        }
+                    }
+                }
+            }
+
+            for (; endScanIndex < lBodyStrLen;)
+            {
+                c = lBodyStr[endScanIndex];
+                if (c == settings.BlockEndChar)
+                {
+                    break;
+                }
+                else if (c == settings.BlockStartChar)
+                {
+                    var nestedTermLength = lBodyStr.InnerFindCountIncludingMatchingNestedSquareBracket(endScanIndex, settings);
+                    endScanIndex += nestedTermLength;
+                }
+                else
+                {
+                    endScanIndex += 1;
+                }
+            }
+
+            c = default(char);
+
+            if (endScanIndex < lBodyStrLen)
+                c = lBodyStr[endScanIndex];
+
+            if (c != settings.BlockEndChar)
+                throw new ValueContainerParseFromSMLException($"No closing '{settings.BlockEndChar}' found in '{lBodyStr}' at index {endScanIndex}");
+
+            endScanIndex += 1;
+
+            return endScanIndex - startScanIndex;
+        }
+
+
+        /// <summary>
+        /// This method may be used to attempt parse a given <see langword="string"/> <paramref name="s"/> 
+        /// using a sub-set of the string formats that can be produced by the <see cref="ValueContainer.ToStringSML()"/> method.
+        /// <para/>If the parse was successful then the method returns the parsed value.
+        /// <para/>If the parse was not successful and the <paramref name="rethrow"/> is passed as <see langword="false"/> then the method returns the given <paramref name="fallbackVC"/> value.
+        /// <para/>If the parse was not successful and the <paramref name="rethrow"/> is passed as <see langword="true"/> then the method throws a <see cref="ValueContainerParseFromSMLException"/>.
+        /// </summary>
+        /// <remarks>
+        /// This method internally uses the related <see cref="ExtensionMethods.TryParseFromSML(string, out ValueContainer, SMLSettings, ValueContainer)"/>
+        /// and as such this method supports the same set of string patterns as are shown in the documentation for that method.
+        /// </remarks>
+        public static ValueContainer ParseFromSML(this string s, bool rethrow = true, SMLSettings settings = null, ValueContainer fallbackVC = default(ValueContainer))
+        {
+            Exception ex = null;
+
+            try
+            {
+                ValueContainer resultVC = default(ValueContainer);
+                if (s.TryParseFromSML(out resultVC, settings: settings, fallbackVC: fallbackVC))
+                    return resultVC;
+
+                throw new ValueContainerParseFromSMLException($"the given '{s}' could not be parsed using the restricted set of ValueContainer.ToStringSML() supported contents");
+            }
+            catch (Exception e)
+            {
+                ex = e;
+                if (rethrow)
+                    throw;
+            }
+
+            if (rethrow && ex != null)
+                throw ex;
+
+            return fallbackVC;
+        }
     }
+
+    /// <summary>
+    /// This immutable object defines sets of strings that are used when parsing SML (ish) strings into <see cref="ValueContainer"/>s
+    /// </summary>
+    public class SMLSettings
+    {
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        public SMLSettings(char blockStart = '[', char blockEnd = ']')
+        {
+            BlockStartChar = blockStart;
+            BlockEndChar = blockEnd;
+        }
+
+        /// <summary>
+        /// This string is used to mark the start of a new object or a new tree of objects.
+        /// </summary>
+        public char BlockStartChar { get; }
+
+        /// <summary>
+        /// This string is used to mark the end of an object or tree of objects.
+        /// </summary>
+        public char BlockEndChar { get; }
+
+        /// <summary>
+        /// The Default <see cref="SMLSettings"/>.  This is currently defined as <see cref="SquareBracketDelimited"/>
+        /// </summary>
+        public static SMLSettings Default => SquareBracketDelimited;
+
+        /// <summary>
+        /// Standard set of delimiters - square bracket based.  <see cref="BlockStartChar"/> is '[' and <see cref="BlockEndChar"/> is ']'
+        /// </summary>
+        public static SMLSettings SquareBracketDelimited => new SMLSettings();
+    }
+
 
     /// <summary>
     /// Exception that may be thrown by the ValueContainer's GetValue method.  Message will give more details of the problem.
@@ -3460,6 +4147,19 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainerGetValueException(string message, System.Exception innerException = null) 
             : base(message, innerException) 
+        { }
+    }
+
+    /// <summary>
+    /// Exception that is thrown by the ValueContainer's <see cref="ExtensionMethods.ParseFromSML(string, bool, SMLSettings, ValueContainer)"/> method if a given string cannot be parsed successfully.
+    /// </summary>
+    public class ValueContainerParseFromSMLException : System.Exception
+    {
+        /// <summary>
+        /// Constructor requires message and innerException (which may be null)
+        /// </summary>
+        public ValueContainerParseFromSMLException(string message, System.Exception innerException = null)
+            : base(message, innerException)
         { }
     }
 
@@ -3589,9 +4289,11 @@ namespace MosaicLib.Modular.Common
         /// Gives the ValueContainer that this evenelope is being used to serialize from and/or has been deserialized to.
         /// </summary>
         public ValueContainer VC 
-        { 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return vc; }
-            set 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set
             { 
                 vc = value;
                 onSerializingCanBeSkipped = false; 
@@ -4580,7 +5282,7 @@ namespace MosaicLib.Modular.Common
         string ToString(bool includeROorRW = true, bool treatNameWithEmptyVCAsKeyword = true, TraversalType traversalType = TraversalType.EntireTree);
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV");
+        string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV", bool useShortNames = false);
 
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
@@ -4701,7 +5403,7 @@ namespace MosaicLib.Modular.Common
         string ToString(bool useDoubleEqualsForRW, bool treatNameWithEmptyVCAsKeyword);
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        string ToStringSML(string nvNodeName = "NV");
+        string ToStringSML(string nvNodeName = "NV", bool useShortNames = false);
 
         /// <summary>
         /// Returns the <see cref="Name"/> and <see cref="VC"/> value of this <see cref="INamedValue"/> in a corresponding KeyValuePair instance.
@@ -4738,7 +5440,11 @@ namespace MosaicLib.Modular.Common
         #region Empty constant
 
         /// <summary>Returns a readonly empty NamedValueSet</summary>
-        public static NamedValueSet Empty { get { return empty; } }
+        public static NamedValueSet Empty 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return empty; } 
+        }
         private static readonly NamedValueSet empty = new NamedValueSet(null, asReadOnly: true);
 
         #endregion
@@ -4775,6 +5481,7 @@ namespace MosaicLib.Modular.Common
 
         #region Constructor helper methods (SetFrom variants)
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetFrom(INamedValueSet other, TraversalType copyTraversalType)
         {
             if (other == null)
@@ -4792,6 +5499,7 @@ namespace MosaicLib.Modular.Common
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetFrom(IEnumerable<INamedValue> set, IEnumerable<INamedValueSet> subSets = null, bool asReadOnly = false)
         {
             ThrowIfIsReadOnly("The SetFrom method");
@@ -4902,6 +5610,7 @@ namespace MosaicLib.Modular.Common
         /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns it.
         /// Otherwise this method returns NamedValue.Empty
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public INamedValue GetNamedValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
         {
             name = name.Sanitize();
@@ -4918,6 +5627,7 @@ namespace MosaicLib.Modular.Common
         /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns the ValueContainer (VC) from that INamedValue.
         /// Otherwise this method returns ValueContainer.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueContainer GetValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
         {
             return GetNamedValue(name, searchTraversalType).VC;
@@ -4927,6 +5637,7 @@ namespace MosaicLib.Modular.Common
         /// Updates the desired NamedValue to be a keyword (has empty value container value), or adds a new keyword NamedValue, from the given name, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetKeyword(string name, bool asReadOnly = false)
         {
             return SetValue(new NamedValue(name) { IsReadOnly = asReadOnly });
@@ -4936,6 +5647,7 @@ namespace MosaicLib.Modular.Common
         /// Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetValue(string name, ValueContainer vc, bool asReadOnly = false)
         {
             return SetValue(new NamedValue(name, vc, asReadOnly: asReadOnly));
@@ -4946,6 +5658,7 @@ namespace MosaicLib.Modular.Common
         /// In either case the given object value will be assigned into a ValueContainer automatically using this signature.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetValue(string name, object value, bool asReadOnly = false)
         {
             return SetValue(new NamedValue(name, value, asReadOnly: asReadOnly));
@@ -4956,6 +5669,7 @@ namespace MosaicLib.Modular.Common
         /// <para/>NOTE: in the case where this method adds the given nv to the set or replaces the NamedValue (because it is read only) the set will directly reference the given nv object)
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet SetValue(NamedValue nv)
         {
             ThrowIfIsReadOnly("The SetValue method");
@@ -4993,6 +5707,7 @@ namespace MosaicLib.Modular.Common
         /// Returns true if the given sanitized name was found and removed from the set.  Returns false otherwise.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Remove(string name)
         {
             ThrowIfIsReadOnly("The Remove name method");
@@ -5018,6 +5733,7 @@ namespace MosaicLib.Modular.Common
         /// Removes the element at the given indexed element.  
         /// </summary>
         /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void RemoveAt(int index)
         {
             ThrowIfIsReadOnly("The RemoveAt method");
@@ -5065,6 +5781,7 @@ namespace MosaicLib.Modular.Common
         /// <exception cref="System.ArgumentException">This exception is thrown by the setter if the given value.Name propery is not equal to the string index.</exception>
         public NamedValue this[string name]
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 INamedValue iNv = GetNamedValue(name, TraversalType.EntireTree);
@@ -5078,6 +5795,7 @@ namespace MosaicLib.Modular.Common
 
                 return NamedValue.Empty;
             }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 ThrowIfIsReadOnly("The String indexed property setter");
@@ -5100,7 +5818,8 @@ namespace MosaicLib.Modular.Common
         /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
         public NamedValue this[int index]
         {
-            get 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             {
                 if (index < 0 || index >= Count)
                     new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count").Throw();
@@ -5114,6 +5833,7 @@ namespace MosaicLib.Modular.Common
         #region INamedValueSet (leftovers - most of the other members and properties are found in other regions of this class) - Includes IEquatable<INamedValueSet>
 
         /// <summary>Returns true if this set, or any of its sub-sets, contains a NamedValue for the given name (after sanitization).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Contains(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
         {
             string sanitizedName = name.Sanitize();
@@ -5127,6 +5847,7 @@ namespace MosaicLib.Modular.Common
         /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the index into the set (in enumerable order) for the corresponding NamedValue.
         /// Otherwise this method returns -1.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int IndexOf(string name)
         {
             string sanitizedName = name.Sanitize();
@@ -5139,7 +5860,8 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
         INamedValue INamedValueSet.this[int index] 
-        { 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return this[index]; } 
         }
 
@@ -5150,6 +5872,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         INamedValue INamedValueSet.this[string name]
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return GetNamedValue(name, TraversalType.EntireTree);
@@ -5162,6 +5885,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         INamedValue INamedValueSet.this[string name, TraversalType searchTraversalType] 
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
                 return GetNamedValue(name, searchTraversalType);
@@ -5208,6 +5932,7 @@ namespace MosaicLib.Modular.Common
         /// Returns true if the this INamedValueSet has the same contents, in the same order, as the given other NVS.
         /// <para/>implicitly uses TraverseType.EntireTree
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(INamedValueSet other)
         {
             return IsEqualTo(other, TraversalType.EntireTree);
@@ -5228,6 +5953,7 @@ namespace MosaicLib.Modular.Common
         /// This method may be safely used even with IsReadOnly sets.
         /// <para/>Support call chaining
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         INamedValueSet INamedValueSet.BuildDictionary()
         {
             return this.BuildDictionary();
@@ -5255,6 +5981,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public int Count
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return list.Count; }
         }
 
@@ -5335,6 +6062,7 @@ namespace MosaicLib.Modular.Common
         /// Clears the underlying collection and removes all sub-sets.  Supports call chaining.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet Clear()
         {
             ThrowIfIsReadOnly("The Clear method");
@@ -5364,7 +6092,7 @@ namespace MosaicLib.Modular.Common
             return list.GetEnumerator();
         }
 
-        #endregion 
+        #endregion
 
         #region IsReadOnly support
 
@@ -5373,6 +6101,7 @@ namespace MosaicLib.Modular.Common
         /// If the target NamedValueSet is already IsReadOnly then this method has no effect.
         /// </summary>
         /// <remarks>Use the ConvertToReadOnly extension method to convert INamedValueSet objects to be ReadOnly.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet MakeReadOnly()
         {
             if (!IsReadOnly)
@@ -5390,7 +6119,9 @@ namespace MosaicLib.Modular.Common
         /// <exception cref="System.NotSupportedException">thrown if the setter is given false and collection has already been set to IsReadOnly</exception>
         public bool IsReadOnly
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return isReadOnly; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 if (value && !isReadOnly)
@@ -5495,7 +6226,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        public string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV")
+        public string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV", bool useShortNames = false)
         {
             if (list.IsNullOrEmpty() && subSetsArray.IsNullOrEmpty())
                 return "[{0}]".CheckedFormat(nvsNodeName);
@@ -5505,15 +6236,15 @@ namespace MosaicLib.Modular.Common
             switch (traversalType)
             {
                 case TraversalType.EntireTree:
-                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName)).ToArray()));
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName, useShortNames: useShortNames)).ToArray()));
                     if (!subSetsArray.IsNullOrEmpty())
-                        sb.CheckedAppendFormat(" [{0}-SubSets {1}]", nvsNodeName, String.Join(" ", subSetsArray.Select(invs => invs.ToStringSML(traversalType, nvsNodeName: nvsNodeName, nvNodeName: nvNodeName))));
+                        sb.CheckedAppendFormat(" [{0}-SubSets {1}]", nvsNodeName, String.Join(" ", subSetsArray.Select(invs => invs.ToStringSML(traversalType, nvsNodeName: nvsNodeName, nvNodeName: nvNodeName, useShortNames: useShortNames))));
                     break;
 
                 default:
                 case TraversalType.Flatten:
                 case TraversalType.TopLevelOnly:
-                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName)).ToArray()));
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName, useShortNames: useShortNames)).ToArray()));
                     break;
             }
 
@@ -5662,6 +6393,7 @@ namespace MosaicLib.Modular.Common
         /// This method may be safely used even with IsReadOnly sets.
         /// <para/>Support call chaining
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSet BuildDictionary()
         {
             Dictionary<string, int> d = new Dictionary<string, int>();
@@ -5702,7 +6434,11 @@ namespace MosaicLib.Modular.Common
         #region Empty constant
 
         /// <summary>Returns a readonly empty NamedValueSet</summary>
-        public static NamedValue Empty { get { return empty; } }
+        public static NamedValue Empty 
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get { return empty; } 
+        }
         private static readonly NamedValue empty = new NamedValue(string.Empty) { IsReadOnly = true };
 
         #endregion
@@ -5710,6 +6446,7 @@ namespace MosaicLib.Modular.Common
         #region Constructors
 
         /// <summary>Default Constructor, for use with deserialization</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue()
         {
             Name = string.Empty;
@@ -5717,12 +6454,14 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Constructor - builds NamedValue with the given <paramref name="keyword"/> value.</summary>
         /// <remarks>Note: This construction signature cannot also be given the optional asReadOnly flag as is done with other construtors or it will take precidence over the object value version below when used to construct a boolean NamedValue (causes test regression).</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue(string keyword)
         {
             Name = keyword ?? string.Empty;
         }
 
         /// <summary>Constructor - builds NamedValue with the given <paramref name="name"/> and ValueContainer <paramref name="vc"/> value.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue(string name, ValueContainer vc, bool asReadOnly = false) 
         {
             Name = name ?? string.Empty;
@@ -5732,8 +6471,9 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Helper Constructor - builds NamedValue with the given <paramref name="name"/> and object <paramref name="value"/>.  VC is constructed to contain the given object <paramref name="value"/></summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue(string name, object value, bool asReadOnly = false) 
-            : this(name: name, vc: new ValueContainer(value), asReadOnly: asReadOnly) 
+            : this(name: name, vc: ValueContainer.CreateFromObject(value), asReadOnly: asReadOnly) 
         {}
 
         /// <summary>
@@ -5743,6 +6483,7 @@ namespace MosaicLib.Modular.Common
         /// copy of the given rhs.  This stop cannot be peformed for general contained values that have opaque Object values in them and it not required for String contents (already immutable)
         /// and for all other value content types which do not naturaly share references.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue(INamedValue rhs, bool asReadOnly = false)
         {
             bool rhsIsNotNull = (rhs != null);
@@ -5801,11 +6542,13 @@ namespace MosaicLib.Modular.Common
         /// <summary>This get/set property gives access to the ValueContainer contained of this named value</summary>
         public ValueContainer VC 
         {
-            get 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
             { 
                 return (VCHasBeenSet ? vc : ValueContainer.Empty); 
             }
-            set 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set
             {
                 ThrowIfIsReadOnly("VC property setter");
                 vc = value;
@@ -5842,6 +6585,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given rhs has the same Name, VC contents and IsReadOnly value as this object.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsEqualTo(INamedValue rhs, bool compareReadOnly = true)
         {
             return (rhs != null 
@@ -5884,6 +6628,7 @@ namespace MosaicLib.Modular.Common
         /// If this NamedValue is already IsReadOnly then this method has no effect.
         /// </summary>
         /// <remarks>Use the ConvertToReadOnly extension method to convert INamedValue objects to be ReadOnly.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValue MakeReadOnly()
         {
             if (!IsReadOnly)
@@ -5900,7 +6645,9 @@ namespace MosaicLib.Modular.Common
         /// <exception cref="System.NotSupportedException">thrown if the setter is given false and item has already been set to IsReadOnly</exception>
         public bool IsReadOnly
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return isReadOnly; }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
                 if (value && !isReadOnly)
@@ -5949,12 +6696,12 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        public string ToStringSML(string nvNodeName = "NV")
+        public string ToStringSML(string nvNodeName = "NV", bool useShortNames = false)
         {
             if (!VC.IsEmpty)
-                return "[{0} {1} {2}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML(), VC.ToStringSML());
+                return "[{0} {1} {2}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML(useShortNames), VC.ToStringSML(useShortNames));
             else if (!Name.IsNullOrEmpty())
-                return "[{0} {1}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML());
+                return "[{0} {1}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML(useShortNames));
             else
                 return "[{0}]".CheckedFormat(nvNodeName);
         }
@@ -5997,6 +6744,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Sanitizes the given name for use as a Dictionary key by replacing any given null value with string.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string Sanitize(this string name)
         {
             return name ?? string.Empty;
@@ -6007,6 +6755,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="condition"/> is true and the given <paramref name="name"/> is non-mepty then this method Sets the given <paramref name="name"/> as a keyword (vc is empty), 
         /// otherwise the method does not modify the given <paramref name="nvs"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet ConditionalSetKeyword(this NamedValueSet nvs, string name, bool condition)
         {
             if (condition && nvs != null && name.IsNeitherNullNorEmpty())
@@ -6020,6 +6769,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="condition"/> is true and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>, 
         /// otherwise the method does not modify the given <paramref name="nvs"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet ConditionalSetValue<TValueType>(this NamedValueSet nvs, string name, bool condition, TValueType value)
         {
             if (condition && nvs != null && name.IsNeitherNullNorEmpty())
@@ -6033,6 +6783,7 @@ namespace MosaicLib.Modular.Common
         /// If the given nullable <paramref name="value"/> is not null and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>
         /// otherwise the method does not modify the given nvs.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType? value)
             where TValueType : struct
         {
@@ -6047,6 +6798,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="value"/> is not null and the given <paramref name="name"/> is non-empty then this method Sets the given <paramref name="name"/> to the given <paramref name="value"/>
         /// otherwise the method does not modify the given nvs.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType value)
             where TValueType : class
         {
@@ -6062,6 +6814,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="iNvSet"/> value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
         /// Otherwise this method returns a new readonly NamedValueSet created as a sufficiently deep clone of the given iNvSet.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet ConvertToReadOnly(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
         {
             if (iNvSet == null)
@@ -6080,6 +6833,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="iNv"/> value IsReadOnly and its type is actually a NamedValue then this method returns the given <paramref name="iNv"/> down casted as a NamedValue (path used for serialziation)
         /// Otherwise this method returns a new readonly NamedValue as a copy of the given <paramref name="iNv"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValue ConvertToReadOnly(this INamedValue iNv, bool mapNullToEmpty = false)
         {
             if (iNv == null)
@@ -6109,6 +6863,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="iNvSet"/> value is not null and it is !IsReadonly then return the given value.
         /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet ConvertToWritable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
         {
             if (iNvSet == null)
@@ -6126,6 +6881,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="iNv"/> !IsReadonly and is already a NamedValue then this method returns it casted but otherwise unchanged.
         /// Otherwise this method constructs and returns a new readonly NamedValue copy of the given <paramref name="iNv"/>.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValue ConvertToWritable(this INamedValue iNv, bool mapNullToEmpty = true)
         {
             if (iNv == null)
@@ -6230,7 +6986,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Converts the given <paramref name="kvcSet"/>'s contents to a NamedValueSet and returns it.
         /// </summary>
-        public static NamedValueSet ConvertToNamedValueSet(this ICollection<KeyValuePair<string, ValueContainer>> kvcSet)
+        public static NamedValueSet ConvertToNamedValueSet(this IEnumerable<KeyValuePair<string, ValueContainer>> kvcSet)
         {
             var nvs = new NamedValueSet();
 
@@ -6304,6 +7060,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given iNvSet is either null or it refers to a NamedValueSet that is currently empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty(this INamedValueSet iNvSet)
         {
             return (iNvSet == null || (iNvSet.Count == 0 && iNvSet.SubSets.IsNullOrEmpty()));
@@ -6312,6 +7069,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given iNv is either null or it refers to a NamedValue that is currently empty (Name IsNullOrEmpty and VC IsEmpty)
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNullOrEmpty(this INamedValue iNv)
         {
             return (iNv == null || (iNv.Name.IsNullOrEmpty() && iNv.VC.IsEmpty));
@@ -6320,6 +7078,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given <paramref name="iNvSet"/> is neither Null nor Empty
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNeitherNullNorEmpty(this INamedValueSet iNvSet)
         {
             return !iNvSet.IsNullOrEmpty();
@@ -6328,6 +7087,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given <paramref name="iNv"/> is neither Null nor Empty
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNeitherNullNorEmpty(this INamedValue iNv)
         {
             return !iNv.IsNullOrEmpty();
@@ -6336,6 +7096,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given <paramref name="iNvSet"/> through as the return value unless it is a non-null, empty set in which case this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static INamedValueSet MapEmptyToNull(this INamedValueSet iNvSet)
         {
             return (iNvSet.IsNullOrEmpty() ? null : iNvSet);
@@ -6344,6 +7105,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given <paramref name="nvSet"/> through as the return value unless it is a non-null, empty set in which case this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet MapEmptyToNull(this NamedValueSet nvSet)
         {
             return (nvSet.IsNullOrEmpty() ? null : nvSet);
@@ -6352,6 +7114,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given <paramref name="iNvSet"/> through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static INamedValueSet MapNullToEmpty(this INamedValueSet iNvSet)
         {
             return (iNvSet ?? NamedValueSet.Empty);
@@ -6360,6 +7123,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given <paramref name="nvSet"/> through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet MapNullToEmpty(this NamedValueSet nvSet)
         {
             return (nvSet ?? NamedValueSet.Empty);
@@ -6368,6 +7132,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given iNv through as the return value unless it is a non-null, empty set in which case this method returns null.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static INamedValue MapEmptyToNull(this INamedValue iNv)
         {
             return (iNv.IsNullOrEmpty() ? null : iNv);
@@ -6376,6 +7141,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// passes the given iNv through as the return value unless it is a null, in which case this method returns NamedValue.Empty.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static INamedValue MapNullToEmpty(this INamedValue iNv)
         {
             return (iNv ?? NamedValue.Empty);
@@ -6389,6 +7155,7 @@ namespace MosaicLib.Modular.Common
         /// <param name="lhs">Gives the object that the rhs NV items will be merged into</param>
         /// <param name="rhs">Gives the object that contains the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
         /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.  Defaults to NamedValueMergeBehavior.AddAndUpdate</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static NamedValueSet MergeWith(this INamedValueSet lhs, INamedValueSet rhs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             if (((mergeBehavior & NamedValueMergeBehavior.Replace) != NamedValueMergeBehavior.None))
@@ -6539,12 +7306,14 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Returns true if the given mergeBehavior value has the AddNewItems flag set.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsAddSelected(this NamedValueMergeBehavior mergeBehavior)
         {
             return ((mergeBehavior & NamedValueMergeBehavior.AddNewItems) != NamedValueMergeBehavior.None);
         }
 
         /// <summary>Returns true if the given mergeBehavior value has the UpdateExsitingItems flag set.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUpdateSelected(this NamedValueMergeBehavior mergeBehavior)
         {
             return ((mergeBehavior & NamedValueMergeBehavior.UpdateExistingItems) != NamedValueMergeBehavior.None);
@@ -6588,6 +7357,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns the contents of the given <paramref name="nvs"/> as a kvc set.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ICollection<KeyValuePair<string, ValueContainer>> ConvertToKVCSet(this INamedValueSet nvs, bool mapNullToEmpty = true)
         {
             if (nvs != null)
@@ -7165,6 +7935,7 @@ namespace MosaicLib.Modular.Common
         /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are not included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public new NamedValueSetAdapter<TValueSet> Set(INamedValueSet nvs, bool merge = false)
         {
             base.Set(nvs: nvs, merge: merge);
@@ -7314,6 +8085,7 @@ namespace MosaicLib.Modular.Common
         /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are not included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSetAdapter<TValueSet, TAttribute> Set(INamedValueSet nvs, bool merge = false)
         {
             if (ValueSet == null)
@@ -7330,6 +8102,7 @@ namespace MosaicLib.Modular.Common
         /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are not included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
         /// <para/>Supports call chaining.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public NamedValueSetAdapter<TValueSet, TAttribute> Set(INamedValueSet nvs, TValueSet valueSet, bool merge = false)
         {
             if (valueSet == null)
@@ -7347,6 +8120,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public INamedValueSet Get(bool asReadOnly = false, NamedValueSet intoNVS = null)
         {
             if (ValueSet == null)

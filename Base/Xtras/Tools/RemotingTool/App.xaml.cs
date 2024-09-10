@@ -20,16 +20,9 @@
 //-------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
-using System.Linq;
 using System.Windows;
 
 using MosaicLib;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Part;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.WPF.Common;
 
@@ -47,6 +40,7 @@ namespace RemotingTool
             AppSetup.HandleOnStartup(e, ref appLogger, new NamedValueSet()
             {
                 { "diagTraceLMHSettingFlags" , "IncludeWhenDebuggerAttached" },
+                { "diagTraceLogGate", Logging.LogGate.Info },
                 { "setName", "LocalLogMessageHistory" },
                 { "addSetLMH", true },
                 { "setCapacity" , 5000 },
