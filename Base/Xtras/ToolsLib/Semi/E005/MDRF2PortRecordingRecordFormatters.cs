@@ -68,7 +68,7 @@ namespace Mosaic.ToolsLib.Semi.E005.PortRecording.Formatters
     public class MDRF2PortRecordingRecordSMLPDTextFileFormatter
     {
         /// <summary>
-        /// Default constructor.  Initializes <see cref="Settings"> to default values. 
+        /// Default constructor.  Initializes <see cref="Settings"/> to default values. 
         /// </summary>
         public MDRF2PortRecordingRecordSMLPDTextFileFormatter() 
         {

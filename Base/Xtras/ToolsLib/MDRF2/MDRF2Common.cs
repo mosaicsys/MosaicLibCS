@@ -181,7 +181,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// Gives the ID for this session which is either manually assigned or which uses a single D format UUID generated for this session.
         /// Each process that starts recording MDRF2 files will generate a single UUID on first use for this session and all recorded files
         /// for the duration of this process will use this value.
-        /// <para/>The recorded value can be overridden by manually asigning the <see cref="SessionInfo.SharedSessionID"/> proprty prior to its first use.
+        /// <para/>The recorded value can be overridden by manually asigning the <see cref="SessionInfo.SharedSessionUUID"/> proprty prior to its first use.
         /// </summary>
         string SessionID { get; }
 
@@ -385,8 +385,8 @@ namespace Mosaic.ToolsLib.MDRF2.Common
         /// </summary>
         /// <remarks>
         /// <see cref="UTCTimeSince1601"/> == 0.0 
-        ///   && <see cref="FileDeltaTime"/> == 0.0 
-        ///   && <see cref="FileDeltaTimeContents"/> == <see cref="FileDeltaTimeContents.None"/>
+        ///   &amp;&amp; <see cref="FileDeltaTime"/> == 0.0 
+        ///   &amp;&amp; <see cref="FileDeltaTimeContents"/> == <see cref="FileDeltaTimeContents.None"/>
         /// </remarks>
         public bool IsEmpty
         {
@@ -928,7 +928,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             /// <summary>
             /// This gives the default hash set of type names that is used to determine which type names we are enabling serialization of links from other objects for.
             /// When null it selects that all types shall enable this feature by default.  When explicitly empty it selects that no types shall enable this feature by default.
-            /// <para/>This proprty is only used when using the <see cref="IE039ObjectTypeNameHandler.IE039ObjectTypeNameHandler"/> default constructor.
+            /// <para/>This proprty is only used when using the <see cref="IE039ObjectTypeNameHandler.IE039ObjectTypeNameHandler()"/> default constructor.
             /// </summary>
             public static ReadOnlyHashSet<string> DefaultEnableSerializationOfLinksFromOtherObjectsTypeNameHashSet { get; set; } = ReadOnlyHashSet<string>.Empty;
 
@@ -972,7 +972,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
             public INamedValueSetTypeNameHandler() : base(new NVSFormatter()) { }
         }
 
-        /// <summary>Type name handler for KVCSet (aka <see cref="ICollection{KeyValuePair{string,ValueContainer}}"/>) instances</summary>
+        /// <summary>Type name handler for KVCSet (aka ICollection{KeyValuePair{string,ValueContainer}}") instances</summary>
         public class KVCSetTypeNameHandler : TypeNameHandlerBase<ICollection<KeyValuePair<string, ValueContainer>>>
         {
             public KVCSetTypeNameHandler() : base(new KVCSetFormatter()) { }
@@ -1197,7 +1197,7 @@ namespace Mosaic.ToolsLib.MDRF2.Common
 
         /// <summary>Type name handler for <see cref="System.Dynamic.DynamicObject"/> instances</summary>
         /// <remarks>
-        /// On serialization this type name handler can directly serialize any <see cref="System.Dynamic.ExpandoObject"/> instance by casting it to an <see cref="IDictionary{string, value}"/> and iterating on that as a set of key value pairs.
+        /// On serialization this type name handler can directly serialize any <see cref="System.Dynamic.ExpandoObject"/> instance by casting it to an IDictionary{string, value} and iterating on that as a set of key value pairs.
         /// For all other (dyanmic) value types this handler uses reflection to obtain the set of, and values of, each property from which it builds the set of key value pairs to be serialized.
         /// Deserialization always generates records that contain <see cref="System.Dynamic.ExpandoObject"/> instances.
         /// </remarks>

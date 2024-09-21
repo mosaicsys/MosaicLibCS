@@ -263,7 +263,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// <summary>
         /// When non-null this spccifies the <see cref="IPartBase"/> instance that is used to generate automatic E116 state transitions.
         /// When non-null this specifies the part base state source that the CERP can use to automatically generate Busy or Blocked scoped token triggered transitions from.
-        /// This property is used in conjunction with the <see cref="PartBaseStateUsageBehavior"/> property here to specify how to use an provided <see cref="PartBaseStateSource"/>.
+        /// This property is used in conjunction with the <see cref="PartBaseStateUsageBehavior"/> property here to specify how to use each newly observed <see cref="IPartBase.BaseState"/> value.
         /// </summary>
         public IPartBase SourcePart { get; set; }
 
@@ -462,7 +462,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// <summary>Note: This property is get only.  Its value is determined from the <see cref="E116ModuleConfig.DisableReporting"/>.</summary>
         public new bool DisableReporting { get => base.DisableReporting; }
 
-        /// <summary>This gives the <see cref="Semi.E116.TaskType"/> that is to be reported with any related Busy transition</summary>
+        /// <summary>This gives the <see cref="MosaicLib.Semi.E116.TaskType"/> that is to be reported with any related Busy transition</summary>
         public MosaicLib.Semi.E116.TaskType TaskType { get; set; }
 
         /// <summary>This gives the TaskName that is to be reported with any related Busy transition</summary>
@@ -521,7 +521,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E116
         /// <summary>Note: This property is get only.  Its value is determined from the <see cref="E116ModuleConfig.DisableReporting"/>.</summary>
         public new bool DisableReporting { get => base.DisableReporting; }
 
-        /// <summary>Gives the <see cref="Semi.E116.BlockedReasonEx"/> value to be used while the module is reported as Blocked.</summary>
+        /// <summary>Gives the <see cref="MosaicLib.Semi.E116.BlockedReasonEx"/> value to be used while the module is reported as Blocked.</summary>
         public MosaicLib.Semi.E116.BlockedReasonEx BlockedReason { get; set; }
 
         /// <summary>Gives the text description of the reason that the module is reported as Blocked.</summary>

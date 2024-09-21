@@ -28,7 +28,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <NoWarn>1591, 1587</NoWarn>
-    <DocumentationFile>bin\Debug\MosaicLibCS_PartsLib.XML</DocumentationFile>
+    <DocumentationFile>bin\Debug\MosaicLibCS_PartsLib.xml</DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -38,7 +38,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\MosaicLibCS_PartsLib.XML</DocumentationFile>
+    <DocumentationFile>bin\Release\MosaicLibCS_PartsLib.xml</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>

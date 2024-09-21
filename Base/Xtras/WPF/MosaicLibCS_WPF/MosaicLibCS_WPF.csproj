@@ -26,7 +26,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\MosaicLibCS_WPF.XML</DocumentationFile>
+    <DocumentationFile>bin\Debug\MosaicLibCS_WPF.xml</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
@@ -37,7 +37,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Release\MosaicLibCS_WPF.XML</DocumentationFile>
+    <DocumentationFile>bin\Release\MosaicLibCS_WPF.xml</DocumentationFile>
     <NoWarn>1591, 1587</NoWarn>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>

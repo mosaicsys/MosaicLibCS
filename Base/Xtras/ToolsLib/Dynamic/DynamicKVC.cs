@@ -65,9 +65,9 @@ namespace Mosaic.ToolsLib.Dynamic
         private bool? _EnablePropertyGetterVCSuffixHandling;
 
         /// <summary>
-        /// When this key is null and a dynamic property is accessed using a binding with the IgnoreCase propety set to true then the key name will be set to the property name in lower case (using <see cref="String.ToLower"/>).
+        /// When this key is null and a dynamic property is accessed using a binding with the IgnoreCase propety set to true then the key name will be set to the property name in lower case (using <see cref="String.ToLower()"/>).
         /// When this key is false this dynamic object will not ignore the case of given dynamic property names.  
-        /// When this key is true this dynamic object will always access keys using the lower case version of any given property name (using <see cref="String.ToLower"/>).
+        /// When this key is true this dynamic object will always access keys using the lower case version of any given property name (using <see cref="String.ToLower()"/>).
         /// Defaults to <see langword="null"/>.
         /// </summary>
         public bool? OverrideIgnoreCase { get; set; }
@@ -106,9 +106,9 @@ namespace Mosaic.ToolsLib.Dynamic
     /// The set of supported cases are best documented 
     /// These use cases include:
     /// <list type="bullet">
-    /// <item>Copy Construction, Content replacement using <see cref="DynamicKVC.SetFrom(object)"/>, and Content update using <see cref="DynamicKVC.UpdateFrom(object, bool)"/></item>
-    /// <item>Copy Construction/Set/Update from <see cref="INamedValueSet"/>, <see cref="IEnumerable{KeyValuePair{String, ValueContainer}}"/></item>
-    /// <item>Copy Construction/Set/Update from <see cref="IEnumerable{KeyValuePair{String, object}}"/> where each object is converted using <see cref="ValueContainer.CreateFromObject(object)"/></item>
+    /// <item>Copy Construction, Content replacement using <see cref="DynamicKVC.SetFrom(object)"/>, and Content update using <see cref="DynamicKVC.UpdateFrom(object)"/></item>
+    /// <item>Copy Construction/Set/Update from <see cref="INamedValueSet"/>, IEnumerable{KeyValuePair{string, object}}</item>
+    /// <item>Copy Construction/Set/Update from IEnumerable{KeyValuePair{string, object}}" where each object is converted using <see cref="ValueContainer.CreateFromObject(object)"/></item>
     /// <item>Copy Construction/Set/Update from other <see cref="DynamicObject"/> instances</item>
     /// <item><see cref="DynamicKVC.ToString"/> produced using NamedValueSet.ToStringSML()</item>
     /// </list>
@@ -205,8 +205,8 @@ namespace Mosaic.ToolsLib.Dynamic
         /// <list type="bullet">
         /// <item>From another <see cref="DynamicKVC"/>, or a set of <see cref="KeyValuePair{String, ValueContainer}"/> instances without change.</item>
         /// <item>From an <see cref="INamedValueSet"/></item>
-        /// <item>From an <see cref="IEnumerable{KeyValuePair{String, ValueContainer}}"/></item>
-        /// <item>From an <see cref="IEnumerable{KeyValuePair{String, object}}"/></item>
+        /// <item>From an IEnumerable{KeyValuePair{String, ValueContainer}}"</item>
+        /// <item>From an IEnumerable{KeyValuePair{String, object}}"</item>
         /// <item>From an <see cref="JObject"/></item>
         /// <item>From a <see cref="DynamicObject"/></item>
         /// <item>From any other <see cref="System.Object"/> by extracting the member names and values for all public instance members (properties or fields) from the given object and converting them using <see cref="ValueContainer.CreateFromObject(object)"/>.</item>
@@ -280,7 +280,7 @@ namespace Mosaic.ToolsLib.Dynamic
 
         /// <summary>
         /// This method implements the value by value recursive conversion.  
-        /// When <see cref="Config.UseRecursiveConversion"/> is true and it is given a type that 
+        /// When <see cref="DynamicKVCConfig.UseRecursiveConversion"/> is true and it is given a type that 
         /// </summary>
         protected ValueContainer ConvertRecursively(ValueContainer vcIn)
         {

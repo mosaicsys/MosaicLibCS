@@ -28,6 +28,8 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
+using Mosaic.ToolsLib.MDRF2.Common;
+
 using MessagePack;
 
 namespace Mosaic.ToolsLib.Semi.CERP.E157
@@ -96,7 +98,7 @@ namespace Mosaic.ToolsLib.Semi.CERP.E157
         /// <summary>
         /// Gives the StepCount value to be incremented and reported with each Step active transition.  
         /// <para/>If this Scoped Token was constructed with the enableAutomaticStepCountGeneration parameter as true (the default)
-        /// then this property will be set/incremented automatically using the step counter in the parent <see cref="GeneralExcutionScopedToken"/>.
+        /// then this property will be set/incremented automatically using the step counter in the parent <see cref="E157GeneralExcutionScopedToken"/>.
         /// Otherwise the client is reponsible for assigning the value is E157 compliant maner.
         /// </summary>
         [DataMember(IsRequired = false, EmitDefaultValue = false)]

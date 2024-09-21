@@ -26,9 +26,9 @@ using System.Reflection;
 [assembly: AssemblyCompany("Mosaic Systems Inc.")]
 [assembly: AssemblyCopyright("Copyright © Mosaic Systems Inc.  All rights reserved.  Licensed under the Apache License, Version 2.0.")]
 
-[assembly: AssemblyInformationalVersion("0.1.9.5")]
-[assembly: AssemblyFileVersion("0.1.9.5")]
-[assembly: AssemblyVersion("0.1.9.5")]
+[assembly: AssemblyInformationalVersion("0.1.9.6")]
+[assembly: AssemblyFileVersion("0.1.9.6")]
+[assembly: AssemblyVersion("0.1.9.6")]
 
 // AssemblyInformationalVersion:  "Product Version" dipslayed in explorer version info.  Describes the version including descriptive additions to the Major.Minor.Build.Revision pattern.
 // AssemblyFileVersion: "File Version" diplayed in explorer version info.

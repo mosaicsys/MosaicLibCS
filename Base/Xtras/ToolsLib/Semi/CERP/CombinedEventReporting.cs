@@ -217,7 +217,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// </summary>
         /// <param name="waitTimeLimit">
         /// When a non-null waitTimeLimit is specified, either directly or through the specific scoped token's default value evaluation logic, it will be used to limit
-        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedBegin(IScopedToken)"/> operation.
+        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedOp(ScopedOp, IScopedToken)"/> operation.
         /// </param>
         /// <param name="rethrow">
         /// When this property is passed as true and the operation fails, then it will both emit a corresponding issue log message and it will throw a corresponding exception to the caller.
@@ -237,7 +237,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// </summary>
         /// <param name="waitTimeLimit">
         /// When a non-null waitTimeLimit is specified, either directly or through the specific scoped token's default value evaluation logic, it will be used to limit
-        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedEnd(IScopedToken)"/> operation.
+        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedOp(ScopedOp, IScopedToken)"/> operation.
         /// </param>
         /// <param name="rethrow">
         /// When this property is passed as true and the operation fails, then it will both emit a corresponding issue log message and it will throw a corresponding exception to the caller.
@@ -256,7 +256,6 @@ namespace Mosaic.ToolsLib.Semi.CERP
 
         /// <summary>
         /// This property can be set by the client to true when constructing a specific <see cref="ScopedTokenBase"/> derived type.
-        /// It can also be implicitly set to true if this <see cref="ScopedTokenBase"/>'s <see cref="IModuleScopedToken.DisableReporting"/> is true.
         /// When true this event report will not be passed to the delegate handler.  
         /// When false (the default) this event report will be passed to the delegate handler as normal.
         /// </summary>
@@ -723,7 +722,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <param name="scopedToken">Provides the instance on which to apply the Begin operation.</param>
         /// <param name="waitTimeLimit">
         /// When a non-null waitTimeLimit is specified, either directly or through the specific scoped token's default value evaluation logic, it will be used to limit
-        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedBegin(IScopedToken)"/> operation.
+        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedOp(ScopedOp, IScopedToken)"/> operation.
         /// </param>
         /// <param name="rethrow">
         /// When this property is passed as true and the operation fails, then it will both emit a corresponding issue log message and it will throw a corresponding exception to the caller.
@@ -752,7 +751,7 @@ namespace Mosaic.ToolsLib.Semi.CERP
         /// <param name="scopedToken">Provides the instance on which to apply the Begin operation.</param>
         /// <param name="waitTimeLimit">
         /// When a non-null waitTimeLimit is specified, either directly or through the specific scoped token's default value evaluation logic, it will be used to limit
-        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedEnd(IScopedToken)"/> operation.
+        /// how long the caller is willing to wait for the completion of the underlying <see cref="ICombinedEventReportingPart.ScopedOp(ScopedOp, IScopedToken)"/> operation.
         /// </param>
         /// <param name="rethrow">
         /// When this property is passed as true and the operation fails, then it will both emit a corresponding issue log message and it will throw a corresponding exception to the caller.

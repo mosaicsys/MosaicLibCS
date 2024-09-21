@@ -61,8 +61,8 @@ namespace Mosaic.ToolsLib.File.Cryptography
 
         /// <summary>
         /// Writes the given data to the file after applying any selected encryption and/or validation HMAC header generation and prefixing.
-        /// Handling for all file and cryptographic related exceptions that may be thrown are determined by the <paramref name="rethrow"/> and <paramref name="fallbackValue"/> (optional) parameters.
-        /// On exception if <paramref name="rethrow"/> is false then this method will return the given <paramref name="fallbackValue"/> otherwise the exception will be passed to the caller.
+        /// Handling for all file and cryptographic related exceptions that may be thrown are determined by the <paramref name="rethrow"/> parameter.
+        /// On exception if <paramref name="rethrow"/> is <see langword="false"/> then this method will return <see langword="false"/> otherwise the exception will be passed to the caller.
         /// </summary>
         bool Write(byte[] data, bool rethrow = false);
 

@@ -347,6 +347,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
             public override int Read(byte[] buffer, int offset, int count)
             {
+                if (count == 0 && buffer.IsSafeIndex(offset))
+                    return 0;
+
                 if (!buffer.IsSafeIndex(offset, length: count))
                     new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 
@@ -435,6 +438,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
             public override void Write(byte[] buffer, int offset, int count) 
             {
+                if (count == 0 && buffer.IsSafeIndex(offset))
+                    return;
+
                 if (!buffer.IsSafeIndex(offset, length: count))
                     new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 

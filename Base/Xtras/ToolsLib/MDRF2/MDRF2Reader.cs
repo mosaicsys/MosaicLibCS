@@ -171,7 +171,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public interface IMDRF2QueryRecord<TItemType> : IMDRF2QueryRecord
     {
-        /// <summary>Gives the <see cref="TItemType"/> specific Data contents for this record.</summary>
+        /// <summary>Gives the <typeparamref name="TItemType"/> specific Data contents for this record.</summary>
         TItemType Data { get; }
     }
 
@@ -180,25 +180,25 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     /// </summary>
     public class MDRF2QueryRecord<TItemType> : IMDRF2QueryRecord<TItemType>
     {
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public IMDRF2FileInfo FileInfo { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public MDRF2QueryItemTypeSelect ItemType { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public ulong UserRowFlagBits { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string KeyName { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public int KeyID { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public Common.MDRF2DateTimeStampPair DTPair { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public TItemType Data { get; set; }
 
         object IMDRF2QueryRecord.DataAsObject { get { return Data; } }
@@ -256,7 +256,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         }
 
         /// <summary>
-        /// Gives the Type Leaf Name for <see cref="TItemType"/>
+        /// Gives the Type Leaf Name for <typeparamref name="TItemType"/>
         /// </summary>
         public static readonly string TypeLeafName = typeof(TItemType).GetTypeLeafName();
     }
@@ -278,25 +278,25 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             DataAsObject = other.DataAsObject;
         }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public IMDRF2FileInfo FileInfo { get; private set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public Common.MDRF2DateTimeStampPair DTPair { get; private set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public MDRF2QueryItemTypeSelect ItemType { get; private set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public ulong UserRowFlagBits { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string KeyName { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public int KeyID { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public object DataAsObject { get; private set; }
 
         /// <summary>Logging and Debugging helper method</summary>
@@ -420,49 +420,49 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             FullPath = fullPath ?? System.IO.Path.GetFullPath(fileNameAndRelativePath);
         }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string FileNameAndRelativePath { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string FileNameFromConfiguredPath { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string FullPath { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public ulong FileLength { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public QpcTimeStamp ScanTimeStamp { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public DateTimeInfo DateTimeInfo { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public LibraryInfo LibraryInfo { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public SetupInfo SetupInfo { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public SessionInfo SessionInfo { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public INamedValueSet SetupInfoNVS { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public INamedValueSet ClientInfoNVS { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public INamedValueSet SessionInfoNVS { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public INamedValueSet NonSpecMetaNVS { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public IList<INamedValueSet> SpecItemNVSSet { get; set; }
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public SpecItemSet SpecItemSet { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public string FaultCode { get; set; }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public bool IsUsable { get { return (FaultCode.IsNullOrEmpty() && DateTimeInfo != null && LibraryInfo != null && SetupInfo != null && SpecItemSet != null); } }
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public MDRF2FileInfo MakeCopyOfThis(bool deepCopy = true)
         {
             return (MDRF2FileInfo)MemberwiseClone();
@@ -481,7 +481,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
         private static readonly Logging.IBasicLogger populateIfNeededLogger = new Logging.Logger($"{Fcns.CurrentClassLeafName}.PopulateIfNeeded");
 
-        /// <inheritdoc>
+        /// <inheritdoc/>
         public IMDRF2FileInfo PopulateIfNeeded(MDRF2QuerySpec settings = null)
         {
             try
@@ -615,8 +615,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// </summary>
         /// <remarks>
         /// This set acceptance critera are in performed in addition (set union sense) to any other objects that are selected through other means 
-        /// (<see cref="ObjectTypeNameSet"/> and <see cref="ObjectSpecificUserRowFlagBitMask"/>)
-        /// <para/>Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yield object records.
+        /// (<see cref="ObjectTypeNameSet"/> and <see cref="ObjectSpecificUserRowFlagBits"/>)
+        /// <para/>Note: the <see cref="MDRF2QueryItemTypeSelect.Object"/> flag must be included in the <see cref="ItemTypeSelect"/> in order for the query engine to yield object records.
         /// </remarks>
         public ReadOnlyHashSet<string> KeyNameHashSet { get; set; }
 
@@ -1204,7 +1204,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public bool IsUsable { get => (FileInfo?.IsUsable == true && FileSummary != null && InlineIndexRecordArray != null); }
 
         /// <summary>
-        /// Gives the (nominal) compression ratio for the corresponding <see cref="IMDRF2FileInfo"> <see cref="FileInfo"/>
+        /// Gives the (nominal) compression ratio for the corresponding <see cref="IMDRF2FileInfo"/> <see cref="FileInfo"/>
         /// as the <see cref="FileSummary"/>.BytesProcessed / <see cref="FileInfo"/>.FileLength;
         /// </summary>
         public double CompressionRatio => (FileSummary?.BytesProcessed ?? default) * ((double)(FileInfo?.FileLength ?? default)).SafeOneOver();
@@ -2568,7 +2568,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
 
             /// <summary>
-            /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="MDRF2ObjectRecordGeneratorDelegate"/> methods that allow
+            /// When non-empty, this property allows the caller to pass a set of externally known TypeNames and corresponding <see cref="IMDRF2TypeNameHandler"/> instances that allow
             /// the client to inject customized type deserialization and record behavior into the system.
             /// When a given TypeName value matches one of the default values, the default deserializer will be replaced with the given one.
             /// </summary>

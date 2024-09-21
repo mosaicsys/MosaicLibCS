@@ -1802,7 +1802,7 @@ namespace Mosaic.ToolsLib.MessagePackUtils
         }
 
         /// <summary>
-        /// If <paramref name="autoReadIfNeeded"/> is true and NextRecordLength is zero then this method calls AttemptToPopulateNextRecord.
+        /// If <see cref="NextRecordLength"/> is zero then this method calls <see cref="AttemptToPopulateNextRecord()"/>.
         /// Then if there is a complete record available, this method sets up the given <paramref name="mpReader"/> instance to read from the buffer starting at that location and returns true.
         /// Otherwise this method set the given <paramref name="mpReader"/> to the default value and returns false.
         /// </summary>

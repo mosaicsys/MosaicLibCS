@@ -1569,7 +1569,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
-        /// <summary>returns (currentFileInfo.IsActive && InnerIsStreamWritable)</summary>
+        /// <summary>returns (currentFileInfo.IsActive &amp;&amp; InnerIsStreamWritable)</summary>
         private bool InnerIsFileActiveAndWritable 
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]

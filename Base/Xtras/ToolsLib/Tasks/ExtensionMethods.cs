@@ -36,7 +36,7 @@ namespace Mosaic.ToolsLib.Tasks
         /// </summary>
         public static partial class ExtensionMethods
         {
-            /// <summary>Variant of <see cref="Task.Start"/> that supports call chaining.</summary>
+            /// <summary>Variant of <see cref="Task.Start()"/> that supports call chaining.</summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static TTaskType StartInline<TTaskType>(this TTaskType task)
                 where TTaskType : Task
@@ -55,7 +55,7 @@ namespace Mosaic.ToolsLib.Tasks
             }
 
             /// <summary>
-            /// Variant of <see cref="Task.Wait"/> that supports call chaining.
+            /// Variant of <see cref="Task.Wait()"/> that supports call chaining.
             /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static TTaskType WaitInline<TTaskType>(this TTaskType task)
@@ -167,7 +167,7 @@ namespace Mosaic.ToolsLib.Tasks
     }
 
     /// <summary>
-    /// This exception is used the <see cref="ExtensionMethods.RunActionInlineAsync{TICFType}(TICFType, TaskContinuationOptions, bool)"/> method when
+    /// This exception is used the ExtensionMethods.RunActionInlineAsync{TICFType}(TICFType, TaskContinuationOptions, bool) method when
     /// the action cannot be started normally and/or when the action is not in the Ready state (aka action cannot be re-used).
     /// </summary>
     public class RunActionInlineAsyncStartFailedException : System.Exception
@@ -184,7 +184,7 @@ namespace Mosaic.ToolsLib.Tasks
         public IClientFacet ICF { get; }
     }
     /// <summary>
-    /// This exception is used the <see cref="ExtensionMethods.RunActionInlineAsync{TICFType}(TICFType, TaskContinuationOptions, bool)"/> method when the 
+    /// This exception is used the ExtensionMethods.RunActionInlineAsync{TICFType}(TICFType, TaskContinuationOptions, bool) method when the 
     /// convertFailureToException optional is selected and the given <see cref="IClientFacet"/> fails.
     /// </summary>
     public class RunActionInlineAsyncFailedException : System.Exception

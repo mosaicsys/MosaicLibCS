@@ -92,7 +92,7 @@ namespace Mosaic.ToolsLib.Tasks.Allocation
     /// The allocated <see cref="ID"/> in this token can be released in three ways:
     /// <para/>* Using the <see cref="IAllocationTool{TIdentifierType}.Release(TIdentifierType, bool)"/> method directly.
     /// <para/>* Using the <see cref="Dispose"/> method on this instance.
-    /// <para/>* or by using the <see cref="AttachAutoReleaseOnTaskComplete(Task)"/> method (or setting the <see cref="AutoReleaseOnTaskComplete"/> property directly) to associated 
+    /// <para/>* or by using the AttachAutoReleaseOnTaskComplete(Task) method (or setting the <see cref="AutoReleaseOnTaskComplete"/> property directly) to associated 
     /// a <see cref="Task"/> with this token and then having <see cref="Task.IsCompleted"/> become true, as observed by the <see cref="IAllocationTool{TIdentifierType}.Service"/> method, 
     /// before ID has been relased through other means.
     /// </remarks>
@@ -366,7 +366,7 @@ namespace Mosaic.ToolsLib.Tasks.Allocation
             /// <summary>Gives the <see cref="IDAllocationState"/> instance for this pending ID allocotion request</summary>
             public IDAllocationState IDAllocationState { get; set; }
 
-            /// <summary>Gives the <see cref="TaskCompletionSource{IDAllocationToken{TIdentifierType}}"/> that will be used to signal successfull completion of the allocation, or if/when it is cancelled or aborted.</summary>
+            /// <summary>Gives the TaskCompletionSource{IDAllocationToken{TIdentifierType}} that will be used to signal successfull completion of the allocation, or if/when it is cancelled or aborted.</summary>
             public TaskCompletionSource<IDAllocationToken<TIdentifierType>> TCS { get; set; }
 
             /// <summary>Gives the <see cref="CancellationToken"/> that the caller provided with the Allocate request, if any.</summary>

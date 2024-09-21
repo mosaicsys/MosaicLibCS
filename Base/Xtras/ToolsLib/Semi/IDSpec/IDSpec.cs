@@ -159,7 +159,7 @@ namespace Mosaic.ToolsLib.Semi.IDSpec
 
         /// <summary>
         /// Gives the <see cref="IIDSpec"/> that was returned from the corresponding GetIDSpec method.
-        /// This is expected to be null if no valid <see cref="IIDSpec"> could be found for the given <see cref="Name"/>.
+        /// This is expected to be null if no valid <see cref="IIDSpec"/> could be found for the given <see cref="Name"/>.
         /// </summary>
         public IIDSpec IDSpec { get; set; }
 

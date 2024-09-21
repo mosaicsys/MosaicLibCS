@@ -202,7 +202,7 @@ namespace Mosaic.ToolsLib.Compression
 
         /// <summary>
         /// Attempts to open the given <paramref name="filePath"/> using the given <paramref name="fileMode"/>, <paramref name="fileAccess"/>, <paramref name="fileShare"/>, <paramref name="bufferSize"/>, and <paramref name="fileOptions"/>, 
-        /// and then creates a compressor based on the extension on the given <paramref name="fileName"/> which is returned.  The Compressor will close the underlying FileStream when it is closed or disposed.
+        /// and then creates a compressor based on the extension on the given <paramref name="filePath"/> which is returned.  The Compressor will close the underlying FileStream when it is closed or disposed.
         /// </summary>
         public static CompressorStreamBase CreateCompressor(this string filePath, FileMode fileMode = FileMode.CreateNew, FileAccess fileAccess = FileAccess.Write, FileShare fileShare = FileShare.ReadWrite, int bufferSize = Constants.DefaultBufferSize, FileOptions fileOptions = FileOptions.None, INamedValueSet nvs = null)
         {
@@ -211,7 +211,7 @@ namespace Mosaic.ToolsLib.Compression
 
         /// <summary>
         /// Attempts to open the given <paramref name="filePath"/> using the given <paramref name="fileMode"/>, <paramref name="fileAccess"/>, <paramref name="fileShare"/>, <paramref name="bufferSize"/>, and <paramref name="fileOptions"/>, 
-        /// and then creates a decompressor based on the extension on the given <paramref name="fileName"/> which is returned.  The Decompressor will close the underlying FileStream when it is closed or disposed.
+        /// and then creates a decompressor based on the extension on the given <paramref name="filePath"/> which is returned.  The Decompressor will close the underlying FileStream when it is closed or disposed.
         /// </summary>
         public static DecompressorStreamBase CreateDecompressor(this string filePath, FileMode fileMode = FileMode.Open, FileAccess fileAccess = FileAccess.Read, FileShare fileShare = FileShare.Read, int bufferSize = Constants.DefaultBufferSize, FileOptions fileOptions = FileOptions.None, INamedValueSet nvs = null)
         {

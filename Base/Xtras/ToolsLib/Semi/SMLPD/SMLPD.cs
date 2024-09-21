@@ -69,7 +69,7 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         /// <summary>
         /// Defines the value that is passed to the rethrow parameters in the various <see cref="ValueContainer"/> related methods that are used here.
         /// Defaults to true.
-        /// When this is set to false then the calls to the <see cref="Format(ValueContainer, System.IO.TextWriter, int)"/> method 
+        /// When this is set to false then the calls to the <see cref="SMLPDFormatter.Format(ValueContainer, System.IO.TextWriter, int, bool)"/> method 
         /// which internally throw and exception will output a summary of the exception to the given text writer.
         /// </summary>
         public bool Rethrow { get; set; } = true;
@@ -415,8 +415,8 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         /// <param name="indent">When this is set to true it selects use of indented output</param>
         /// <param name="rethrow">Selects whether rethrow is passed as true or false to the internal ValueContainer Get methods</param>
         /// <param name="newLineStr">When non-null this is used to override the default and specify the the value used for the <see cref="System.IO.TextWriter.NewLine"/> property that is used during the format operation.</param>
-        /// <param name="levelIndentStr">When non-null this selects the level indent string to use.  When null the existing <see cref="SMLPDFormatter.LevelIndentStr"/> default value is used.</param>
-        /// <param name="nominalElementLineSplitLength">When non-null this selects the length for a single line element at which the element may be split onto further lines.  When null th exisitng <see cref="SMLPDFormatter.NominalElementLineSplitLength"/> default value is used.</param>
+        /// <param name="levelIndentStr">When non-null this selects the level indent string to use.  When null the existing <see cref="SMLPDFormatterSettings.LevelIndentStr"/> default value is used.</param>
+        /// <param name="nominalElementLineSplitLength">When non-null this selects the length for a single line element at which the element may be split onto further lines.  When null th exisitng <see cref="SMLPDFormatterSettings.NominalElementLineSplitLength"/> default value is used.</param>
         public static string ToStringSMLPD(this ValueContainer vc, bool indent = false, bool rethrow = false, string newLineStr = null, string levelIndentStr = null, int? nominalElementLineSplitLength = null)
         {
             var sbtw = new StringBuilderTextWriter();
@@ -451,8 +451,8 @@ namespace Mosaic.ToolsLib.Semi.SMLPD
         /// <param name="indent">When this is set to true it selects use of indented output</param>
         /// <param name="rethrow">Selects whether rethrow is passed as true or false to the internal ValueContainer Get methods</param>
         /// <param name="newLineStr">When non-null this is used to override the default and specify the the value used for the <see cref="System.IO.TextWriter.NewLine"/> property that is used during the format operation.</param>
-        /// <param name="levelIndentStr">When non-null this selects the level indent string to use.  When null the existing <see cref="SMLPDFormatter.LevelIndentStr"/> default value is used.</param>
-        /// <param name="nominalElementLineSplitLength">When non-null this selects the length for a single line element at which the element may be split onto further lines.  When null th exisitng <see cref="SMLPDFormatter.NominalElementLineSplitLength"/> default value is used.</param>
+        /// <param name="levelIndentStr">When non-null this selects the level indent string to use.  When null the existing <see cref="SMLPDFormatterSettings.LevelIndentStr"/> default value is used.</param>
+        /// <param name="nominalElementLineSplitLength">When non-null this selects the length for a single line element at which the element may be split onto further lines.  When null th exisitng <see cref="SMLPDFormatterSettings.NominalElementLineSplitLength"/> default value is used.</param>
         public static string ToStringSMLPD(this MosaicLib.Semi.E005.IMessage message, bool indent = false, bool rethrow = false, string newLineStr = null, string levelIndentStr = null, int? nominalElementLineSplitLength = null)
         {
             var sbtw = new StringBuilderTextWriter();

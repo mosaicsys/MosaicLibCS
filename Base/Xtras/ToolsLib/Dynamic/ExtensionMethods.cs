@@ -91,7 +91,7 @@ namespace Mosaic.ToolsLib.Dynamic
                 return kvcSet.Select(kvc => KVP.Create(kvc.Key, kvc.Value.ValueAsObject)).ToExpandoObject(recursive: recursive);
             }
 
-            /// <summary>This EM creates, populates, and returns a new <see cref="ExpandoObject"/> from the given <paramref name="kvpSet"/></summary>
+            /// <summary>This EM creates, populates, and returns a new <see cref="ExpandoObject"/> from the given <paramref name="kvpSetIn"/></summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static ExpandoObject ToExpandoObject(this IEnumerable<KeyValuePair<string, object>> kvpSetIn, bool? recursive = null)
             {
